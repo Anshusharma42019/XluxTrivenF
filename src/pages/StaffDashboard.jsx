@@ -595,7 +595,7 @@ export default function StaffDashboard() {
                             </div>
                             {item.status && (
                               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 uppercase shrink-0">
-                                {item.status.replace(/_/g, ' ')}
+                                {item.status?.replace(/_/g, ' ')}
                               </span>
                             )}
                           </div>

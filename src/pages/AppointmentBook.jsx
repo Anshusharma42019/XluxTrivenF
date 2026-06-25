@@ -484,7 +484,7 @@ export default function AppointmentBook() {
 
                     <div className="flex flex-col items-end gap-2 shrink-0">
                       <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full capitalize ${STATUS_COLORS[appt.status] || 'bg-gray-100 text-gray-500'}`}>
-                        {appt.status.replace(/_/g, ' ')}
+                        {appt.status?.replace(/_/g, ' ')}
                       </span>
                     </div>
                   </div>

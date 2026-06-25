@@ -439,7 +439,7 @@ export default function Tasks() {
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-gray-400 font-medium">{task.lead?.name || 'No Lead'}</span>
                           <span className="text-xs text-gray-300">•</span>
-                          <span className="text-[10px] text-gray-400 font-bold uppercase">{task.type.replace(/_/g, ' ')}</span>
+                          <span className="text-[10px] text-gray-400 font-bold uppercase">{task.type?.replace(/_/g, ' ')}</span>
                           {task.department && (
                             <>
                               <span className="text-xs text-gray-300">•</span>
@@ -496,8 +496,7 @@ export default function Tasks() {
             <SectionHead label="Task Information" />
             <div className="grid grid-cols-1 gap-1">
               <DetailRow label="Due Date" value={new Date(selected.dueDate).toLocaleString()} />
-              <DetailRow label="Type" value={selected.type.replace(/_/g, ' ')} />
-              <DetailRow label="Priority" value={selected.priority} color={selected.priority === 'high' ? 'red' : 'gray'} />
+              <DetailRow label="Type" value={selected.type?.replace(/_/g, ' ')} /> value={selected.priority} color={selected.priority === 'high' ? 'red' : 'gray'} />
               <DetailRow label="Status" value={selected.status} color={selected.status === 'completed' ? 'green' : 'amber'} />
             </div>
 
@@ -632,7 +631,7 @@ export default function Tasks() {
               <div className="flex-1 overflow-y-auto px-1 space-y-0 custom-scrollbar">
                  <SectionHead label="Task Information" />
                  <DetailRow label="Due Date" value={new Date(selected.dueDate).toLocaleString()} />
-                 <DetailRow label="Type" value={selected.type.replace(/_/g, ' ')} />
+                 <DetailRow label="Type" value={selected.type?.replace(/_/g, ' ')} />
                  <DetailRow label="Status" value={selected.status} color={selected.status === 'completed' ? 'green' : 'amber'} />
                  
                  <SectionHead label="Lead & Phone" />
