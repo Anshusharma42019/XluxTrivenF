@@ -496,7 +496,8 @@ export default function Tasks() {
             <SectionHead label="Task Information" />
             <div className="grid grid-cols-1 gap-1">
               <DetailRow label="Due Date" value={new Date(selected.dueDate).toLocaleString()} />
-              <DetailRow label="Type" value={selected.type?.replace(/_/g, ' ')} /> value={selected.priority} color={selected.priority === 'high' ? 'red' : 'gray'} />
+              <DetailRow label="Type" value={selected.type?.replace(/_/g, ' ')} />
+              <DetailRow label="Priority" value={selected.priority} color={selected.priority === 'high' ? 'red' : 'gray'} />
               <DetailRow label="Status" value={selected.status} color={selected.status === 'completed' ? 'green' : 'amber'} />
             </div>
 
