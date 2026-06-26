@@ -18,8 +18,8 @@ export const searchOrderByPhone = (phone)          => api.get(`${BASE}/orders/se
 // ── Shipping ──────────────────────────────────────────────────────────────────
 export const createShipment = (body) => api.post(`${BASE}/shipping/create-shipment`, body);
 export const trackShipment  = (awb)  => api.get(`${BASE}/shipping/track-shipment`, { params: { awb } });
-export const generateLabel  = (awb)  => api.get(`${BASE}/shipping/generate-label`, { params: { awb } });
-export const getManifest    = (awb)  => api.get(`${BASE}/shipping/manifest/${awb}`);
+export const generateLabel  = (awb)  => api.get(`${BASE}/shipping/generate-label`, { params: { awb }, responseType: 'blob' });
+export const getManifest    = (awb)  => api.get(`${BASE}/shipping/manifest/${awb}`, { responseType: 'blob' });
 export const cancelShipment = (body) => api.post(`${BASE}/shipping/cancel-shipment`, body);
 export const checkServiceability = (body) => api.post(`${BASE}/shipping/serviceability`, body);
 export const getShipments   = (params) => api.get(`${BASE}/shipping/shipments`, { params });
@@ -30,7 +30,7 @@ export const getWarehouses   = (params) => api.get(`${BASE}/warehouses`, { param
 export const createWarehouse = (body)   => api.post(`${BASE}/warehouses/create`, body);
 
 // ── Invoice ───────────────────────────────────────────────────────────────────
-export const getInvoice = (order_id) => api.get(`${BASE}/invoice/${order_id}`);
+export const getInvoice = (order_id) => api.get(`${BASE}/invoice/${order_id}`, { responseType: 'blob' });
 
 // ── NDR & NDR Notes ───────────────────────────────────────────────────────────
 export const getNdrList    = (params) => api.get(`${BASE}/ndr`, { params });

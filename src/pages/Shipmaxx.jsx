@@ -55,11 +55,35 @@ const openLabel = async (awb, setActionId) => {
   setActionId(`label-${awb}`);
   try {
     const res = await smxSvc.generateLabel(awb);
-    const url = res.data?.data?.label_url || res.data?.label_url;
-    if (url) window.open(url, '_blank');
-    else window.open('https://appapi.losung360.com', '_blank');
-  } catch {
-    window.open('https://appapi.losung360.com', '_blank');
+    if (res.data && res.data.size > 0) {
+      const slice = res.data.slice(0, 20);
+      const magicStr = await slice.text();
+      if (!magicStr.trim().startsWith('%PDF-')) {
+        const fullText = await res.data.text();
+        try {
+          const json = JSON.parse(fullText);
+          alert(json.message || 'Label not available yet.');
+        } catch (e) {
+          alert('Label not available yet (invalid format).');
+        }
+        return;
+      }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      return;
+    }
+    alert('Label not available yet. It may still be generating.');
+  } catch (e) {
+    if (e?.response?.data instanceof Blob) {
+      try {
+        const text = await e.response.data.text();
+        const json = JSON.parse(text);
+        alert(json.message || 'Error fetching label');
+        return;
+      } catch (err) {}
+    }
+    alert(e?.response?.data?.message || e.message || 'Error fetching label');
   } finally { setActionId(null); }
 };
 
@@ -67,11 +91,35 @@ const openManifest = async (awb, setActionId) => {
   setActionId(`manifest-${awb}`);
   try {
     const res = await smxSvc.getManifest(awb);
-    const url = res.data?.data?.manifest_url || res.data?.manifest_url;
-    if (url) window.open(url, '_blank');
-    else window.open('https://appapi.losung360.com', '_blank');
-  } catch {
-    window.open('https://appapi.losung360.com', '_blank');
+    if (res.data && res.data.size > 0) {
+      const slice = res.data.slice(0, 20);
+      const magicStr = await slice.text();
+      if (!magicStr.trim().startsWith('%PDF-')) {
+        const fullText = await res.data.text();
+        let parsedJson;
+        try {
+          parsedJson = JSON.parse(fullText);
+        } catch (e) {
+          throw new Error('Manifest not available yet (invalid format).');
+        }
+        throw new Error(parsedJson.message || 'Manifest not available yet.');
+      }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      return;
+    }
+    alert('Manifest not available yet. It may still be generating.');
+  } catch (e) {
+    if (e?.response?.data instanceof Blob) {
+      try {
+        const text = await e.response.data.text();
+        const json = JSON.parse(text);
+        alert(json.message || 'Error fetching manifest');
+        return;
+      } catch (err) {}
+    }
+    alert(e?.response?.data?.message || e.message || 'Error fetching manifest');
   } finally { setActionId(null); }
 };
 
@@ -79,9 +127,13 @@ const openInvoice = async (order_id, setActionId) => {
   setActionId(`invoice-${order_id}`);
   try {
     const res = await smxSvc.getInvoice(order_id);
-    const url = res.data?.data?.invoice_url || res.data?.invoice_url;
-    if (url) window.open(url, '_blank');
-    else window.open('https://appapi.losung360.com', '_blank');
+    if (res.data && res.data.size > 0) {
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      return;
+    }
+    window.open('https://appapi.losung360.com', '_blank');
   } catch {
     window.open('https://appapi.losung360.com', '_blank');
   } finally { setActionId(null); }
@@ -89,10 +141,54 @@ const openInvoice = async (order_id, setActionId) => {
 
 // ── Order Detail Modal ────────────────────────────────────────────────────────
 function OrderDetailModal({ order, tracking, trackingLoading, fetchLiveTracking, onClose, actionId, setActionId }) {
+  const [inlinePdfUrl, setInlinePdfUrl] = useState(null);
+  const [inlineTitle, setInlineTitle] = useState('');
+
+  const fetchInline = async (type, id) => {
+    setActionId(`${type}-${id}`);
+    setInlinePdfUrl(null);
+    try {
+      let res;
+      if (type === 'label') res = await smxSvc.generateLabel(id);
+      else if (type === 'manifest') res = await smxSvc.getManifest(id);
+      else if (type === 'invoice') res = await smxSvc.getInvoice(id);
+
+      if (res.data && res.data.size > 0) {
+        const slice = res.data.slice(0, 20);
+        const magicStr = await slice.text();
+        if (!magicStr.trim().startsWith('%PDF-')) {
+          const fullText = await res.data.text();
+          let parsedJson;
+          try {
+            parsedJson = JSON.parse(fullText);
+          } catch (e) {
+            throw new Error(`${type} not available yet (invalid format).`);
+          }
+          throw new Error(parsedJson.message || `${type} not available yet.`);
+        }
+        const blob = new Blob([res.data], { type: 'application/pdf' });
+        setInlinePdfUrl(URL.createObjectURL(blob));
+        setInlineTitle(type === 'label' ? 'Shipping Label' : type === 'manifest' ? 'Manifest Document' : 'Tax Invoice');
+        return;
+      }
+      throw new Error(`${type} not available yet.`);
+    } catch (e) {
+      if (e?.response?.data instanceof Blob) {
+        try {
+          const text = await e.response.data.text();
+          const json = JSON.parse(text);
+          alert(json.message || `Error fetching ${type}`);
+          return;
+        } catch (err) {}
+      }
+      alert(e?.response?.data?.message || e.message || `Error fetching ${type}`);
+    } finally { setActionId(null); }
+  };
+
   if (!order) return null;
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className={`bg-white rounded-3xl shadow-xl w-full ${inlinePdfUrl ? 'max-w-5xl min-h-[75vh]' : 'max-w-3xl'} max-h-[90vh] overflow-hidden flex flex-col transition-all duration-300`}>
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
           <div>
             <h3 className="font-bold text-gray-800 text-lg">Order Detail</h3>
@@ -105,7 +201,8 @@ function OrderDetailModal({ order, tracking, trackingLoading, fetchLiveTracking,
             </button>
           </div>
         </div>
-        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+        <div className="flex flex-1 overflow-hidden">
+          <div className={`p-6 space-y-4 overflow-y-auto ${inlinePdfUrl ? 'w-1/2 border-r border-gray-100' : 'w-full'}`}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-gray-50 rounded-2xl p-4 space-y-2 text-xs text-gray-600">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Customer</h4>
@@ -134,33 +231,57 @@ function OrderDetailModal({ order, tracking, trackingLoading, fetchLiveTracking,
                   <p className="text-xs font-bold text-blue-700 uppercase mb-2">Status: {tracking.current_status || tracking.status || 'UNKNOWN'}</p>
                   {tracking.history?.length > 0 ? (
                     <div className="space-y-2">
-                      {tracking.history.map((h, i) => (
-                        <div key={i} className="flex gap-2 text-xs">
-                          <div className={`w-2 h-2 rounded-full mt-1 shrink-0 ${i === 0 ? 'bg-blue-600' : 'bg-gray-300'}`} />
-                          <div><p className="font-bold text-gray-700">{h.status || h.activity}</p><p className="text-gray-400">{h.location} · {h.date || h.timestamp}</p></div>
-                        </div>
-                      ))}
+                      {tracking.history.map((h, i) => {
+                        let statusText = h.status || h.activity;
+                        if (statusText === 'SPB') statusText = 'New / Manifested (SPB)';
+                        if (statusText === 'DEL') statusText = 'Delivered';
+                        if (statusText === 'INT') statusText = 'In Transit';
+                        if (statusText === 'OFD') statusText = 'Out For Delivery';
+                        if (statusText === 'RTO') statusText = 'RTO';
+                        if (statusText === 'SC') statusText = 'Shipped / Picked Up';
+                        return (
+                          <div key={i} className="flex gap-2 text-xs">
+                            <div className={`w-2 h-2 rounded-full mt-1 shrink-0 ${i === 0 ? 'bg-blue-600' : 'bg-gray-300'}`} />
+                            <div><p className="font-bold text-gray-700">{statusText}</p><p className="text-gray-400">{h.location} · {h.date || h.timestamp}</p></div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : <pre className="text-[10px] text-gray-600 bg-gray-100/60 rounded-xl p-3 overflow-auto max-h-40">{JSON.stringify(tracking, null, 2)}</pre>}
                 </div>
               ) : <p className="text-xs text-gray-400 italic">Click Fetch to load live tracking.</p>}
+            </div>
+            )}
+          </div>
+          {inlinePdfUrl && (
+            <div className="w-1/2 p-6 flex flex-col bg-gray-50/50">
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                <h3 className="font-bold text-gray-700">{inlineTitle}</h3>
+                <div className="flex gap-3 items-center">
+                  <a href={inlinePdfUrl} download={`${inlineTitle}.pdf`} className="text-xs text-blue-600 font-bold hover:underline">Download ⬇</a>
+                  <button onClick={() => setInlinePdfUrl(null)} className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-300 transition">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
+              </div>
+              <iframe src={`${inlinePdfUrl}#view=FitH`} className="w-full h-full flex-1 rounded-xl border border-gray-200 bg-white shadow-sm min-h-[500px]" title={inlineTitle} />
             </div>
           )}
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50/40 shrink-0">
           {order.awb_code && (
             <>
-              <button onClick={() => openLabel(order.awb_code, setActionId)} disabled={actionId === `label-${order.awb_code}`}
+              <button onClick={() => fetchInline('label', order.awb_code)} disabled={actionId === `label-${order.awb_code}`}
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white transition disabled:opacity-50">
                 {actionId === `label-${order.awb_code}` ? 'Label…' : 'Generate Label'}
               </button>
-              <button onClick={() => openManifest(order.awb_code, setActionId)} disabled={actionId === `manifest-${order.awb_code}`}
+              <button onClick={() => fetchInline('manifest', order.awb_code)} disabled={actionId === `manifest-${order.awb_code}`}
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-700 hover:bg-gray-800 text-white transition disabled:opacity-50">
                 {actionId === `manifest-${order.awb_code}` ? 'Manifest…' : 'Get Manifest'}
               </button>
             </>
           )}
-          <button onClick={() => openInvoice(order.order_id, setActionId)} disabled={actionId === `invoice-${order.order_id}`}
+          <button onClick={() => fetchInline('invoice', order.order_id)} disabled={actionId === `invoice-${order.order_id}`}
             className="px-4 py-2 rounded-xl text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white transition disabled:opacity-50">
             {actionId === `invoice-${order.order_id}` ? 'Invoice…' : 'Invoice'}
           </button>
@@ -187,6 +308,7 @@ function OrdersSection() {
   const [detailOrder, setDetailOrder] = useState(null);
   const [detailTracking, setDetailTracking] = useState(null);
   const [detailTrackLoading, setDetailTrackLoading] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchOrders = async () => {
     setLoading(true); setError('');
@@ -198,6 +320,77 @@ function OrdersSection() {
     finally { setLoading(false); }
   };
 
+  const downloadBulkLabels = async () => {
+    const awbs = orders.filter(o => o.awb_code).map(o => o.awb_code);
+    if (awbs.length === 0) {
+      alert("No AWB numbers found on the current page to download.");
+      return;
+    }
+    
+    // Open the window immediately to bypass pop-up blockers
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert("Please allow pop-ups for this site to download bulk labels.");
+      return;
+    }
+    win.document.write('<div style="font-family:sans-serif;padding:20px;"><h2>Generating Bulk Labels...</h2><p>Please wait while we merge ' + awbs.length + ' labels. This might take a few seconds.</p></div>');
+    
+    setBulkLoading(true);
+    try {
+      const token = getSavedToken();
+      const { PDFDocument } = await import('pdf-lib');
+      const mergedPdf = await PDFDocument.create();
+      
+      const fetchPromises = awbs.map(async (awb) => {
+        try {
+          const res = await fetch(`https://appapi.losung360.com/external/v1/shipping/download-label?awb=${awb}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            return await res.arrayBuffer();
+          }
+        } catch (e) {
+          console.warn('Failed to load label for', awb, e);
+        }
+        return null;
+      });
+
+      const arrayBuffers = await Promise.all(fetchPromises);
+
+      let successCount = 0;
+      for (const buffer of arrayBuffers) {
+        if (buffer) {
+          try {
+            const pdfToMerge = await PDFDocument.load(buffer);
+            const copiedPages = await mergedPdf.copyPages(pdfToMerge, pdfToMerge.getPageIndices());
+            copiedPages.forEach((page) => mergedPdf.addPage(page));
+            successCount++;
+          } catch (e) {
+            console.warn('Failed to merge PDF', e);
+          }
+        }
+      }
+      
+      if (successCount === 0) {
+        win.close();
+        alert("Failed to download any labels. They might not be generated yet.");
+        return;
+      }
+      
+      const mergedPdfBytes = await mergedPdf.save();
+      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      win.location.href = url;
+      
+    } catch (err) {
+      console.error(err);
+      win.close();
+      alert("Error generating bulk labels: " + err.message);
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   useEffect(() => { fetchOrders(); }, [page, status]);
 
   const handleViewDetails = async (order) => {
@@ -206,6 +399,17 @@ function OrdersSection() {
       setDetailTrackLoading(true);
       try { const res = await smxSvc.trackShipment(order.awb_code); setDetailTracking(res.data?.data || res.data); } catch { }
       finally { setDetailTrackLoading(false); }
+    }
+  };
+
+  const handleCancel = async (awb) => {
+    if (!window.confirm(`Are you sure you want to cancel shipment ${awb}?`)) return;
+    try {
+      const res = await smxSvc.cancelShipment({ awb, cancellation_reason: 'User requested cancellation from dashboard' });
+      alert(res.data?.message || 'Shipment cancelled successfully');
+      fetchOrders();
+    } catch (e) {
+      alert(e?.response?.data?.message || e.message || 'Error cancelling shipment');
     }
   };
 
@@ -242,7 +446,13 @@ function OrdersSection() {
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
         <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between">
           <span className="font-bold text-gray-700 text-sm uppercase tracking-wider">ShipMaxx Orders</span>
-          <button onClick={fetchOrders} className="text-xs text-blue-600 font-semibold hover:text-blue-700">↻ Refresh</button>
+          <div className="flex items-center gap-3">
+            <button onClick={downloadBulkLabels} disabled={bulkLoading} className="text-xs text-purple-600 font-bold hover:text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              {bulkLoading ? 'Merging PDFs...' : 'Bulk Label Download'}
+            </button>
+            <button onClick={fetchOrders} className="text-xs text-blue-600 font-semibold hover:text-blue-700">↻ Refresh</button>
+          </div>
         </div>
         {error && <div className="p-4 mx-5 my-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs">{error}</div>}
         {loading ? (
@@ -276,8 +486,9 @@ function OrdersSection() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1.5">
                           <button onClick={() => handleViewDetails(o)} className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-semibold transition">View</button>
-                          {o.awb_code && <button onClick={() => openLabel(o.awb_code, setActionId)} disabled={actionId === `label-${o.awb_code}`} className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 text-[11px] font-semibold transition disabled:opacity-50">{actionId === `label-${o.awb_code}` ? '…' : 'Label'}</button>}
-                          <button onClick={() => openInvoice(o.order_id, setActionId)} disabled={actionId === `invoice-${o.order_id}`} className="px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 text-[11px] font-semibold transition disabled:opacity-50">{actionId === `invoice-${o.order_id}` ? '…' : 'Invoice'}</button>
+                          {o.awb_code && o.status !== 'CANCELLED' && (
+                            <button onClick={() => handleCancel(o.awb_code)} className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 text-[11px] font-semibold transition">Cancel</button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -314,26 +525,38 @@ function TrackSection() {
   const [manualOrderId, setManualOrderId] = useState('');
   const [tracking, setTracking] = useState(null);
   const [labelUrl, setLabelUrl] = useState('');
+  const [manifestUrl, setManifestUrl] = useState('');
+  const [invoiceUrl, setInvoiceUrl] = useState('');
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
 
   const run = async (key, fn) => {
     setLoading(key); setError('');
     try { await fn(); }
-    catch (e) { setError(e?.response?.data?.message || e.message); }
+    catch (e) {
+      if (e?.response?.data instanceof Blob) {
+        try {
+          const text = await e.response.data.text();
+          const json = JSON.parse(text);
+          setError(json.message || 'Error occurred');
+          return;
+        } catch (err) {}
+      }
+      setError(e?.response?.data?.message || e.message);
+    }
     finally { setLoading(''); }
   };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl animate-in fade-in duration-200">
       {/* Track */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
         <div className="h-1 bg-blue-600" />
         <div className="px-5 py-4 space-y-3">
           <h3 className="font-semibold text-gray-700 text-sm">Track Shipment</h3>
           <Field label="AWB Number">
             <div className="flex gap-2">
-              <input className={inp} placeholder="Enter AWB" value={manualAwb} onChange={e => setManualAwb(e.target.value)} />
+              <input className={inp} placeholder="Enter AWB" value={manualAwb} onChange={e => { setManualAwb(e.target.value); setLabelUrl(''); setManifestUrl(''); }} />
               <button onClick={() => run('track', async () => { const r = await smxSvc.trackShipment(manualAwb.trim()); setTracking(r.data?.data || r.data); })}
                 disabled={loading === 'track' || !manualAwb.trim()} className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50">
                 {loading === 'track' ? '…' : 'Track'}
@@ -344,59 +567,140 @@ function TrackSection() {
       </div>
 
       {/* Label */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
         <div className="h-1 bg-purple-600" />
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 flex-1">
           <h3 className="font-semibold text-gray-700 text-sm">Generate Label & Manifest</h3>
           <p className="text-xs text-gray-400">Uses AWB from the field above.</p>
           <div className="flex gap-2">
             <button onClick={() => run('label', async () => {
-              const r = await smxSvc.generateLabel(manualAwb.trim());
-              const url = r.data?.data?.label_url || r.data?.label_url;
-              if (url) { setLabelUrl(url); window.open(url, '_blank'); }
-              else window.open('https://appapi.losung360.com', '_blank');
+              setLabelUrl(''); setManifestUrl(''); setInvoiceUrl('');
+              const res = await smxSvc.generateLabel(manualAwb.trim());
+              if (res.data && res.data.size > 0) {
+                const slice = res.data.slice(0, 20);
+                const magicStr = await slice.text();
+                if (!magicStr.trim().startsWith('%PDF-')) {
+                  const fullText = await res.data.text();
+                  let parsedJson;
+                  try {
+                    parsedJson = JSON.parse(fullText);
+                  } catch (e) {
+                    throw new Error('Label not available yet (invalid format).');
+                  }
+                  throw new Error(parsedJson.message || 'Label not available yet.');
+                }
+                const blob = new Blob([res.data], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                setLabelUrl(url);
+                return;
+              }
+              throw new Error('Label not available yet. It may still be generating.');
             })} disabled={loading === 'label' || !manualAwb.trim()} className="flex-1 px-4 py-2 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 transition disabled:opacity-50">
-              {loading === 'label' ? '…' : 'Get Label'}
+              {loading === 'label' ? <span className="spinner-border spinner-border-sm w-4 h-4 mr-2"></span> : 'Get Label'}
             </button>
             <button onClick={() => run('manifest', async () => {
-              const r = await smxSvc.getManifest(manualAwb.trim());
-              const url = r.data?.data?.manifest_url || r.data?.manifest_url;
-              if (url) window.open(url, '_blank');
-              else window.open('https://appapi.losung360.com', '_blank');
-            })} disabled={loading === 'manifest' || !manualAwb.trim()} className="flex-1 px-4 py-2 rounded-xl bg-gray-700 text-white text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50">
-              {loading === 'manifest' ? '…' : 'Manifest'}
+              setLabelUrl(''); setManifestUrl(''); setInvoiceUrl('');
+              const res = await smxSvc.getManifest(manualAwb.trim());
+              if (res.data && res.data.size > 0) {
+                const slice = res.data.slice(0, 20);
+                const magicStr = await slice.text();
+                if (!magicStr.trim().startsWith('%PDF-')) {
+                  const fullText = await res.data.text();
+                  let parsedJson;
+                  try {
+                    parsedJson = JSON.parse(fullText);
+                  } catch (e) {
+                    throw new Error('Manifest not available yet (invalid format).');
+                  }
+                  throw new Error(parsedJson.message || 'Manifest not available yet.');
+                }
+                const blob = new Blob([res.data], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                setManifestUrl(url);
+                return;
+              }
+              throw new Error('Manifest not available yet. It may still be generating.');
+            })} disabled={loading === 'manifest' || !manualAwb.trim()} className="flex-1 px-4 py-2 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900 transition disabled:opacity-50">
+              {loading === 'manifest' ? <span className="spinner-border spinner-border-sm w-4 h-4 mr-2"></span> : 'Manifest'}
             </button>
           </div>
-          <a href="https://appapi.losung360.com" target="_blank" rel="noreferrer"
+          <a href="https://app.losung360.com" target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             Open ShipMaxx Dashboard
           </a>
+          
+          {labelUrl && (
+            <div className="mt-4 border-t border-gray-100 pt-3 animate-in fade-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-purple-700">Label Generated</span>
+                <a href={labelUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">Open in new tab ↗</a>
+              </div>
+              <iframe src={labelUrl} className="w-full h-48 rounded-xl border border-gray-200 bg-gray-50" title="Label PDF" />
+            </div>
+          )}
+          
+          {manifestUrl && (
+            <div className="mt-4 border-t border-gray-100 pt-3 animate-in fade-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-700">Manifest Generated</span>
+                <a href={manifestUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">Open in new tab ↗</a>
+              </div>
+              <iframe src={manifestUrl} className="w-full h-48 rounded-xl border border-gray-200 bg-gray-50" title="Manifest PDF" />
+            </div>
+          )}
         </div>
       </div>
 
       {/* Invoice */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
         <div className="h-1 bg-orange-500" />
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 flex-1">
           <h3 className="font-semibold text-gray-700 text-sm">Download Invoice</h3>
           <Field label="Order ID">
             <div className="flex gap-2">
-              <input className={inp} placeholder="Enter Order ID" value={manualOrderId} onChange={e => setManualOrderId(e.target.value)} />
+              <input className={inp} placeholder="Enter Order ID" value={manualOrderId} onChange={e => { setManualOrderId(e.target.value); setInvoiceUrl(''); }} />
               <button onClick={() => run('invoice', async () => {
-                const r = await smxSvc.getInvoice(manualOrderId.trim());
-                const url = r.data?.data?.invoice_url || r.data?.invoice_url;
-                if (url) window.open(url, '_blank');
-                else window.open('https://appapi.losung360.com', '_blank');
-              })} disabled={loading === 'invoice' || !manualOrderId.trim()} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition disabled:opacity-50">
+                setInvoiceUrl('');
+                const res = await smxSvc.getInvoice(manualOrderId.trim());
+                if (res.data && res.data.size > 0) {
+                  const slice = res.data.slice(0, 20);
+                  const magicStr = await slice.text();
+                  if (!magicStr.trim().startsWith('%PDF-')) {
+                    const fullText = await res.data.text();
+                    try {
+                      const json = JSON.parse(fullText);
+                      throw new Error(json.message || 'Invoice not available yet.');
+                    } catch (e) {
+                      throw new Error('Invoice not available yet (invalid format).');
+                    }
+                  }
+
+                  const blob = new Blob([res.data], { type: 'application/pdf' });
+                  const url = URL.createObjectURL(blob);
+                  setInvoiceUrl(url);
+                  return;
+                }
+                throw new Error('Invoice data is empty.');
+              })} disabled={loading === 'invoice' || !manualOrderId.trim()} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition disabled:opacity-50 shrink-0">
                 {loading === 'invoice' ? '…' : 'Invoice'}
               </button>
             </div>
           </Field>
+          
+          {invoiceUrl && (
+            <div className="mt-4 border-t border-gray-100 pt-3 animate-in fade-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-orange-600">Invoice Generated</span>
+                <a href={invoiceUrl} download={`invoice-${manualOrderId}.pdf`} className="text-xs text-blue-600 hover:underline">Download PDF ⬇</a>
+              </div>
+              <iframe src={invoiceUrl} className="w-full h-48 rounded-xl border border-gray-200 bg-gray-50" title="Invoice PDF" />
+            </div>
+          )}
         </div>
       </div>
 
-      {error && <div className="col-span-2 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-red-600 text-xs font-semibold">{error}</div>}
+      {error && <div className="col-span-1 md:col-span-2 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-red-600 text-xs font-semibold">{error}</div>}
 
       {tracking && (
         <div className="col-span-1 md:col-span-2 bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
@@ -408,12 +712,21 @@ function TrackSection() {
             </div>
             {tracking.history?.length > 0 ? (
               <div className="space-y-2">
-                {tracking.history.map((h, i) => (
-                  <div key={i} className="flex gap-3 text-xs">
-                    <div className="mt-1 w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-                    <div><p className="font-semibold text-gray-700">{h.status || h.activity}</p><p className="text-gray-400">{h.location} · {h.date || h.timestamp}</p></div>
-                  </div>
-                ))}
+                {tracking.history.map((h, i) => {
+                  let statusText = h.status || h.activity;
+                  if (statusText === 'SPB') statusText = 'New / Manifested (SPB)';
+                  if (statusText === 'DEL') statusText = 'Delivered';
+                  if (statusText === 'INT') statusText = 'In Transit';
+                  if (statusText === 'OFD') statusText = 'Out For Delivery';
+                  if (statusText === 'RTO') statusText = 'RTO';
+                  if (statusText === 'SC') statusText = 'Shipped / Picked Up';
+                  return (
+                    <div key={i} className="flex gap-3 text-xs">
+                      <div className="mt-1 w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                      <div><p className="font-semibold text-gray-700">{statusText}</p><p className="text-gray-400">{h.location} · {h.date || h.timestamp}</p></div>
+                    </div>
+                  );
+                })}
               </div>
             ) : <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl p-3 overflow-auto max-h-48">{JSON.stringify(tracking, null, 2)}</pre>}
           </div>
@@ -490,8 +803,8 @@ export default function Shipmaxx() {
   const location = useLocation();
   const [rtsId, setRtsId] = useState('');
 
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
+  const [authEmail, setAuthEmail] = useState(() => localStorage.getItem('smx_auth_email') || 'infotriven@gmail.com');
+  const [authPassword, setAuthPassword] = useState(() => localStorage.getItem('smx_auth_pass') || 'Triven123$');
   const [authApiKey, setAuthApiKey] = useState('');
   const [authBaseUrl, setAuthBaseUrl] = useState('https://appapi.losung360.com/external/v1');
 
@@ -511,6 +824,15 @@ export default function Shipmaxx() {
   const [awbCode, setAwbCode] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
   const [carrierVariantId, setCarrierVariantId] = useState('');
+  const [inlinePdfUrl, setInlinePdfUrl] = useState('');
+  const [inlineManifestUrl, setInlineManifestUrl] = useState('');
+
+  const [srvSourcePin, setSrvSourcePin] = useState(() => localStorage.getItem('smx_src_pin') || '208017');
+  const [srvDestPin, setSrvDestPin] = useState('');
+  const [srvWeight, setSrvWeight] = useState(0.5);
+  const [srvLoading, setSrvLoading] = useState(false);
+  const [srvCarriers, setSrvCarriers] = useState([]);
+  const [srvError, setSrvError] = useState('');
 
   const setC = (k, v) => setOrder(p => ({ ...p, customer: { ...p.customer, [k]: v } }));
   const setPkg = (k, v) => setOrder(p => ({ ...p, package: { ...p.package, [k]: v } }));
@@ -563,8 +885,8 @@ export default function Shipmaxx() {
           <div className="px-5 py-4 space-y-3">
             <h3 className="font-semibold text-gray-800 text-sm">Option 1: Email & Password</h3>
             <Field label="Base URL"><input className={inp} value={authBaseUrl} onChange={e => setAuthBaseUrl(e.target.value)} /></Field>
-            <Field label="Email"><input className={inp} placeholder="admin@example.com" value={authEmail} onChange={e => setAuthEmail(e.target.value)} /></Field>
-            <Field label="Password"><input className={inp} type="password" placeholder="••••••••" value={authPassword} onChange={e => setAuthPassword(e.target.value)} /></Field>
+            <Field label="Email"><input className={inp} placeholder="admin@example.com" value={authEmail} onChange={e => { setAuthEmail(e.target.value); localStorage.setItem('smx_auth_email', e.target.value); }} /></Field>
+            <Field label="Password"><input className={inp} type="password" placeholder="••••••••" value={authPassword} onChange={e => { setAuthPassword(e.target.value); localStorage.setItem('smx_auth_pass', e.target.value); }} /></Field>
           </div>
           <div className="border-t border-gray-100 bg-gray-50 px-5 py-4 space-y-3">
             <h3 className="font-semibold text-gray-800 text-sm">Option 2: Bearer Token</h3>
@@ -641,7 +963,12 @@ export default function Shipmaxx() {
           const res = await smxSvc.createOrder(payload);
           const d = res.data?.data || res.data;
           const extracted = res.data?.data?.extracted_order_id || d?.extracted_order_id || d?.order_id || d?.id;
-          if (extracted) { setSmxOrderId(String(extracted)); setTimeout(() => goStep(2), 1200); }
+          if (extracted) { 
+            setSmxOrderId(String(extracted)); 
+            setSrvDestPin(order.customer.pincode || '');
+            setSrvWeight(order.package.weight || 0.5);
+            setTimeout(() => goStep(2), 1200); 
+          }
           if (rtsId) { api.patch(`/ready-to-shipment/${rtsId}/sent`).catch(() => {}); }
           return res.data;
         })} className="px-6 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition w-full sm:w-auto active:scale-95 shadow-md">
@@ -664,6 +991,66 @@ export default function Shipmaxx() {
             <Field label="Carrier Variant ID (optional)"><input className={inp} type="number" value={carrierVariantId} onChange={e => setCarrierVariantId(e.target.value)} /></Field>
           </div>
         </div>
+
+        {/* Check Serviceability Block */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="h-1 bg-indigo-500" />
+          <div className="px-5 py-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-700 text-sm">Check Serviceability (Manual Choice)</h3>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Source PIN"><input className={inp} value={srvSourcePin} onChange={e => { const v = e.target.value; localStorage.setItem('smx_src_pin', v); setSrvSourcePin(v); }} placeholder="e.g. 110001" /></Field>
+              <Field label="Dest PIN"><input className={inp} value={srvDestPin} onChange={e => setSrvDestPin(e.target.value)} placeholder="e.g. 400001" /></Field>
+              <Field label="Weight (kg)"><input className={inp} type="number" value={srvWeight} onChange={e => setSrvWeight(Number(e.target.value))} /></Field>
+            </div>
+            <button onClick={async () => {
+              if (!srvSourcePin || !srvDestPin || !srvWeight) return setSrvError('Please enter source pin, dest pin, and weight');
+              setSrvLoading(true); setSrvError(''); setSrvCarriers([]);
+              try {
+                const srvPayload = { 
+                  source_pincode: srvSourcePin, 
+                  destination_pincode: srvDestPin, 
+                  weight_kg: srvWeight,
+                  payment_type: order.payment_method === 'cod' ? 'cod' : 'prepaid',
+                  shipment_value: order.products.reduce((acc, p) => acc + (Number(p.price) * Number(p.quantity||1)), 0) || 0
+                };
+                const res = await smxSvc.checkServiceability(srvPayload);
+                console.log('ShipMaxx Serviceability API Response:', res);
+                const rd = res.data?.data || res.data || {};
+                let list = Array.isArray(rd) ? rd : (rd.available_courier_companies || rd.carriers || rd.couriers || Object.values(rd).find(Array.isArray) || []);
+                setSrvCarriers(Array.isArray(list) ? list : []);
+                if (!Array.isArray(list) || list.length === 0) setSrvError('No carriers found for this route. Check console for details.');
+              } catch (e) {
+                setSrvError(e?.response?.data?.message || e.message);
+              } finally {
+                setSrvLoading(false);
+              }
+            }} disabled={srvLoading} className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition w-full disabled:opacity-50">
+              {srvLoading ? 'Checking...' : 'Check Serviceability & View Carriers'}
+            </button>
+            {srvError && <p className="text-xs text-red-600 font-medium">{srvError}</p>}
+            {srvCarriers.length > 0 && (
+              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
+                {srvCarriers.map((c, i) => {
+                  const cId = c.carrier_variant_id || c.id || c.carrier_id || c.courier_id || c.partner_id || c.variant_id;
+                  const cName = c.carrier_name || c.courier_name || c.partner_name || c.name || 'Unknown Carrier';
+                  const cRate = c.rate || c.total_amount || c.charge || 0;
+                  return (
+                  <div key={cId || i} className="flex items-center justify-between p-2.5 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition">
+                    <div>
+                      <p className="font-bold text-gray-800 text-xs">{cName}</p>
+                      <p className="text-gray-500 text-[10px] mt-0.5">ID: {cId} • Rate: <span className="font-semibold text-gray-700">₹{cRate}</span></p>
+                    </div>
+                    <button onClick={() => setCarrierVariantId(String(cId))} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[10px] font-bold hover:bg-indigo-700 transition active:scale-95 shadow-sm">
+                      Select
+                    </button>
+                  </div>
+                )})}
+              </div>
+            )}
+          </div>
+        </div>
         <button onClick={() => call(async () => {
           if (!smxOrderId) throw new Error('order_id is required');
           const payload = { order_id: smxOrderId };
@@ -682,8 +1069,8 @@ export default function Shipmaxx() {
 
     // Step 3: Generate Label
     if (step === 3) return (
-      <div className="space-y-4 max-w-md animate-in fade-in duration-200">
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+      <div className="space-y-4 max-w-5xl animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden max-w-md" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
           <div className="h-1 bg-purple-500" />
           <div className="px-5 py-4 space-y-3">
             <Field label="AWB Number (auto-filled)">
@@ -691,28 +1078,57 @@ export default function Shipmaxx() {
             </Field>
           </div>
         </div>
-        <button onClick={() => call(async () => {
-          if (!awbCode) throw new Error('AWB is required');
-          const res = await smxSvc.generateLabel(awbCode.trim());
-          return res.data;
-        })} className="px-6 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 transition w-full sm:w-auto active:scale-95 shadow-md">
-          Generate Label
-        </button>
-        {result && (result.data?.label_url || result.label_url) && (
-          <a href={result.data?.label_url || result.label_url} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-2 text-white text-sm font-semibold px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 transition shadow-md">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Open Label PDF
-          </a>
-        )}
-        {result && !result.data?.label_url && !result.label_url && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-2">
-            <p className="text-amber-800 text-sm font-semibold">Label not available via API</p>
-            <p className="text-amber-700 text-xs">ShipMaxx does not support label generation via API for this shipment. Please download directly from your ShipMaxx dashboard.</p>
-            <a href="https://appapi.losung360.com" target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl bg-amber-600 text-white hover:bg-amber-700 transition">
-              Open ShipMaxx Dashboard
-            </a>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => call(async () => {
+            if (!awbCode) throw new Error('AWB is required');
+            const response = await fetch(`${authBaseUrl}/shipping/download-label?awb=${awbCode.trim()}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Failed to download label. Make sure AWB is valid.');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+            setInlinePdfUrl(url);
+            return { message: "Label fetched successfully!" };
+          })} className="px-6 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 transition w-full sm:w-auto active:scale-95 shadow-md">
+            Show Label
+          </button>
+          
+          <button onClick={() => call(async () => {
+            if (!awbCode) throw new Error('AWB is required');
+            const response = await fetch(`${authBaseUrl}/shipping/manifest/${awbCode.trim()}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Failed to download manifest.');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+            setInlineManifestUrl(url);
+            return { message: "Manifest fetched successfully!" };
+          })} className="px-6 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 transition w-full sm:w-auto active:scale-95 shadow-md">
+            Show Manifest
+          </button>
+        </div>
+        
+        {result && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden w-full" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+            <div className="h-1 bg-purple-500" />
+            <div className="px-5 py-4 space-y-4">
+              <pre className="text-xs text-green-600 bg-green-50 font-bold rounded-xl p-3 inline-block">{result.message || 'Success'}</pre>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {inlinePdfUrl && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-bold text-gray-700 px-1">Shipping Label</p>
+                    <iframe src={inlinePdfUrl} className="w-full h-[600px] rounded-xl border border-gray-200 bg-gray-50" title="Label PDF" />
+                  </div>
+                )}
+                {inlineManifestUrl && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-bold text-gray-700 px-1">Manifest Document</p>
+                    <iframe src={inlineManifestUrl} className="w-full h-[600px] rounded-xl border border-gray-200 bg-white" title="Manifest HTML" />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
         <a href="https://appapi.losung360.com" target="_blank" rel="noreferrer"
@@ -768,13 +1184,28 @@ export default function Shipmaxx() {
         </div>
         <button onClick={() => call(async () => {
           if (!smxOrderId) throw new Error('order_id is required');
-          const res = await smxSvc.getInvoice(smxOrderId.trim());
-          const url = res.data?.data?.invoice_url || res.data?.invoice_url;
-          if (url) window.open(url, '_blank');
-          return res.data;
+          const response = await fetch(`${authBaseUrl}/invoice/order/${smxOrderId.trim()}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!response.ok) throw new Error('Failed to fetch invoice. Make sure order ID is valid.');
+          const blob = await response.blob();
+          const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+          setInlinePdfUrl(url);
+          return { message: "Invoice downloaded successfully!" };
         })} className="px-6 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600 transition w-full sm:w-auto active:scale-95 shadow-md">
-          Download Invoice
+          Show Invoice
         </button>
+        {result && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+            <div className="h-1 bg-orange-500" />
+            <div className="px-5 py-4 space-y-4">
+              <pre className="text-xs text-green-600 bg-green-50 font-bold rounded-xl p-3">{result.message || 'Success'}</pre>
+              {inlinePdfUrl && (
+                <iframe src={inlinePdfUrl} className="w-full h-[500px] rounded-xl border border-gray-200 bg-gray-50" title="Invoice PDF" />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
