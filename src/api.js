@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL });
+const API = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || 'https://xluxtriven.de/api/v1' });
 API.interceptors.request.use((config) => {
   const tokens = JSON.parse(localStorage.getItem('crmTokens') || 'null');
   if (tokens?.access?.token) {
@@ -50,7 +50,7 @@ API.interceptors.response.use(
           throw new Error('No refresh token available');
         }
 
-        const { data } = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/auth/refresh-tokens`, {
+        const { data } = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'https://xluxtriven.de/api/v1'}/auth/refresh-tokens`, {
           refreshToken: tokens.refresh.token,
         });
 

@@ -137,7 +137,7 @@ export default function Shiprocket({ initialSection, initialReturnsTab = 'return
   const fetchAddress = async (pin, type) => {
     if (pin.length !== 6) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/pincode/${pin}`);
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://xluxtriven.de/api/v1'}/pincode/${pin}`);
       const data = await res.json();
       const result = Array.isArray(data) ? data[0] : data;
       if (result?.Status === 'Success') {
