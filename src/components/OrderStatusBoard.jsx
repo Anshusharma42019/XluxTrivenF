@@ -119,7 +119,13 @@ const getDateParams = (preset, customFrom, customTo) => {
   }
   if (preset === 'month') {
     const d = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { filterType: 'range', from: formatDateInput(d), to };
+    const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    return { filterType: 'range', from: formatDateInput(d), to: formatDateInput(end) };
+  }
+  if (preset === 'last_month') {
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const end = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { filterType: 'range', from: formatDateInput(start), to: formatDateInput(end) };
   }
   if (preset === 'custom' && customFrom && customTo) {
     return { filterType: 'range', from: customFrom, to: customTo };
@@ -268,13 +274,6 @@ export default function OrderStatusBoard({
     return acc;
   }, {});
 
-  // Merge all UNDELIVERED variants into the UNDELIVERED card
-  const undeliveredTotal = (statusCounts['UNDELIVERED_1ST_ATTEMPT'] || 0)
-    + (statusCounts['UNDELIVERED_2ND_ATTEMPT'] || 0)
-    + (statusCounts['UNDELIVERED_3RD_ATTEMPT'] || 0)
-    + (statusCounts['UNDELIVERED'] || 0)
-    + (statusCounts['UNDELIVERED_ATTEMPT_FAILURE'] || 0);
-  if (undeliveredTotal > 0) statusCounts['UNDELIVERED'] = undeliveredTotal;
 
   const listedStatuses = new Set(STATUS_LIST.map(normalizeStatus));
   const statusCards = [
@@ -311,6 +310,9 @@ export default function OrderStatusBoard({
                     {t(filter.label).toUpperCase()}
                   </button>
                 ))}
+                <button onClick={() => selectDatePreset('last_month')} className={`h-8 px-3 rounded-lg text-[10px] sm:text-[11px] font-black transition-all whitespace-nowrap ${datePreset === 'last_month' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                  LAST MONTH
+                </button>
               </div>
             </div>
           )}

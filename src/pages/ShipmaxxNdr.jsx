@@ -235,7 +235,8 @@ function NdrList({ onActionItem }) {
 
         // ShipMaxx API actually returns { status, shipments: [...] }
         let arr = [];
-        if (d2?.shipments && Array.isArray(d2.shipments)) arr = d2.shipments;
+        if (d2?.data?.shipments && Array.isArray(d2.data.shipments)) arr = d2.data.shipments;
+        else if (d2?.shipments && Array.isArray(d2.shipments)) arr = d2.shipments;
         else if (d2?.data && Array.isArray(d2.data)) arr = d2.data;
         else if (Array.isArray(d2)) arr = d2;
         else if (Array.isArray(d1)) arr = d1;
