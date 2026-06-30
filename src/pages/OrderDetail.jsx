@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as srSvc from '../services/shiprocket.service';
+import * as smxSvc from '../services/shipmaxx.service';
 
 const STATUS_COLORS = {
   DELIVERED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -33,12 +34,23 @@ const SR_STATUS_COLOR = {
 };
 
 const getStatusLabel = (a) => {
+  if (a.description) return a.description;
+  if (a.system_status_name) return a.system_status_name;
+  
   const code = Number(a['sr-status'] ?? a.status_id ?? a.statusCode);
   if (code && SR_STATUS[code]) return SR_STATUS[code];
   return a.activity || a['sr-status-label'] || a.status || String(a['sr-status'] || '—');
 };
 
 const getStatusDot = (a) => {
+  if (a.system_status_code === 'DEL' || a.system_status_name === 'Delivered') return 'bg-emerald-500';
+  if (a.system_status_code === 'INT' || a.system_status_name === 'In-Transit') return 'bg-cyan-500';
+  if (a.system_status_code === 'PKD' || a.system_status_name === 'Pickup Done' || a.system_status_code === 'SPD') return 'bg-amber-400';
+  if (a.system_status_code === 'UND' || a.system_status_name === 'Undelivered') return 'bg-red-400';
+  if (a.system_status_code === 'RTO') return 'bg-orange-400';
+  if (a.system_status_code === 'RTO-DEL') return 'bg-blue-400';
+  if (a.system_status_code === 'CAN' || a.system_status_name === 'Cancelled') return 'bg-gray-400';
+
   const code = Number(a['sr-status'] ?? a.status_id ?? a.statusCode);
   return SR_STATUS_COLOR[code] || 'bg-gray-300';
 };
@@ -71,7 +83,8 @@ export default function OrderDetail() {
         setOrder(o);
         if (o?.awb_code) {
           setTrackLoading(true);
-          srSvc.trackByAWB(o.awb_code)
+          const trackApi = o.platform === 'shipmaxx' ? smxSvc.trackShipment : srSvc.trackByAWB;
+          trackApi(o.awb_code)
             .then(r => setTracking(r.data?.data))
             .catch(() => {})
             .finally(() => setTrackLoading(false));
@@ -85,7 +98,8 @@ export default function OrderDetail() {
     if (!order?.awb_code) return;
     setTrackLoading(true);
     try {
-      const res = await srSvc.trackByAWB(order.awb_code);
+      const trackApi = order.platform === 'shipmaxx' ? smxSvc.trackShipment : srSvc.trackByAWB;
+      const res = await trackApi(order.awb_code);
       setTracking(res.data?.data);
     } catch { setTracking(null); }
     finally { setTrackLoading(false); }
@@ -107,8 +121,9 @@ export default function OrderDetail() {
 
   const statusKey = String(order.status || '').toUpperCase().replace(/[\s-]+/g, '_');
   const statusColor = STATUS_COLORS[statusKey] || 'bg-gray-100 text-gray-600 border-gray-200';
-  const trackingData = tracking?.tracking_data;
-  const activities = trackingData?.shipment_track_activities || [];
+  const isShipmaxx = order.platform === 'shipmaxx';
+  const trackingData = isShipmaxx ? tracking : tracking?.tracking_data;
+  const activities = isShipmaxx ? (tracking?.history || []) : (trackingData?.shipment_track_activities || []);
 
   return (
     <div className="max-w-4xl mx-auto space-y-4 pb-10">
@@ -149,9 +164,13 @@ export default function OrderDetail() {
           <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Order Info</p>
         </div>
         <Field label="Order ID" value={order.order_id} mono />
-        <Field label="Shiprocket ID" value={order.shiprocket_order_id} mono />
-        <Field label="Shipment ID" value={order.shiprocket_shipment_id} mono />
-        <Field label="AWB Code" value={order.awb_code} mono link href={`https://shiprocket.co/tracking/${order.awb_code}`} />
+        {order.platform !== 'shipmaxx' && (
+          <>
+            <Field label="Shiprocket ID" value={order.shiprocket_order_id} mono />
+            <Field label="Shipment ID" value={order.shiprocket_shipment_id} mono />
+          </>
+        )}
+        <Field label="AWB Code" value={order.awb_code} mono link href={order.platform === 'shipmaxx' ? undefined : `https://shiprocket.co/tracking/${order.awb_code}`} />
         <Field label="Courier" value={order.courier_name} />
         <Field label="Amount" value={order.sub_total ? `₹${Number(order.sub_total).toLocaleString()}` : null} />
         <Field label="Order Date" value={fmt(order.order_date || order.createdAt)} />
@@ -198,8 +217,12 @@ export default function OrderDetail() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">
               <Field label="Current Status" value={trackingData?.current_status || (activities[0] ? getStatusLabel(activities[0]) : '—')} />
-              <Field label="Delivered Date" value={trackingData?.delivered_date || '—'} />
-              <Field label="ETA" value={trackingData?.etd ? new Date(trackingData.etd).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'} />
+              <Field label="Delivered Date" value={trackingData?.delivered_date || (isShipmaxx && trackingData?.current_status === 'DEL' && activities[0]?.timestamp ? new Date(activities[0].timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')} />
+              <Field label="ETA" value={
+                isShipmaxx 
+                ? (trackingData?.expected_delivery_date ? new Date(trackingData.expected_delivery_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
+                : (trackingData?.etd ? new Date(trackingData.etd).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
+              } />
             </div>
             {activities.length > 0 && (
               <div className="relative mt-2">
@@ -207,7 +230,9 @@ export default function OrderDetail() {
                   const label = getStatusLabel(a);
                   const dot = getStatusDot(a);
                   const isFirst = i === 0;
-                  const datetime = [a.date, a.time].filter(Boolean).join(' ');
+                  const datetime = a.timestamp 
+                    ? new Date(a.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) 
+                    : [a.date, a.time].filter(Boolean).join(' ');
                   return (
                     <div key={i} className="relative flex gap-4 pb-5">
                       {/* Line */}

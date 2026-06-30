@@ -36,6 +36,7 @@ const DATE_FILTERS = [
   { id: 'yesterday', label: 'Yesterday' },
   { id: 'last7', label: 'Last 7 Days' },
   { id: 'month', label: 'This Month' },
+  { id: 'last_month', label: 'Last Month' },
   { id: 'all', label: 'All Time' },
   { id: 'custom', label: 'Custom' },
 ];
@@ -159,6 +160,16 @@ export default function OrderStatusBoard({
   const [savingNote, setSavingNote] = useState(null);
   const [noteError, setNoteError] = useState({});
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.order-status-interactive')) {
+        setSelectedStatus('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadDelivered = useCallback((params = {}) => {
     svc.getDeliveredStats(params).then(res => {
@@ -298,7 +309,7 @@ export default function OrderStatusBoard({
             {subtitle || `${orderTotal} ${t('ORDERS TOTAL')}`}
           </p>
         </div>
-        <div className="w-full lg:w-auto flex flex-col gap-3">
+        <div className="order-status-interactive w-full lg:w-auto flex flex-col gap-3">
           {!filterParams && (
             <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar shrink-0">
               <div className="inline-flex items-center gap-1 rounded-xl bg-gray-100 p-1">
@@ -310,9 +321,6 @@ export default function OrderStatusBoard({
                     {t(filter.label).toUpperCase()}
                   </button>
                 ))}
-                <button onClick={() => selectDatePreset('last_month')} className={`h-8 px-3 rounded-lg text-[10px] sm:text-[11px] font-black transition-all whitespace-nowrap ${datePreset === 'last_month' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  LAST MONTH
-                </button>
               </div>
             </div>
           )}
@@ -361,7 +369,7 @@ export default function OrderStatusBoard({
             const selected = selectedStatus === status;
             return (
               <button key={status} onClick={() => openStatusDetails(status)}
-                className={`min-h-[70px] sm:min-h-[86px] text-left rounded-2xl border p-3.5 sm:p-4 transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${
+                className={`order-status-interactive min-h-[70px] sm:min-h-[86px] text-left rounded-2xl border p-3.5 sm:p-4 transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${
                   selected ? 'ring-2 ring-green-500 border-green-300 bg-green-50' : STATUS_STYLES[normalizeStatus(status)] || 'border-gray-200 bg-gray-50 text-gray-700'
                 }`}>
                 <div className="flex items-start justify-between gap-3">
@@ -378,7 +386,7 @@ export default function OrderStatusBoard({
       )}
 
       {selectedStatus && (
-        <div className="mt-6 border-t border-gray-100 pt-5">
+        <div className="order-status-interactive mt-6 border-t border-gray-100 pt-5">
           <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
             <div>
               <h4 className="text-sm font-semibold text-gray-700">{formatStatusLabel(selectedStatus)} Details</h4>
@@ -468,7 +476,7 @@ export default function OrderStatusBoard({
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-400 font-semibold">Date</p>
+                      <p className="text-gray-400 font-semibold">Order Date</p>
                       <p className="font-semibold text-gray-700">{formatDateTime(order.createdAt)}</p>
                     </div>
                     <div onClick={e => e.stopPropagation()}>
@@ -476,7 +484,17 @@ export default function OrderStatusBoard({
                       {order.awb_code
                         ? (
                           <a 
-                            href={`https://shiprocket.co/tracking/${order.awb_code}`} 
+                            href={(function() {
+                              if (platform !== 'shipmaxx') return `https://shiprocket.co/tracking/${order.awb_code}`;
+                              const c = (order.courier_name || '').toLowerCase();
+                              if (c.includes('shadowfax')) return `https://tracker.shadowfax.in/track?awb=${order.awb_code}`;
+                              if (c.includes('delhivery')) return `https://www.delhivery.com/tracking`;
+                              if (c.includes('xpressbees')) return `https://www.xpressbees.com/track?awb=${order.awb_code}`;
+                              if (c.includes('ecom')) return `https://ecomexpress.in/tracking/?awb=${order.awb_code}`;
+                              if (c.includes('bluedart')) return `https://www.bluedart.com/tracking`;
+                              if (c.includes('amazon') || c.includes('ats')) return `https://track.amazon.in/tracking/${order.awb_code}`;
+                              return `https://shipmaxx.in/track/${order.awb_code}`;
+                            })()} 
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="font-mono font-bold text-blue-600 truncate hover:underline"

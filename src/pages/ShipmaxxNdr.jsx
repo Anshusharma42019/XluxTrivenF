@@ -256,6 +256,11 @@ function NdrList({ onActionItem }) {
         else if (Array.isArray(d2)) rawCrm = d2;
         else if (Array.isArray(d1)) rawCrm = d1;
 
+        const attemptLabel = (num) => {
+          const n = Number(num || 1);
+          return n === 1 ? '1st Attempt' : n === 2 ? '2nd Attempt' : n === 3 ? '3rd Attempt' : `${n}th Attempt`;
+        };
+
         crmNdrs = rawCrm.map(o => ({
           _id:            o._id,
           id:             o._id,
@@ -266,11 +271,13 @@ function NdrList({ onActionItem }) {
           customer_phone: o.billing_phone || '',
           status:         o.status || 'UNDELIVERED',
           attempt_number: o.delivery_attempt ?? 1,
-          reason:         o.status || 'Undelivered',
+          reason:         `Undelivered - ${attemptLabel(o.delivery_attempt ?? 1)}`,
           ndr_date:       o.status_updated_at || o.createdAt,
           courier_name:   o.courier_name || '',
           payment_method: o.payment_method || '',
           sub_total:      o.sub_total,
+          billing_city:   o.billing_city || '',
+          billing_state:  o.billing_state || '',
           _source:        'crm',
         }));
       }
@@ -287,20 +294,41 @@ function NdrList({ onActionItem }) {
     }).finally(() => setLoading(false));
   }, [statusFilter]);
 
-  useEffect(() => { fetchNdrs(); }, []);
+  // Fetch on mount and whenever status filter changes
+  useEffect(() => { fetchNdrs(statusFilter); }, [statusFilter]);
 
   const filtered = ndrs.filter(n => {
+    // Attempt number filter
     if (attempt !== 'all') {
       const a = Number(n.attempt_number ?? n.delivery_attempt ?? 1);
       if (attempt === '4+' ? a < 4 : a !== Number(attempt)) return false;
     }
+    // NDR status filter — only applies to ShipMaxx NDR source records
+    // For CRM records (pending = undelivered, closed = delivered/rto)
+    if (statusFilter) {
+      const s = (n.status || '').toLowerCase();
+      const ndrStatus = (n.ndr_status || '').toLowerCase();
+      if (statusFilter === 'pending') {
+        // pending: undelivered records not yet actioned
+        const isPending = ndrStatus === 'pending' || s.includes('undelivered') || s === 'pending';
+        if (!isPending) return false;
+      } else if (statusFilter === 'action_requested') {
+        const isAction = ndrStatus === 'action_requested' || s === 'action_requested';
+        if (!isAction) return false;
+      } else if (statusFilter === 'closed') {
+        const isClosed = ndrStatus === 'closed' || s === 'closed' || s.includes('delivered') || s.includes('rto');
+        if (!isClosed) return false;
+      }
+    }
+    // Search filter
     if (search) {
       const q = search.toLowerCase();
       return (
         (n.awb || n.awb_code || '').toLowerCase().includes(q) ||
         (n.customer?.name || n.customer_name || '').toLowerCase().includes(q) ||
         (n.order_id || '').toLowerCase().includes(q) ||
-        (n.id || '').toLowerCase().includes(q)
+        (n.id || '').toLowerCase().includes(q) ||
+        (n.reason || '').toLowerCase().includes(q)
       );
     }
     return true;
@@ -412,7 +440,7 @@ function NdrList({ onActionItem }) {
               className="px-5 py-2 rounded-xl bg-orange-500 text-white text-xs font-bold hover:bg-orange-600 transition disabled:opacity-50">
               {loading ? '…' : 'Refresh'}
             </button>
-            <button onClick={() => { setStatus(''); setAttempt('all'); setSearch(''); fetchNdrs(''); }}
+            <button onClick={() => { setStatus(''); setAttempt('all'); setSearch(''); }}
               className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 text-xs font-bold hover:bg-gray-300 transition">
               Reset
             </button>
@@ -999,6 +1027,13 @@ export default function ShipmaxxNdr() {
   const [tab, setTab]             = useState('board');
   const [actionItem, setActionItem] = useState(null);
   const location = useLocation();
+  // Track which tabs have been visited — lazy mount to avoid loading all tabs on page load
+  const [visited, setVisited]     = useState(new Set(['board']));
+
+  const switchTab = (id) => {
+    setTab(id);
+    setVisited(prev => new Set([...prev, id]));
+  };
 
   useEffect(() => {
     if (location.state?.prefillAwb) {
@@ -1011,7 +1046,7 @@ export default function ShipmaxxNdr() {
 
   const handleActionItem = (item) => {
     setActionItem(item);
-    setTab('action');
+    switchTab('action');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1030,7 +1065,7 @@ export default function ShipmaxxNdr() {
           {TABS.map(t => {
             const active = tab === t.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => switchTab(t.id)}
                 className={`h-9 rounded-lg px-3 text-xs font-semibold transition-all inline-flex items-center gap-2 ${
                   active ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
                 }`}>
@@ -1044,24 +1079,31 @@ export default function ShipmaxxNdr() {
         </div>
       </div>
 
+      {/* Lazy mount: only render when first visited, keep mounted after for instant switching */}
       <div style={{ display: tab === 'board' ? 'block' : 'none' }}>
         <OrderStatusBoard 
           title="ShipMaxx Overall Status" 
           subtitle="ALL SHIPMAXX ORDERS"
-          defaultPreset="month"
-          defaultStatus="UNDELIVERED"
+          defaultPreset="today"
+          defaultStatus=""
           platform="shipmaxx"
         />
       </div>
-      <div style={{ display: tab === 'list' ? 'block' : 'none' }}>
-        <NdrList onActionItem={handleActionItem} />
-      </div>
-      <div style={{ display: tab === 'action' ? 'block' : 'none' }}>
-        <NdrActionPanel prefillItem={actionItem} />
-      </div>
-      <div style={{ display: tab === 'notes' ? 'block' : 'none' }}>
-        <NdrNotesPanel onUseAwb={(awb) => { setActionItem({ awb, id: '' }); setTab('action'); }} />
-      </div>
+      {visited.has('list') && (
+        <div style={{ display: tab === 'list' ? 'block' : 'none' }}>
+          <NdrList onActionItem={handleActionItem} />
+        </div>
+      )}
+      {visited.has('action') && (
+        <div style={{ display: tab === 'action' ? 'block' : 'none' }}>
+          <NdrActionPanel prefillItem={actionItem} />
+        </div>
+      )}
+      {visited.has('notes') && (
+        <div style={{ display: tab === 'notes' ? 'block' : 'none' }}>
+          <NdrNotesPanel onUseAwb={(awb) => { setActionItem({ awb, id: '' }); switchTab('action'); }} />
+        </div>
+      )}
     </div>
   );
 }

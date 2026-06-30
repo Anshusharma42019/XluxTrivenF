@@ -385,7 +385,10 @@ export default function ShipmaxxFollowup() {
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${ROLE_GRADIENT[i % 5]} flex items-center justify-center text-white font-black shrink-0 shadow`}>{initials(o.billing_customer_name)}</div>
                     <div className="min-w-0">
-                      <p className="font-bold text-gray-800 text-sm truncate">{o.billing_customer_name}</p>
+                      <p className="font-bold text-gray-800 text-sm truncate">
+                        {o.billing_customer_name}
+                        <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-100 text-purple-700 border border-purple-200">Kit {o.kit_number || 1}</span>
+                      </p>
                       <p className="text-[10px] text-gray-400 font-mono mt-0.5">{o.billing_phone} · {o.awb_code}</p>
                     </div>
                   </div>
@@ -466,7 +469,10 @@ export default function ShipmaxxFollowup() {
                               {initials(o.billing_customer_name)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-gray-800 text-sm truncate">{o.billing_customer_name || '—'}</p>
+                              <p className="font-bold text-gray-800 text-sm truncate">
+                                {o.billing_customer_name || '—'}
+                                <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-100 text-purple-700 border border-purple-200">Kit {o.kit_number || 1}</span>
+                              </p>
                               <p className="text-[10px] text-gray-400 font-mono mt-0.5">{o.awb_code}</p>
                             </div>
                           </div>
@@ -629,6 +635,8 @@ export default function ShipmaxxFollowup() {
                   <div>
                     <SectionHead label="Order Details" />
                     <DetailRow label="Order ID" value={selected.order_id} />
+                    <DetailRow label="Kit Count" value={`Kit ${selected.kit_number || 1}`} />
+                    <DetailRow label="Medicine" value={selected.order_items?.[0]?.name || '—'} />
                     <DetailRow label="Courier" value={selected.courier_name} />
                     <DetailRow label="Payment" value={selected.payment_method} />
                     <DetailRow label="Amount" value={`₹${selected.sub_total}`} />
@@ -679,6 +687,18 @@ export default function ShipmaxxFollowup() {
                           <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 shrink-0">×{p.units || 1}</span>
                         </div>
                       ))}
+                    </div>
+
+                    <SectionHead label="Problem & Remarks" />
+                    <div className="space-y-2 mt-2">
+                      <div className="p-3 bg-red-50/50 rounded-xl border border-red-100 shadow-sm">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-red-400 block mb-1">Reported Problem</span>
+                        <span className="text-sm text-gray-800 font-medium whitespace-pre-wrap">{selected.verification_problem || selected.problem || selected.lead_id?.problem || 'No problem recorded'}</span>
+                      </div>
+                      <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 shadow-sm">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400 block mb-1">Order Remarks</span>
+                        <span className="text-sm text-gray-800 font-medium whitespace-pre-wrap">{selected.verification_notes || selected.notes || selected.lead_id?.note || 'No remarks added'}</span>
+                      </div>
                     </div>
 
                     <SectionHead label="Feedback Notes" />
