@@ -454,6 +454,7 @@ export default function ReorderCommission() {
               onClick={async () => {
                 setLoading(true);
                 try {
+                  await api.post('/shipmaxx/orders/sync');
                   await api.post('/shiprocket/orders/sync');
                   loadCommissions(1);
                   loadStaff();

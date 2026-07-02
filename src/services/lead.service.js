@@ -17,6 +17,7 @@ export const createCallAgain = (leadId, notes) => API.post('/call-again', { lead
 export const getCallAgains = (params) => API.get('/call-again', { params }).then(r => r.data.data);
 export const updateCallAgain = (id, data) => API.patch(`/call-again/${id}`, data).then(r => r.data.data);
 export const distributeUnassigned = () => API.post('/leads/distribute-unassigned').then(r => r.data);
+export const distributeAbsentSalesLeads = () => API.post('/leads/distribute-absent').then(r => r.data);
 export const sendLeadWhatsApp = (leadId, message, templateName, languageCode, attachment) => {
   if (attachment) {
     const formData = new FormData();

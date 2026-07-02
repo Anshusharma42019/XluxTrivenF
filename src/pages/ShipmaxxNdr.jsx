@@ -21,34 +21,34 @@ const fmt = (v) => {
 const statusBadge = (s) => {
   const v = String(s || '').toUpperCase();
   if (v.includes('UNDELIVER') || v.includes('FAIL') || v.includes('NDR') || v.includes('EXCEPTION')) return 'bg-red-50 text-red-700 border-red-200';
-  if (v.includes('DELIVER'))   return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (v.includes('DELIVER')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (v.includes('TRANSIT') || v.includes('PICKUP') || v.includes('SHIPPED')) return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (v.includes('PENDING'))   return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-  if (v.includes('ACTION'))    return 'bg-orange-50 text-orange-700 border-orange-200';
-  if (v.includes('CLOSED'))    return 'bg-slate-50 text-slate-500 border-slate-200';
+  if (v.includes('PENDING')) return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+  if (v.includes('ACTION')) return 'bg-orange-50 text-orange-700 border-orange-200';
+  if (v.includes('CLOSED')) return 'bg-slate-50 text-slate-500 border-slate-200';
   return 'bg-slate-50 text-slate-700 border-slate-200';
 };
 
 const NDR_ACTIONS = [
-  { value: 'reattempt', label: '🔄 Re-attempt Delivery',   color: 'bg-blue-600 hover:bg-blue-700' },
-  { value: 'rto',       label: '↩️ Return to Origin (RTO)', color: 'bg-orange-500 hover:bg-orange-600' },
-  { value: 'escalate',  label: '🚨 Escalate',               color: 'bg-red-600 hover:bg-red-700' },
-  { value: 'follow_up', label: '📞 Follow Up',              color: 'bg-purple-600 hover:bg-purple-700' },
+  { value: 'reattempt', label: '🔄 Re-attempt Delivery', color: 'bg-blue-600 hover:bg-blue-700' },
+  { value: 'rto', label: '↩️ Return to Origin (RTO)', color: 'bg-orange-500 hover:bg-orange-600' },
+  { value: 'escalate', label: '🚨 Escalate', color: 'bg-red-600 hover:bg-red-700' },
+  { value: 'follow_up', label: '📞 Follow Up', color: 'bg-purple-600 hover:bg-purple-700' },
 ];
 
 const NDR_STATUS_OPTIONS = [
-  { value: '',                 label: 'All Statuses' },
-  { value: 'pending',          label: 'Pending' },
+  { value: '', label: 'All Statuses' },
+  { value: 'pending', label: 'Pending' },
   { value: 'action_requested', label: 'Action Requested' },
-  { value: 'closed',           label: 'Closed' },
+  { value: 'closed', label: 'Closed' },
 ];
 
 const ATTEMPT_OPTIONS = [
   { value: 'all', label: 'All Attempts' },
-  { value: '1',   label: '1st Attempt' },
-  { value: '2',   label: '2nd Attempt' },
-  { value: '3',   label: '3rd Attempt' },
-  { value: '4+',  label: '4+ Attempts' },
+  { value: '1', label: '1st Attempt' },
+  { value: '2', label: '2nd Attempt' },
+  { value: '3', label: '3rd Attempt' },
+  { value: '4+', label: '4+ Attempts' },
 ];
 
 /* ── Live Tracking Detail Panel ────────────────────────────────────────────── */
@@ -59,7 +59,7 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
 
   // NDR list item uses: id, awb, customer_name, customer_phone, status, attempt_number, reason, ndr_date
   // CRM order item uses: awb_code, billing_customer_name, billing_phone, order_id, status
-  const awb  = item?.awb || item?.awb_code || item?.awb_number;
+  const awb = item?.awb || item?.awb_code || item?.awb_number;
   const name = item?.customer?.name || item?.customer_name || item?.billing_customer_name || item?.name;
   const phone = item?.customer?.phone || item?.customer_phone || item?.billing_phone || item?.phone_number;
   const ndrId = item?.id || item?.ndr_id;
@@ -69,7 +69,7 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
     setLoading(true); setError(''); setTracking(null);
     smxSvc.trackShipment(awb)
       .then(res => setTracking(res.data?.data || res.data))
-      .catch(e  => setError(e?.response?.data?.detail || e?.response?.data?.message || e.message || 'Failed to fetch live tracking'))
+      .catch(e => setError(e?.response?.data?.detail || e?.response?.data?.message || e.message || 'Failed to fetch live tracking'))
       .finally(() => setLoading(false));
   }, [awb]);
 
@@ -79,9 +79,9 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
 
   const fields = [
     ['Customer Name', name],
-    ['Phone Number',  phone],
-    ['AWB Number',    awb],
-    ['NDR ID',        ndrId],
+    ['Phone Number', phone],
+    ['AWB Number', awb],
+    ['NDR ID', ndrId],
   ];
 
   if (item.order_id) {
@@ -91,9 +91,9 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
     fields.push(['Courier', item.courier_name]);
   }
   if (item.attempt_number !== undefined) fields.push(['Attempt #', item.attempt_number]);
-  if (item.reason)      fields.push(['NDR Reason', item.reason]);
-  if (item.ndr_date)    fields.push(['NDR Date',   new Date(item.ndr_date).toLocaleString('en-IN')]);
-  if (item.createdAt)   fields.push(['Created At', new Date(item.createdAt).toLocaleString('en-IN')]);
+  if (item.reason) fields.push(['NDR Reason', item.reason]);
+  if (item.ndr_date) fields.push(['NDR Date', new Date(item.ndr_date).toLocaleString('en-IN')]);
+  if (item.createdAt) fields.push(['Created At', new Date(item.createdAt).toLocaleString('en-IN')]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden space-y-5" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
@@ -101,7 +101,7 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <button onClick={onClose} className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>
             Back to List
           </button>
           <h3 className="font-bold text-gray-800 text-base">{name?.trim() || 'NDR Detail'}</h3>
@@ -134,7 +134,7 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
       <div className="px-5 pb-5">
         <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/30 space-y-4">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-            <svg className="w-4 h-4 text-orange-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <svg className="w-4 h-4 text-orange-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
             <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Live Tracking Status</span>
           </div>
           {loading && (
@@ -145,7 +145,7 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
           )}
           {error && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-red-600 text-xs font-semibold">
-              <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
               <span>{error}</span>
             </div>
           )}
@@ -153,10 +153,10 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  ['Order ID',    tracking.order_id],
-                  ['Courier',     tracking.courier || tracking.carrier],
-                  ['EDD',         tracking.edd || tracking.expected_delivery],
-                  ['Payment',     tracking.payment_method],
+                  ['Order ID', tracking.order_id],
+                  ['Courier', tracking.courier || tracking.carrier],
+                  ['EDD', tracking.edd || tracking.expected_delivery],
+                  ['Payment', tracking.payment_method],
                 ].filter(([, v]) => v).map(([label, value]) => (
                   <div key={label} className="bg-white rounded-xl p-3 border border-gray-100 shadow-sm">
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
@@ -197,16 +197,16 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
 
 /* ── NDR List (GET /ndr + CRM undelivered fallback) ─────────────────────────── */
 function NdrList({ onActionItem }) {
-  const [ndrs, setNdrs]           = useState([]);
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState('');
+  const [ndrs, setNdrs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [statusFilter, setStatus] = useState('');
-  const [search, setSearch]       = useState('');
-  const [attempt, setAttempt]     = useState('all');
-  const [detail, setDetail]       = useState(null);
+  const [search, setSearch] = useState('');
+  const [attempt, setAttempt] = useState('all');
+  const [detail, setDetail] = useState(null);
 
   // Bulk selection
-  const [selected, setSelected]   = useState(new Set());
+  const [selected, setSelected] = useState(new Set());
   const [bulkAction, setBulkAction] = useState('reattempt');
   const [bulkNotes, setBulkNotes] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -262,23 +262,23 @@ function NdrList({ onActionItem }) {
         };
 
         crmNdrs = rawCrm.map(o => ({
-          _id:            o._id,
-          id:             o._id,
-          awb:            o.awb_code || '',
-          awb_code:       o.awb_code || '',
-          order_id:       o.order_id || '',
-          customer_name:  o.billing_customer_name || '',
+          _id: o._id,
+          id: o._id,
+          awb: o.awb_code || '',
+          awb_code: o.awb_code || '',
+          order_id: o.order_id || '',
+          customer_name: o.billing_customer_name || '',
           customer_phone: o.billing_phone || '',
-          status:         o.status || 'UNDELIVERED',
+          status: o.status || 'UNDELIVERED',
           attempt_number: o.delivery_attempt ?? 1,
-          reason:         `Undelivered - ${attemptLabel(o.delivery_attempt ?? 1)}`,
-          ndr_date:       o.status_updated_at || o.createdAt,
-          courier_name:   o.courier_name || '',
+          reason: `Undelivered - ${attemptLabel(o.delivery_attempt ?? 1)}`,
+          ndr_date: o.status_updated_at || o.createdAt,
+          courier_name: o.courier_name || '',
           payment_method: o.payment_method || '',
-          sub_total:      o.sub_total,
-          billing_city:   o.billing_city || '',
-          billing_state:  o.billing_state || '',
-          _source:        'crm',
+          sub_total: o.sub_total,
+          billing_city: o.billing_city || '',
+          billing_state: o.billing_state || '',
+          _source: 'crm',
         }));
       }
 
@@ -404,7 +404,7 @@ function NdrList({ onActionItem }) {
             </button>
           </div>
           {bulkResult && <p className="w-full text-xs font-bold text-green-700 bg-green-50 px-3 py-2 rounded-xl border border-green-200">✅ {bulkResult}</p>}
-          {bulkError  && <p className="w-full text-xs font-bold text-red-600  bg-red-50  px-3 py-2 rounded-xl border border-red-200">❌ {bulkError}</p>}
+          {bulkError && <p className="w-full text-xs font-bold text-red-600  bg-red-50  px-3 py-2 rounded-xl border border-red-200">❌ {bulkError}</p>}
         </div>
       )}
 
@@ -440,7 +440,7 @@ function NdrList({ onActionItem }) {
               className="px-5 py-2 rounded-xl bg-orange-500 text-white text-xs font-bold hover:bg-orange-600 transition disabled:opacity-50">
               {loading ? '…' : 'Refresh'}
             </button>
-            <button onClick={() => { setStatus(''); setAttempt('all'); setSearch(''); }}
+            <button onClick={() => { setStatus(''); setAttempt('all'); setSearch(''); fetchNdrs(''); }}
               className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 text-xs font-bold hover:bg-gray-300 transition">
               Reset
             </button>
@@ -449,7 +449,7 @@ function NdrList({ onActionItem }) {
 
         {error && (
           <div className="mx-5 my-3 flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-red-600 text-xs font-semibold">
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
             {error}
           </div>
         )}
@@ -481,13 +481,13 @@ function NdrList({ onActionItem }) {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filtered.map((n, i) => {
-                    const ndrId  = String(n.id || n.ndr_id || i);
-                    const awb    = n.awb || n.awb_code;
-                    const name   = n.customer?.name || n.customer_name || '—';
+                    const ndrId = String(n.id || n.ndr_id || i);
+                    const awb = n.awb || n.awb_code;
+                    const name = n.customer?.name || n.customer_name || '—';
                     const status = n.status || '—';
                     const attempt = n.attempt_number ?? n.delivery_attempt ?? 1;
                     const reason = n.reason || n.ndr_reason || '—';
-                    const date   = n.ndr_date || n.createdAt;
+                    const date = n.ndr_date || n.createdAt;
                     const isSelected = selected.has(ndrId);
                     return (
                       <tr key={ndrId} className={`transition-colors ${isSelected ? 'bg-orange-50/50' : 'hover:bg-orange-50/20'}`}>
@@ -533,9 +533,9 @@ function NdrList({ onActionItem }) {
             {/* Mobile cards */}
             <div className="sm:hidden divide-y divide-gray-50">
               {filtered.map((n, i) => {
-                const ndrId  = String(n.id || n.ndr_id || i);
-                const awb    = n.awb || n.awb_code;
-                const name   = n.customer?.name || n.customer_name || '—';
+                const ndrId = String(n.id || n.ndr_id || i);
+                const awb = n.awb || n.awb_code;
+                const name = n.customer?.name || n.customer_name || '—';
                 const status = n.status || '—';
                 const attempt = n.attempt_number ?? n.delivery_attempt ?? 1;
                 const reason = n.reason || n.ndr_reason || '—';
@@ -575,24 +575,24 @@ function NdrList({ onActionItem }) {
 
 /* ── NDR Action Panel (POST /ndr/{ndr_id}/action + POST /ndr/bulk-action) ──── */
 function NdrActionPanel({ prefillItem }) {
-  const [ndrId, setNdrId]     = useState('');
-  const [awb, setAwb]         = useState('');
-  const [action, setAction]   = useState('reattempt');
-  const [notes, setNotes]     = useState('');
+  const [ndrId, setNdrId] = useState('');
+  const [awb, setAwb] = useState('');
+  const [action, setAction] = useState('reattempt');
+  const [notes, setNotes] = useState('');
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(false);
   const [trackLoading, setTrackLoading] = useState(false);
-  const [result, setResult]   = useState('');
-  const [error, setError]     = useState('');
+  const [result, setResult] = useState('');
+  const [error, setError] = useState('');
 
   // Bulk action state
   const [bulkMode, setBulkMode] = useState(false);
-  const [bulkIds, setBulkIds]   = useState('');
+  const [bulkIds, setBulkIds] = useState('');
   const [bulkAction, setBulkAction] = useState('reattempt');
-  const [bulkNotes, setBulkNotes]   = useState('');
+  const [bulkNotes, setBulkNotes] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkResult, setBulkResult]   = useState('');
-  const [bulkError, setBulkError]     = useState('');
+  const [bulkResult, setBulkResult] = useState('');
+  const [bulkError, setBulkError] = useState('');
 
   const prevPrefill = useRef(null);
   useEffect(() => {
@@ -600,7 +600,7 @@ function NdrActionPanel({ prefillItem }) {
     const key = JSON.stringify(prefillItem);
     if (key === prevPrefill.current) return;
     prevPrefill.current = key;
-    const id  = String(prefillItem.id || prefillItem.ndr_id || '');
+    const id = String(prefillItem.id || prefillItem.ndr_id || '');
     const awbCode = prefillItem.awb || prefillItem.awb_code || '';
     setNdrId(id);
     setAwb(awbCode);
@@ -636,8 +636,8 @@ function NdrActionPanel({ prefillItem }) {
 
   const submitBulk = async () => {
     const ids = bulkIds.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    if (ids.length === 0)  { setBulkError('Enter at least one NDR ID'); return; }
-    if (ids.length > 10)   { setBulkError('Maximum 10 NDR IDs per bulk request'); return; }
+    if (ids.length === 0) { setBulkError('Enter at least one NDR ID'); return; }
+    if (ids.length > 10) { setBulkError('Maximum 10 NDR IDs per bulk request'); return; }
     setBulkLoading(true); setBulkResult(''); setBulkError('');
     try {
       const body = { ndr_ids: ids, action: bulkAction };
@@ -713,7 +713,7 @@ function NdrActionPanel({ prefillItem }) {
                   )}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                  {[['Customer', tracking.customer_name], ['Phone', tracking.customer_phone], ['Courier', tracking.courier || tracking.carrier]].filter(([,v]) => v).map(([l, v]) => (
+                  {[['Customer', tracking.customer_name], ['Phone', tracking.customer_phone], ['Courier', tracking.courier || tracking.carrier]].filter(([, v]) => v).map(([l, v]) => (
                     <div key={l}>
                       <p className="text-gray-400 font-semibold">{l}</p>
                       <p className="font-bold text-gray-700 truncate">{v}</p>
@@ -742,7 +742,7 @@ function NdrActionPanel({ prefillItem }) {
               {loading ? 'Applying…' : `Apply ${NDR_ACTIONS.find(a => a.value === action)?.label || 'Action'}`}
             </button>
             {result && <span className="text-xs font-bold text-green-700 bg-green-50 px-3 py-2 rounded-xl border border-green-200">{result}</span>}
-            {error  && <span className="text-xs font-bold text-red-600  bg-red-50  px-3 py-2 rounded-xl border border-red-200">❌ {error}</span>}
+            {error && <span className="text-xs font-bold text-red-600  bg-red-50  px-3 py-2 rounded-xl border border-red-200">❌ {error}</span>}
           </div>
         </div>
       ) : (
@@ -803,7 +803,7 @@ function NdrActionPanel({ prefillItem }) {
               {bulkLoading ? 'Applying…' : `⚡ Apply Bulk ${NDR_ACTIONS.find(a => a.value === bulkAction)?.label || 'Action'}`}
             </button>
             {bulkResult && <span className="text-xs font-bold text-green-700 bg-green-50 px-3 py-2 rounded-xl border border-green-200">{bulkResult}</span>}
-            {bulkError  && <span className="text-xs font-bold text-red-600  bg-red-50  px-3 py-2 rounded-xl border border-red-200">❌ {bulkError}</span>}
+            {bulkError && <span className="text-xs font-bold text-red-600  bg-red-50  px-3 py-2 rounded-xl border border-red-200">❌ {bulkError}</span>}
           </div>
         </div>
       )}
@@ -813,24 +813,24 @@ function NdrActionPanel({ prefillItem }) {
 
 /* ── NDR Notes Panel (internal CRM notes) ───────────────────────────────────── */
 function NdrNotesPanel({ onUseAwb }) {
-  const [notes, setNotes]       = useState([]);
-  const [loading, setLoading]   = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [filterDate, setFilterDate] = useState('');
-  const [search, setSearch]     = useState('');
-  const [form, setForm]         = useState({ name: '', phone_number: '', reason: '', awb_number: '' });
-  const [editId, setEditId]     = useState(null);
-  const [error, setError]       = useState('');
-  const [saving, setSaving]     = useState(false);
-  const [detail, setDetail]     = useState(null);
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({ name: '', phone_number: '', reason: '', awb_number: '' });
+  const [editId, setEditId] = useState(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [detail, setDetail] = useState(null);
 
   const fetchNotes = useCallback((date = filterDate, q = search) => {
     setLoading(true);
     const params = {};
     if (date) params.date = date;
-    if (q)    params.search = q;
+    if (q) params.search = q;
     smxSvc.getNdrNotes(params)
       .then(r => setNotes(r.data?.data || []))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [filterDate, search]);
 
@@ -856,7 +856,7 @@ function NdrNotesPanel({ onUseAwb }) {
 
   const del = async (id) => {
     if (!window.confirm('Delete this note?')) return;
-    await smxSvc.deleteNdrNote(id).catch(() => {});
+    await smxSvc.deleteNdrNote(id).catch(() => { });
     setNotes(p => p.filter(n => n._id !== id));
   };
 
@@ -889,10 +889,10 @@ function NdrNotesPanel({ onUseAwb }) {
         </div>
         <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            ['name',         'Customer Name *',  'Name'],
-            ['phone_number', 'Phone Number *',   'Phone'],
-            ['awb_number',   'AWB Number *',     'AWB'],
-            ['reason',       'Reason / Note *',  'Reason'],
+            ['name', 'Customer Name *', 'Name'],
+            ['phone_number', 'Phone Number *', 'Phone'],
+            ['awb_number', 'AWB Number *', 'AWB'],
+            ['reason', 'Reason / Note *', 'Reason'],
           ].map(([key, label, ph]) => (
             <Field key={key} label={label}>
               <input className={inpY} placeholder={ph}
@@ -964,11 +964,11 @@ function NdrNotesPanel({ onUseAwb }) {
                           <button onClick={() => setDetail(n)} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 transition">VIEW</button>
                           <button onClick={() => startEdit(n)} title="Edit Note"
                             className="w-7 h-7 rounded-lg bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100 transition border border-slate-200">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                           </button>
                           <button onClick={() => del(n._id)} title="Delete Note"
                             className="w-7 h-7 rounded-lg bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition border border-red-100">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
                         </div>
                       </td>
@@ -999,10 +999,10 @@ function NdrNotesPanel({ onUseAwb }) {
                   <div className="flex gap-2 flex-wrap">
                     <button onClick={() => setDetail(n)} className="flex-1 text-[11px] font-bold py-2 rounded-xl bg-white text-gray-600 border border-gray-200 shadow-sm">VIEW</button>
                     <button onClick={() => startEdit(n)} className="text-[11px] font-bold p-2 rounded-xl bg-slate-50 text-slate-600 border border-slate-200">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
                     <button onClick={() => del(n._id)} className="text-[11px] font-bold p-2 rounded-xl bg-red-50 text-red-500 border border-red-100">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
                 </div>
@@ -1015,25 +1015,18 @@ function NdrNotesPanel({ onUseAwb }) {
   );
 }
 
-/* ── Main ShipMaxx NDR Page ──────────────────────────────────────────────────── */
+/* ── Main ShipMaxx NDR Page ───────────────────*/
 const TABS = [
-  { id: 'board',  label: 'Status Board',   icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
-  { id: 'list',   label: 'NDR List',       icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
-  { id: 'action', label: 'NDR Action',     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
-  { id: 'notes',  label: 'Notes',          icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> },
+  { id: 'board', label: 'Status Board', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg> },
+  { id: 'list', label: 'NDR List', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg> },
+  { id: 'action', label: 'NDR Action', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg> },
+  { id: 'notes', label: 'Notes', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" /></svg> },
 ];
 
 export default function ShipmaxxNdr() {
-  const [tab, setTab]             = useState('board');
+  const [tab, setTab] = useState('board');
   const [actionItem, setActionItem] = useState(null);
   const location = useLocation();
-  // Track which tabs have been visited — lazy mount to avoid loading all tabs on page load
-  const [visited, setVisited]     = useState(new Set(['board']));
-
-  const switchTab = (id) => {
-    setTab(id);
-    setVisited(prev => new Set([...prev, id]));
-  };
 
   useEffect(() => {
     if (location.state?.prefillAwb) {
@@ -1046,7 +1039,7 @@ export default function ShipmaxxNdr() {
 
   const handleActionItem = (item) => {
     setActionItem(item);
-    switchTab('action');
+    setTab('action');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1065,10 +1058,9 @@ export default function ShipmaxxNdr() {
           {TABS.map(t => {
             const active = tab === t.id;
             return (
-              <button key={t.id} onClick={() => switchTab(t.id)}
-                className={`h-9 rounded-lg px-3 text-xs font-semibold transition-all inline-flex items-center gap-2 ${
-                  active ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
-                }`}>
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`h-9 rounded-lg px-3 text-xs font-semibold transition-all inline-flex items-center gap-2 ${active ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                  }`}>
                 <span className={`grid h-5 w-5 place-items-center rounded-md ${active ? 'bg-white/20 text-white' : 'bg-orange-50 text-orange-500'}`}>
                   {t.icon}
                 </span>
@@ -1079,31 +1071,24 @@ export default function ShipmaxxNdr() {
         </div>
       </div>
 
-      {/* Lazy mount: only render when first visited, keep mounted after for instant switching */}
       <div style={{ display: tab === 'board' ? 'block' : 'none' }}>
-        <OrderStatusBoard 
-          title="ShipMaxx Overall Status" 
+        <OrderStatusBoard
+          title="ShipMaxx Overall Status"
           subtitle="ALL SHIPMAXX ORDERS"
           defaultPreset="today"
-          defaultStatus=""
+          defaultStatus="UNDELIVERED"
           platform="shipmaxx"
         />
       </div>
-      {visited.has('list') && (
-        <div style={{ display: tab === 'list' ? 'block' : 'none' }}>
-          <NdrList onActionItem={handleActionItem} />
-        </div>
-      )}
-      {visited.has('action') && (
-        <div style={{ display: tab === 'action' ? 'block' : 'none' }}>
-          <NdrActionPanel prefillItem={actionItem} />
-        </div>
-      )}
-      {visited.has('notes') && (
-        <div style={{ display: tab === 'notes' ? 'block' : 'none' }}>
-          <NdrNotesPanel onUseAwb={(awb) => { setActionItem({ awb, id: '' }); switchTab('action'); }} />
-        </div>
-      )}
+      <div style={{ display: tab === 'list' ? 'block' : 'none' }}>
+        <NdrList onActionItem={handleActionItem} />
+      </div>
+      <div style={{ display: tab === 'action' ? 'block' : 'none' }}>
+        <NdrActionPanel prefillItem={actionItem} />
+      </div>
+      <div style={{ display: tab === 'notes' ? 'block' : 'none' }}>
+        <NdrNotesPanel onUseAwb={(awb) => { setActionItem({ awb, id: '' }); setTab('action'); }} />
+      </div>
     </div>
   );
 }

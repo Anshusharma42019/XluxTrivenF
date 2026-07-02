@@ -929,9 +929,14 @@ export default function StaffDashboard() {
              <div className="flex items-center justify-center py-10"><div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
           ) : commission ? (
             <div className="space-y-4">
-              <div className="bg-gray-900 rounded-2xl p-5 text-center shadow-lg">
+              <div className="bg-gray-900 rounded-2xl p-5 text-center shadow-lg relative">
                 <p className="text-2xl font-bold text-white">₹{(commission.totalPay || 0).toLocaleString('en-IN')}</p>
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Total Salary</p>
+                {commission.totalDeliveries > 0 && (
+                  <div className="absolute top-3 right-3 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                    {commission.totalDeliveries} Delivered
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100/50 flex flex-col justify-between min-h-[90px]">
@@ -950,7 +955,9 @@ export default function StaffDashboard() {
                   </div>
                   <div>
                     <p className="text-base font-black text-blue-700 leading-none">₹{(commission.revenueCommission || 0).toLocaleString('en-IN')}</p>
-                    <p className="text-[8px] text-blue-600/70 font-bold uppercase tracking-wider mt-1">Sales Comm.</p>
+                    <p className="text-[8px] text-blue-600/70 font-bold uppercase tracking-wider mt-1">
+                      Sales Comm. <span className="inline-block bg-blue-100 text-blue-800 px-1 py-0.5 rounded ml-0.5" style={{ fontSize: '7px', lineHeight: 1 }}>{commission.commissionRate || 5}%</span>
+                    </p>
                   </div>
                 </div>
 
