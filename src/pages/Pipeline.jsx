@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLeads, getLead, updateLead, getCallAgains, updateCallAgain, markCNP, createCallAgain, deleteLead } from '../services/lead.service';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { createTask, getCnpRecords, deleteCnpRecord, getTaskByLead } from '../services/task.service';
 import API from '../api';
 import Modal from '../components/ui/Modal';
@@ -68,8 +69,11 @@ export default function Pipeline() {
   const [nextDate, setNextDate] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
-  const load = useCallback(async () => {
-    setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       API.post('/verification/repair').catch(() => {});
 
@@ -91,9 +95,11 @@ export default function Pipeline() {
       setCnpLeads(Array.isArray(cnpRes) ? cnpRes : []);
       setCallAgainLeads(Array.isArray(callAgainRes) ? callAgainRes : []);
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to load');
-    } finally { setLoading(false); }
+      if (!silent) setError(err.response?.data?.message || err.message || 'Failed to load');
+    } finally { if (!silent) setLoading(false); }
   }, [department]);
+
+  useAutoRefresh(load, 15000);
 
   useEffect(() => { load(); }, [load]);
 

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import API from '../api';
 import { 
   fetchStats, 
@@ -120,7 +121,8 @@ export default function StaffDashboard() {
   ];
   const motiveLine = MOTIVATIONS[new Date().getDay()];
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       // Sync fresh user profile from DB to dynamically reflect any department changes by Admin in real-time
       API.get('/users/me').then(res => {
@@ -147,8 +149,8 @@ export default function StaffDashboard() {
       if (chart.status === 'fulfilled') setMonthlyChart(Array.isArray(chart.value) ? chart.value : []);
       if (att.status === 'fulfilled') setAttStatus(att.value);
     } catch { /* ignore */ }
-    finally { setLoading(false); }
-  }, []);
+    finally { if (!silent) setLoading(false); }
+  }, [user]);
 
   // Calculate streak from target history
   useEffect(() => {
@@ -165,10 +167,10 @@ export default function StaffDashboard() {
       }).catch(() => {});
   }, [stats?.todayVerifications]);
 
+  useAutoRefresh(load, 15000);
+
   useEffect(() => {
     load();
-    const t = setInterval(load, 60000);
-    return () => clearInterval(t);
   }, [load]);
 
   // Reset check-in gate at midnight (day change)

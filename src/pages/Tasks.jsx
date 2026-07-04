@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getTasks, getDailyTasks, createTask, updateTask, deleteTask, addTaskNote, getTask } from '../services/task.service';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { getUsers } from '../services/user.service';
 import { updateLead, createCallAgain } from '../services/lead.service';
 import Modal from '../components/ui/Modal';
@@ -62,6 +63,7 @@ export default function Tasks() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [daily, setDaily] = useState([]);
+  const [yesterdayTasks, setYesterdayTasks] = useState([]);
   const [salesUsers, setSalesUsers] = useState([]);
   const [tab, setTab] = useState('daily');
   const [filters, setFilters] = useState({ status: '', type: '', department: '' });
@@ -86,22 +88,31 @@ export default function Tasks() {
   const pendingOpenId = searchParams.get('openId');
   const canManage = user?.role === 'admin' || user?.role === 'manager';
 
-  const load = useCallback(async () => {
-    setLoadError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setPageLoading(true);
+      setLoadError('');
+    }
     try {
       const params = {};
       if (filters.status) params.status = filters.status;
       if (filters.type) params.type = filters.type;
       if (filters.department) params.department = filters.department;
-      const [all, day] = await Promise.all([getTasks(params), getDailyTasks(params)]);
+      const yestDate = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const [all, day, yestData] = await Promise.all([
+        getTasks(params), 
+        getDailyTasks(params),
+        getTasks({ ...params, date: yestDate })
+      ]);
       setTasks(Array.isArray(all) ? all : []);
       setDaily(Array.isArray(day) ? day : []);
+      setYesterdayTasks(Array.isArray(yestData) ? yestData : []);
     } catch (err) {
-      setLoadError(err.response?.data?.message || err.message || 'Failed to load tasks');
-    } finally { setPageLoading(false); }
+      if (!silent) setLoadError(err.response?.data?.message || err.message || 'Failed to load tasks');
+    } finally { if (!silent) setPageLoading(false); }
   }, [filters]);
 
-  useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load, 15000);
 
   useEffect(() => { load(); }, [load]);
 
@@ -298,7 +309,7 @@ export default function Tasks() {
   };
 
   const filteredItems = useMemo(() => {
-    let items = (tab === 'daily' ? daily : tasks).filter(t =>
+    let items = (tab === 'daily' ? daily : tab === 'yesterday' ? yesterdayTasks : tasks).filter(t =>
       !HIDDEN_TASK_STATUSES.has(t.status) &&
       !HIDDEN_TASK_LEAD_STATUSES.has(t.lead?.status)
     );
@@ -317,7 +328,7 @@ export default function Tasks() {
       task.lead?.name?.toLowerCase().includes(q) ||
       task.phone?.includes(q)
     );
-  }, [tab, tasks, daily, search]);
+  }, [tab, tasks, daily, yesterdayTasks, search]);
 
   if (pageLoading) return (
     <div className="flex items-center justify-center h-64">
@@ -345,6 +356,10 @@ export default function Tasks() {
                 <button onClick={() => { setTab("daily"); setSelected(null); }}
                   className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${tab === "daily" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
                   Today
+                </button>
+                <button onClick={() => { setTab("yesterday"); setSelected(null); }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${tab === "yesterday" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+                  Yesterday
                 </button>
               </div>
               <button onClick={openCreate}

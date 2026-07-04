@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import API from '../api';
 import Modal from '../components/ui/Modal';
 
@@ -60,15 +61,18 @@ export default function ReadyToShipment() {
   const [drillPincode, setDrillPincode] = useState(null);
   const navigate = useNavigate();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const params = department ? { department } : {};
       const res = await API.get('/ready-to-shipment', { params });
       const data = res.data.data;
       setRecords(Array.isArray(data) ? data : []);
     } catch { /* ignore */ }
-    finally { setLoading(false); }
+    finally { if (!silent) setLoading(false); }
   }, [department]);
+
+  useAutoRefresh(load, 15000);
 
   const loadStats = useCallback(async (filterState = null, filterPincode = null) => {
     setStatsLoading(true);

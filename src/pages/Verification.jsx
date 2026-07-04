@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getVerificationRecords, syncVerificationRecords, updateVerificationStatus, updateVerificationRecord, updateTask, deleteVerificationRecord, getOnHoldVerificationRecords } from '../services/task.service';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { updateLead, markCNP, createCallAgain } from '../services/lead.service';
 import { getUsers } from '../services/user.service';
 import API from '../api';
@@ -93,25 +94,33 @@ export default function Verification() {
   const [showPatientTypeModal, setShowPatientTypeModal] = useState(false);
   const [selectedPatientType, setSelectedPatientType] = useState('new');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await getVerificationRecords(department ? { department } : {});
       setRecords(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e?.response?.data?.message || e.message || 'Failed to load');
-    } finally { setLoading(false); }
+      if (!silent) setError(e?.response?.data?.message || e.message || 'Failed to load');
+    } finally { if (!silent) setLoading(false); }
   }, [department]);
 
-  const loadOnHold = useCallback(async () => {
+  const loadOnHold = useCallback(async (silent = false) => {
     try {
       const data = await getOnHoldVerificationRecords(department ? { department } : {});
       setOnHoldRecords(Array.isArray(data) ? data : []);
     } catch { }
   }, [department]);
 
+  const autoFetch = useCallback((silent) => {
+    load(silent);
+    loadOnHold(silent);
+  }, [load, loadOnHold]);
+
+  useAutoRefresh(autoFetch, 15000);
+
   useEffect(() => {
-    load();
-    loadOnHold();
+    load(false);
+    loadOnHold(false);
     const filter = department ? { department } : {};
     syncVerificationRecords()
       .then(() => Promise.all([getVerificationRecords(filter), getOnHoldVerificationRecords(filter)]))

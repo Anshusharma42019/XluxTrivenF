@@ -12,7 +12,6 @@ const STATUS_LIST = [
   'DELIVERED',
   'RTO_DELIVERED',
   'IN_TRANSIT',
-  'CANCELED',
   'NEW',
   'RTO_IN_TRANSIT',
   'OUT_FOR_DELIVERY',
@@ -29,6 +28,20 @@ const STATUS_LIST = [
   'RTO_OFD',
   'PICKUP_SCHEDULED',
   'MISROUTED',
+  'RTO_UNDELIVERED',
+  'OUT_FOR_PICKUP',
+  'PICKUP_DONE',
+  'PICKUP_FAILED',
+  'PICKUP_CANCELLED',
+  'DELIVERY_EXCEPTION',
+  'REVERSE_PICKUP_SCHEDULED',
+  'REVERSE_PICKUP_FAILED',
+  'REVERSE_PICKED_UP',
+  'REVERSE_PICKUP_CANCELLED',
+  'DISPOSED_OFF',
+  'DAMAGED',
+  'LOST',
+  'CANCELLED'
 ];
 
 const DATE_FILTERS = [
@@ -45,9 +58,9 @@ const STATUS_STYLES = {
   DELIVERED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   RTO_DELIVERED: 'border-blue-200 bg-blue-50 text-blue-700',
   IN_TRANSIT: 'border-amber-200 bg-amber-50 text-amber-700',
-  CANCELED: 'border-red-200 bg-red-50 text-red-700',
-  NEW: 'border-sky-200 bg-sky-50 text-sky-700',
-  RTO_IN_TRANSIT: 'border-violet-200 bg-violet-50 text-violet-700',
+  SHIPMENT_CANCELLED: 'border-red-200 bg-red-50 text-red-700',
+  SHIPMENT_BOOKED: 'border-sky-200 bg-sky-50 text-sky-700',
+  RTO_INTRANSIT: 'border-violet-200 bg-violet-50 text-violet-700',
   OUT_FOR_DELIVERY: 'border-cyan-200 bg-cyan-50 text-cyan-700',
   REACHED_BACK_AT_SELLER_CITY: 'border-lime-200 bg-lime-50 text-lime-700',
   'UNDELIVERED_1ST_ATTEMPT': 'border-rose-200 bg-rose-50 text-rose-700',
@@ -63,6 +76,19 @@ const STATUS_STYLES = {
   UNDELIVERED_ATTEMPT_FAILURE: 'border-rose-200 bg-rose-50 text-rose-700',
   MISROUTED: 'border-orange-200 bg-orange-50 text-orange-700',
   INVOICED: 'border-blue-200 bg-blue-50 text-blue-700',
+  RTO_UNDELIVERED: 'border-orange-300 bg-orange-100 text-orange-800',
+  OUT_FOR_PICKUP: 'border-teal-200 bg-teal-50 text-teal-700',
+  PICKUP_DONE: 'border-purple-300 bg-purple-100 text-purple-800',
+  PICKUP_FAILED: 'border-red-200 bg-red-50 text-red-700',
+  PICKUP_CANCELLED: 'border-red-200 bg-red-50 text-red-700',
+  DELIVERY_EXCEPTION: 'border-rose-200 bg-rose-50 text-rose-700',
+  REVERSE_PICKUP_SCHEDULED: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
+  REVERSE_PICKUP_FAILED: 'border-red-200 bg-red-50 text-red-700',
+  REVERSE_PICKED_UP: 'border-fuchsia-300 bg-fuchsia-100 text-fuchsia-800',
+  REVERSE_PICKUP_CANCELLED: 'border-gray-200 bg-gray-100 text-gray-700',
+  DISPOSED_OFF: 'border-gray-300 bg-gray-200 text-gray-800',
+  DAMAGED: 'border-red-300 bg-red-100 text-red-800',
+  LOST: 'border-red-400 bg-red-200 text-red-900',
 };
 
 const formatDateInput = (date) => {
@@ -73,17 +99,29 @@ const formatDateInput = (date) => {
 };
 
 const SMX_MAP = {
+  ADI: 'REVERSE_PICKUP_FAILED',
+  CTR: 'REVERSE_PICKUP_SCHEDULED',
+  CUN: 'DISPOSED_OFF',
+  DAC: 'REVERSE_PICKED_UP',
   DEL: 'DELIVERED',
+  DEX: 'DELIVERY_EXCEPTION',
+  DMG: 'DAMAGED',
   INT: 'IN_TRANSIT',
-  UND: 'UNDELIVERED',
-  RTO: 'RTO_DELIVERED',
+  LOS: 'LOST',
   OFD: 'OUT_FOR_DELIVERY',
-  DEX: 'UNDELIVERED_ATTEMPT_FAILURE',
-  SC:  'SHIPPED',
-  PCN: 'CANCELED',
-  RRA: 'RTO_INITIATED',
+  OFP: 'OUT_FOR_PICKUP',
+  ONH: 'REVERSE_PICKUP_CANCELLED',
+  PCN: 'PICKUP_CANCELLED',
+  PKD: 'PICKUP_DONE',
+  PKF: 'PICKUP_FAILED',
+  RRA: 'RTO_INTRANSIT',
+  RTD: 'RTO_DELIVERED',
+  RTO: 'RTO_INITIATED',
+  RUN: 'RTO_UNDELIVERED',
+  SC:  'SHIPMENT_CANCELLED',
+  SPB: 'SHIPMENT_BOOKED',
   SPD: 'PICKUP_SCHEDULED',
-  SPB: 'NEW'
+  UND: 'UNDELIVERED',
 };
 
 const normalizeStatus = (status) => {
@@ -182,10 +220,12 @@ export default function OrderStatusBoard({
     });
   }, [onStatsChange, svc]);
 
-  const loadStatusOrders = useCallback((status, params = {}) => {
-    setStatusLoading(true);
-    setStatusError('');
-    setStatusOrders([]);
+  const loadStatusOrders = useCallback((status, params = {}, silent = false) => {
+    if (!silent) {
+      setStatusLoading(true);
+      setStatusError('');
+      setStatusOrders([]);
+    }
     svc.getStatusOrders({ ...params, status, limit: 100 }).then(res => {
       const list = res.data?.data?.data || [];
       setStatusOrders(list);
@@ -195,7 +235,7 @@ export default function OrderStatusBoard({
     }).catch(e => {
       setStatusOrders([]);
       setStatusError(e?.response?.data?.message || e.message || 'Unable to load orders');
-    }).finally(() => setStatusLoading(false));
+    }).finally(() => { if (!silent) setStatusLoading(false); });
   }, [svc]);
 
   // Effective parameters: either passed from prop or generated from local state
@@ -214,6 +254,16 @@ export default function OrderStatusBoard({
     if (selectedStatus) {
       loadStatusOrders(selectedStatus, params);
     }
+    
+    // Auto-refresh stats and selected status orders every 15 seconds silently
+    const interval = setInterval(() => {
+      loadDelivered(params);
+      if (selectedStatus) {
+        loadStatusOrders(selectedStatus, params, true);
+      }
+    }, 15000);
+    
+    return () => clearInterval(interval);
   }, [getParams, selectedStatus, filterParams, datePreset, loadDelivered, loadStatusOrders]);
 
   const handleSaveNote = async (e, mongoId) => {

@@ -213,8 +213,8 @@ function NdrList({ onActionItem }) {
   const [bulkResult, setBulkResult] = useState('');
   const [bulkError, setBulkError] = useState('');
 
-  const fetchNdrs = useCallback((status = statusFilter) => {
-    setLoading(true); setError(''); setSelected(new Set());
+  const fetchNdrs = useCallback((status = statusFilter, silent = false) => {
+    if (!silent) { setLoading(true); setError(''); setSelected(new Set()); }
     const params = { limit: 1000, per_page: 1000 };
     if (status) params.status = status;
 
@@ -288,14 +288,20 @@ function NdrList({ onActionItem }) {
       const merged = [...smxNdrs, ...uniqueCrm];
       setNdrs(merged);
 
-      if (merged.length === 0 && ndrRes.status === 'rejected') {
+      if (!silent && merged.length === 0 && ndrRes.status === 'rejected') {
         setError(ndrRes.reason?.response?.data?.message || ndrRes.reason?.message || 'Failed to fetch NDR list');
       }
-    }).finally(() => setLoading(false));
+    }).finally(() => { if (!silent) setLoading(false); });
   }, [statusFilter]);
 
-  // Fetch on mount and whenever status filter changes
-  useEffect(() => { fetchNdrs(statusFilter); }, [statusFilter]);
+  // Fetch on mount, when status filter changes, and setup auto-refresh polling
+  useEffect(() => { 
+    fetchNdrs(statusFilter); 
+    const interval = setInterval(() => {
+      fetchNdrs(statusFilter, true);
+    }, 15000); // Auto-refresh every 15 seconds
+    return () => clearInterval(interval);
+  }, [statusFilter, fetchNdrs]);
 
   const filtered = ndrs.filter(n => {
     // Attempt number filter

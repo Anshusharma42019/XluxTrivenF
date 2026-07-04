@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import * as smxSvc from '../services/shipmaxx.service';
 
 const PER_PAGE = 20;
@@ -98,23 +99,23 @@ export default function ShipmaxxFollowup() {
 
   const followupNumbers = Array.from({ length: TOTAL_FU }, (_, i) => i + 1);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(''); }
     try {
       const res = await smxSvc.getOrdersWithFollowUps();
       setAll(Array.isArray(res.data?.data) ? res.data.data : []);
-    } catch (e) { setError(e?.response?.data?.message || e.message); }
-    finally { setLoading(false); }
+    } catch (e) { if (!silent) setError(e?.response?.data?.message || e.message); }
+    finally { if (!silent) setLoading(false); }
   }, []);
 
-  const loadCompleted = useCallback(async (pg = 1, q = '') => {
-    setCompletedLoading(true);
+  const loadCompleted = useCallback(async (silent = false, pg = 1, q = '') => {
+    if (!silent) setCompletedLoading(true);
     try {
       const res = await smxSvc.getCompletedFollowUps({ page: pg, per_page: PER_PAGE, search: q || undefined });
       setCompletedList(Array.isArray(res.data?.data?.data) ? res.data.data.data : []);
       setCompletedTotal(res.data?.data?.total || 0);
     } catch { }
-    finally { setCompletedLoading(false); }
+    finally { if (!silent) setCompletedLoading(false); }
   }, []);
 
   const syncAndLoad = async () => {
@@ -124,8 +125,15 @@ export default function ShipmaxxFollowup() {
     await load();
   };
 
+  const autoFetch = useCallback((silent) => {
+    load(silent);
+    if (showCompleted) loadCompleted(silent, completedPage, search);
+  }, [load, loadCompleted, showCompleted, completedPage, search]);
+
+  useAutoRefresh(autoFetch, 15000);
+
   useEffect(() => {
-    load().then(()=> loadCompleted(1));
+    load(false).then(() => loadCompleted(false, 1));
   }, [load, loadCompleted]);
 
   // Phone autofill for manual form

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { getLeads, getLead, createLead, updateLead, deleteLead, assignLead, addLeadNote, deleteLeadNote, markCNP, createCallAgain, distributeUnassigned, distributeAbsentSalesLeads, sendLeadWhatsApp } from '../services/lead.service';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { getUsers } from '../services/user.service';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
@@ -74,8 +75,11 @@ export default function Leads() {
   const [attachmentPreview, setAttachmentPreview] = useState(null);
   const fileInputRef = useRef(null);
 
-  const load = useCallback(async () => {
-    setLoadError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setPageLoading(true);
+      setLoadError('');
+    }
     try {
       const params = { page: filters.page, limit: 15 };
       if (filters.search) params.search = filters.search;
@@ -91,9 +95,11 @@ export default function Leads() {
         leads: (nextData.leads || []).filter(lead => !HIDDEN_LEAD_LIST_STATUSES.has(lead.status)),
       });
     } catch (err) {
-      setLoadError(err.response?.data?.message || err.message || 'Failed to load leads');
-    } finally { setPageLoading(false); }
+      if (!silent) setLoadError(err.response?.data?.message || err.message || 'Failed to load leads');
+    } finally { if (!silent) setPageLoading(false); }
   }, [filters]);
+
+  useAutoRefresh(load, 15000);
 
   useEffect(() => { load(); }, [load]);
 

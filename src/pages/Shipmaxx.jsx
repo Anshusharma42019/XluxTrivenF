@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import * as smxSvc from '../services/shipmaxx.service';
 import api from '../api';
 
@@ -20,8 +21,24 @@ const STATUS_COLORS = {
   RTO: 'bg-orange-50 text-orange-700 border-orange-200',
   RTO_INITIATED: 'bg-orange-50 text-orange-700 border-orange-200',
   RTO_DELIVERED: 'bg-orange-100 text-orange-800 border-orange-300',
+  RTO_IN_TRANSIT: 'bg-orange-50 text-orange-700 border-orange-200',
+  RTO_UNDELIVERED: 'bg-orange-200 text-orange-900 border-orange-400',
   IN_TRANSIT: 'bg-yellow-50 text-yellow-700 border-yellow-200',
   'PICKUP SCHEDULED': 'bg-purple-50 text-purple-700 border-purple-200',
+  PICKUP_SCHEDULED: 'bg-purple-50 text-purple-700 border-purple-200',
+  PICKUP_DONE: 'bg-purple-100 text-purple-800 border-purple-300',
+  PICKUP_FAILED: 'bg-red-50 text-red-700 border-red-200',
+  OUT_FOR_DELIVERY: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+  OUT_FOR_PICKUP: 'bg-teal-50 text-teal-700 border-teal-200',
+  DELIVERY_EXCEPTION: 'bg-rose-50 text-rose-700 border-rose-200',
+  UNDELIVERED: 'bg-rose-100 text-rose-800 border-rose-300',
+  REVERSE_PICKUP_SCHEDULED: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
+  REVERSE_PICKUP_FAILED: 'bg-red-50 text-red-700 border-red-200',
+  REVERSE_PICKED_UP: 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300',
+  REVERSE_PICKUP_CANCELLED: 'bg-gray-100 text-gray-700 border-gray-200',
+  DISPOSED_OFF: 'bg-gray-200 text-gray-800 border-gray-300',
+  DAMAGED: 'bg-red-100 text-red-800 border-red-300',
+  LOST: 'bg-red-200 text-red-900 border-red-400',
 };
 
 const SECTIONS = [
@@ -310,15 +327,17 @@ function OrdersSection() {
   const [detailTrackLoading, setDetailTrackLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  const fetchOrders = async () => {
-    setLoading(true); setError('');
+  const fetchOrders = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(''); }
     try {
       const res = await smxSvc.getOrders({ page, limit, status: status === 'all' ? undefined : status, from: fromDate || undefined, to: toDate || undefined, search: search.trim() || undefined });
       setOrders(res.data?.data?.data || res.data?.data || []);
       setTotal(res.data?.data?.total || 0);
     } catch (e) { setError(e?.response?.data?.message || e.message); }
-    finally { setLoading(false); }
-  };
+    finally { if (!silent) setLoading(false); }
+  }, [page, limit, status, fromDate, toDate, search]);
+
+  useAutoRefresh(fetchOrders, 15000);
 
   const downloadBulkLabels = async () => {
     const awbs = orders.filter(o => o.awb_code).map(o => o.awb_code);
@@ -430,7 +449,25 @@ function OrdersSection() {
                 <option value="DELIVERED">Delivered</option>
                 <option value="IN_TRANSIT">In Transit</option>
                 <option value="CANCELLED">Cancelled</option>
+                <option value="CANCELED">Canceled</option>
                 <option value="RTO_INITIATED">RTO Initiated</option>
+                <option value="RTO_IN_TRANSIT">RTO In Transit</option>
+                <option value="RTO_DELIVERED">RTO Delivered</option>
+                <option value="RTO_UNDELIVERED">RTO Undelivered</option>
+                <option value="PICKUP_SCHEDULED">Pickup Scheduled</option>
+                <option value="OUT_FOR_PICKUP">Out for Pickup</option>
+                <option value="PICKUP_DONE">Pickup Done</option>
+                <option value="PICKUP_FAILED">Pickup Failed</option>
+                <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
+                <option value="DELIVERY_EXCEPTION">Delivery Exception</option>
+                <option value="UNDELIVERED">Undelivered</option>
+                <option value="REVERSE_PICKUP_SCHEDULED">Reverse Pickup Scheduled</option>
+                <option value="REVERSE_PICKUP_FAILED">Reverse Pickup Failed</option>
+                <option value="REVERSE_PICKED_UP">Reverse Picked Up</option>
+                <option value="REVERSE_PICKUP_CANCELLED">Reverse Pickup Cancelled</option>
+                <option value="DISPOSED_OFF">Disposed Off</option>
+                <option value="DAMAGED">Damaged</option>
+                <option value="LOST">Lost</option>
               </select>
             </Field>
             <Field label="From"><input type="date" className={inp} value={fromDate} onChange={e => setFromDate(e.target.value)} /></Field>

@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as srSvc from "../services/shiprocket.service";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
 const inp =
   "w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 bg-white";
@@ -245,11 +246,13 @@ export default function ShiprocketOrders() {
     selected.has(String(o.id || o.order_id)),
   );
 
-  const fetchOrders = async (from = fromDate, to = toDate) => {
-    setLoading(true);
-    setError("");
-    setSelected(new Set());
-    setPage(1);
+  const fetchOrders = useCallback(async (silent = false, from = fromDate, to = toDate) => {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+      setSelected(new Set());
+      setPage(1);
+    }
     try {
       const params = {};
       if (from) params.from = from;
@@ -257,15 +260,22 @@ export default function ShiprocketOrders() {
       const res = await srSvc.getOrders(params);
       setOrders(res.data?.data?.data || []);
     } catch (e) {
-      setError(e?.response?.data?.message || e.message);
+      if (!silent) setError(e?.response?.data?.message || e.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, [fromDate, toDate]);
+
+  // Use a wrapper to pass to auto-refresh so it only runs if tab === "list"
+  const autoFetch = useCallback((silent) => {
+    if (tab === "list") fetchOrders(silent);
+  }, [tab, fetchOrders]);
+
+  useAutoRefresh(autoFetch, 15000);
 
   useEffect(() => {
-    if (tab === "list") fetchOrders();
-  }, [tab]);
+    if (tab === "list") fetchOrders(false);
+  }, [tab, fetchOrders]);
 
   useEffect(() => {
     if (pendingOpenId && orders.length > 0) {

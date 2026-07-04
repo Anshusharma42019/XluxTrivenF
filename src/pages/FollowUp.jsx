@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
@@ -132,18 +133,18 @@ export default function FollowUp() {
   const [manualSaving, setManualSaving] = useState(false);
   const [autofilling, setAutofilling] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(''); }
     try {
       const res = await api.get('/shiprocket/orders/with-followups', { params: department ? { department } : {} });
       const data = Array.isArray(res.data?.data) ? res.data.data : [];
       setAll(data);
       return data.length;
     } catch (e) {
-      setError(e?.response?.data?.message || e.message);
+      if (!silent) setError(e?.response?.data?.message || e.message);
       return 0;
-    } finally { setLoading(false); }
-  }, []);
+    } finally { if (!silent) setLoading(false); }
+  }, [department]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -152,15 +153,15 @@ export default function FollowUp() {
     } catch { /* keep defaults */ }
   }, []);
 
-  const loadCompleted = useCallback(async (pg = 1, q = '') => {
-    setCompletedLoading(true);
+  const loadCompleted = useCallback(async (silent = false, pg = 1, q = '') => {
+    if (!silent) setCompletedLoading(true);
     try {
       const res = await api.get('/shiprocket/orders/completed-followups', { params: { page: pg, per_page: PER_PAGE, search: q || undefined, ...(department && { department }) } });
       setCompletedList(Array.isArray(res.data?.data?.data) ? res.data.data.data : []);
       setCompletedTotal(res.data?.data?.total || 0);
-    } catch (e) { setError(e?.response?.data?.message || e.message); }
-    finally { setCompletedLoading(false); }
-  }, []);
+    } catch (e) { if (!silent) setError(e?.response?.data?.message || e.message); }
+    finally { if (!silent) setCompletedLoading(false); }
+  }, [department]);
 
   const syncAndLoad = async () => {
     setSyncing(true); setError('');
@@ -169,11 +170,18 @@ export default function FollowUp() {
     await load();
   };
 
+  const autoFetch = useCallback((silent) => {
+    load(silent);
+    if (showCompleted) loadCompleted(silent, completedPage, search);
+  }, [load, loadCompleted, showCompleted, completedPage, search]);
+
+  useAutoRefresh(autoFetch, 15000);
+
   useEffect(() => {
     loadSettings();
-    load().then(count => {
+    load(false).then(count => {
       if (count === 0 && !department) syncAndLoad();
-      loadCompleted(1);
+      loadCompleted(false, 1);
     });
   }, [load, loadCompleted, loadSettings, department]);
 

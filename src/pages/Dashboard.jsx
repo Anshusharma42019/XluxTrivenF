@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import StatCard from '../components/ui/StatCard';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import {
   fetchStats,
   fetchStaffTodayLists,
@@ -104,7 +105,8 @@ export default function Dashboard() {
   const [department, setDepartment] = useState('');
   const canManage = user?.role === 'admin' || user?.role === 'manager';
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const params = getDateParams(datePreset, filterFrom, filterTo);
     const { from, to } = params;
     const selectedDate = (datePreset === 'today' || datePreset === 'all' || !from) ? new Date().toISOString().split('T')[0] : from;
@@ -128,13 +130,13 @@ export default function Dashboard() {
         setDeliveredStats({ count: count || 0, revenue: revenue || 0, statusBreakdown: statusBreakdown || [] });
       }
     } catch (e) { console.error('Dashboard load error:', e); }
-    finally { setLoading(false); setLastUpdated(new Date()); }
+    finally { if (!silent) setLoading(false); setLastUpdated(new Date()); }
   }, [datePreset, filterFrom, filterTo, department]);
+
+  useAutoRefresh(load, 15000);
 
   useEffect(() => {
     load();
-    const t = setInterval(load, Number(import.meta.env.VITE_DASHBOARD_REFRESH_INTERVAL) || 60000);
-    return () => clearInterval(t);
   }, [load]);
 
   useEffect(() => {
