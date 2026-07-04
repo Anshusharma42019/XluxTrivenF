@@ -24,7 +24,7 @@ const DEPT_COLOR = {
   migraine: 'bg-purple-50 text-purple-600 border-purple-100',
   piles: 'bg-amber-50 text-amber-600 border-amber-100',
 };
-const EMPTY = { name: '', phone: '', password: '', role: 'manager', departments: [], baseSalary: 0, commissionRate: 5, specialization: '' };
+const EMPTY = { name: '', phone: '', password: '', role: 'manager', departments: [], baseSalary: 0, commissionRate: 5, specialization: '', joiningDate: '' };
 
 const ROLE_GRADIENT = {
   admin:   'from-purple-500 to-violet-600',
@@ -146,7 +146,8 @@ export default function Users() {
       departments: u.departments || [],
       baseSalary: u.baseSalary || 0, 
       commissionRate: u.commissionRate || 5,
-      specialization: u.specialization || '' 
+      specialization: u.specialization || '',
+      joiningDate: u.joiningDate ? new Date(u.joiningDate).toISOString().split('T')[0] : ''
     });
     setError(''); setModal('edit');
   };
@@ -681,6 +682,17 @@ export default function Users() {
                 </div>
               </div>
             )}
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Joining Date</label>
+              <input
+                type="date"
+                className={`${inputCls} mt-1.5`}
+                value={form.joiningDate}
+                max={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Base pay calculation isi date se hogi is month mein.</p>
+            </div>
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button type="submit" disabled={loading}
                 className="flex-1 py-3.5 rounded-xl text-[11px] font-bold text-white disabled:opacity-60 transition shadow-lg hover:shadow-xl active:scale-95 uppercase tracking-widest"

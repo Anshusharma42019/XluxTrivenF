@@ -529,6 +529,7 @@ function AdminAttendance() {
                       <thead>
                         <tr className="bg-white text-gray-400 text-left">
                           <th className="py-5 px-6 font-black uppercase tracking-widest">Member</th>
+                          <th className="text-center py-5 px-4 font-black uppercase tracking-widest">Joined</th>
                           <th className="text-center py-5 px-4 font-black uppercase tracking-widest">History</th>
                           <th className="text-center py-5 px-4 font-black uppercase tracking-widest">Activity</th>
                           <th className="text-right py-5 px-4 font-black uppercase tracking-widest">Base</th>
@@ -549,6 +550,19 @@ function AdminAttendance() {
                                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{s.user.role}</p>
                                 </div>
                               </div>
+                            </td>
+                            <td className="text-center py-5 px-4">
+                              {(() => {
+                                const jd = s.user.joiningDate || s.user.createdAt;
+                                return jd ? (
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-[11px] font-black text-indigo-600">
+                                      {new Date(jd).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                    </span>
+                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">joined</span>
+                                  </div>
+                                ) : <span className="text-gray-300">—</span>;
+                              })()}
                             </td>
                             <td className="text-center py-5 px-4">
                               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-[10px] font-black">
@@ -666,32 +680,33 @@ function AdminAttendance() {
                       {/* Desktop unassigned */}
                       <table className="hidden lg:table w-full text-xs opacity-60">
                         <tbody>
-                          <tr>
-                            <td className="py-5 px-6 w-[20%]">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-400 text-sm font-black uppercase shadow-sm">U</div>
-                                <div>
-                                  <p className="font-black text-gray-500 text-sm">Unassigned Orders</p>
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">No Staff Assigned</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="text-center py-5 px-4 w-[15%]">—</td>
-                            <td className="text-center py-5 px-4 w-[15%]">
-                              <div className="flex flex-col">
-                                 <span className="font-black text-gray-400 text-sm">{commData.unassignedDeliveries}</span>
-                                 <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">delivered</span>
-                              </div>
-                            </td>
-                            <td className="text-right py-5 px-4 w-[15%]">
-                              <div className="flex flex-col items-end opacity-40">
-                                 <span className="font-black text-gray-500 text-[10px]">₹{commData.unassignedRevenue?.toLocaleString()}</span>
-                                 <span className="text-[8px] font-black uppercase tracking-tighter">revenue</span>
+                           <tr>
+                             <td className="py-5 px-6 w-[20%]">
+                               <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-400 text-sm font-black uppercase shadow-sm">U</div>
+                                 <div>
+                                   <p className="font-black text-gray-500 text-sm">Unassigned Orders</p>
+                                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">No Staff Assigned</p>
+                                 </div>
                                </div>
-                            </td>
-                            <td className="text-right py-5 px-4 w-[15%]">—</td>
-                            <td className="text-right py-5 px-6 w-[20%]">—</td>
-                          </tr>
+                             </td>
+                             <td className="text-center py-5 px-4 w-[12%]">—</td>
+                             <td className="text-center py-5 px-4 w-[12%]">—</td>
+                             <td className="text-center py-5 px-4 w-[12%]">
+                               <div className="flex flex-col">
+                                  <span className="font-black text-gray-400 text-sm">{commData.unassignedDeliveries}</span>
+                                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">delivered</span>
+                               </div>
+                             </td>
+                             <td className="text-right py-5 px-4 w-[12%]">
+                               <div className="flex flex-col items-end opacity-40">
+                                  <span className="font-black text-gray-500 text-[10px]">₹{commData.unassignedRevenue?.toLocaleString()}</span>
+                                  <span className="text-[8px] font-black uppercase tracking-tighter">revenue</span>
+                                </div>
+                             </td>
+                             <td className="text-right py-5 px-4 w-[12%]">—</td>
+                             <td className="text-right py-5 px-6 w-[20%]">—</td>
+                           </tr>
                         </tbody>
                       </table>
                       {/* Mobile unassigned */}
@@ -736,6 +751,11 @@ function AdminAttendance() {
                 <div className="flex-1 min-w-0">
                   <p className="text-lg font-black text-gray-900 truncate tracking-tight">{u.name}</p>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{u.role}</p>
+                  {(u.joiningDate || u.createdAt) && (
+                    <p className="text-[9px] text-indigo-400 font-bold mt-0.5">
+                      Joined: {new Date(u.joiningDate || u.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
                 </div>
               </div>
               
