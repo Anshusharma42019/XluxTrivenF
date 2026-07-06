@@ -76,7 +76,7 @@ export default function Whatsapp({ onClose, initialLeadId }) {
     }
   }, [selectedChatLead]);
 
-  useEffect(() => { loadChatLeads(); }, [loadChatLeads]);
+  useEffect(() => { loadChatLeads(true); }, [loadChatLeads]);
 
   useEffect(() => {
     const leadId = initialLeadId || searchParams.get('leadId');
@@ -98,7 +98,7 @@ export default function Whatsapp({ onClose, initialLeadId }) {
     const interval = setInterval(() => {
       loadChatLeads(true);
       if (selectedChatLead) loadActiveChat();
-    }, 15000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [loadChatLeads, loadActiveChat, selectedChatLead]);
 

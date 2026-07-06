@@ -133,7 +133,7 @@ export default function Dashboard() {
     finally { if (!silent) setLoading(false); setLastUpdated(new Date()); }
   }, [datePreset, filterFrom, filterTo, department]);
 
-  useAutoRefresh(load, 15000);
+  useAutoRefresh(load, 60000);
 
   useEffect(() => {
     load();
@@ -278,14 +278,11 @@ export default function Dashboard() {
 
   const filterParams = useMemo(() => ({ ...getDateParams(datePreset, filterFrom, filterTo), department }), [datePreset, filterFrom, filterTo, department]);
 
-  if (loading && !stats) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex items-center gap-3 text-gray-400">
-        <div className="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-        Loading dashboard...
-      </div>
-    </div>
-  );
+  if (loading && !stats) {
+    // Show a skeleton or just empty stats instead of blocking
+  }
+
+  // Calculate some derived metrics
   const getPeriodLabel = () => {
     if (datePreset === 'today') return t('Today');
     if (datePreset === 'yesterday') return t('Yesterday');
