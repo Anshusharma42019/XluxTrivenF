@@ -505,6 +505,7 @@ function OrdersSection() {
                     <th className="px-4 py-3 text-left">Order ID</th>
                     <th className="px-4 py-3 text-left">Date</th>
                     <th className="px-4 py-3 text-left">Customer</th>
+                    <th className="px-4 py-3 text-left">Product</th>
                     <th className="px-4 py-3 text-left">AWB</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Amount</th>
@@ -512,11 +513,19 @@ function OrdersSection() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {orders.map(o => (
+                  {orders.map(o => {
+                    const pStr = JSON.stringify(o.order_items || o.products || o).toLowerCase();
+                    let pTag = 'Other';
+                    let pClass = 'bg-gray-100 text-gray-600 border-gray-200';
+                    if (pStr.includes('gastro')) { pTag = 'Gastro'; pClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'; }
+                    else if (pStr.includes('migraine')) { pTag = 'Migraine'; pClass = 'bg-purple-50 text-purple-700 border-purple-200'; }
+                    
+                    return (
                     <tr key={o.order_id} className="hover:bg-gray-50/40 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-600">{o.order_id}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN') : '—'}</td>
                       <td className="px-4 py-3"><p className="font-bold text-gray-800 text-xs">{o.billing_customer_name}</p><p className="text-gray-400 text-[10px]">{o.billing_phone}</p></td>
+                      <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${pClass}`}>{pTag}</span></td>
                       <td className="px-4 py-3 font-mono text-xs text-blue-600 font-bold">{o.awb_code || '—'}</td>
                       <td className="px-4 py-3"><span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{o.status}</span></td>
                       <td className="px-4 py-3 font-bold text-gray-800 text-xs">₹{o.sub_total || 0}</td>
@@ -529,7 +538,8 @@ function OrdersSection() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -871,6 +881,14 @@ export default function Shipmaxx() {
   const [srvCarriers, setSrvCarriers] = useState([]);
   const [srvError, setSrvError] = useState('');
 
+  const [todayCount, setTodayCount] = useState(0);
+  const [gastroCount, setGastroCount] = useState(0);
+  const [migraineCount, setMigraineCount] = useState(0);
+  const [todayOrdersList, setTodayOrdersList] = useState([]);
+  const [gastroOrdersList, setGastroOrdersList] = useState([]);
+  const [migraineOrdersList, setMigraineOrdersList] = useState([]);
+  const [clickedList, setClickedList] = useState(null);
+
   const setC = (k, v) => setOrder(p => ({ ...p, customer: { ...p.customer, [k]: v } }));
   const setPkg = (k, v) => setOrder(p => ({ ...p, package: { ...p.package, [k]: v } }));
   const setProduct = (k, v) => setOrder(p => ({ ...p, products: [{ ...p.products[0], [k]: v }] }));
@@ -892,6 +910,34 @@ export default function Shipmaxx() {
     api.get('/shiprocket/next-order-id').then(res => {
       setOrder(p => ({ ...p, order_number: res.data.data.order_id }));
     }).catch(() => {});
+
+    const fetchTodayCount = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await smxSvc.getOrders({ from: today, to: today, limit: 1000 });
+        const orders = res.data?.data?.data || res.data?.data || [];
+        
+        let gastro = [];
+        let migraine = [];
+        orders.forEach(o => {
+          const str = JSON.stringify(o.order_items || o.products || o).toLowerCase();
+          if (str.includes('gastro')) gastro.push(o);
+          else if (str.includes('migraine')) migraine.push(o);
+        });
+        
+        setTodayCount(res.data?.data?.total || orders.length || 0);
+        setTodayOrdersList(orders);
+        setGastroCount(gastro.length);
+        setGastroOrdersList(gastro);
+        setMigraineCount(migraine.length);
+        setMigraineOrdersList(migraine);
+      } catch (e) {
+        console.error("Failed to fetch today's count", e);
+      }
+    };
+    fetchTodayCount();
+    const interval = setInterval(fetchTodayCount, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -900,12 +946,23 @@ export default function Shipmaxx() {
     const r = state.rts;
     const fullName = (r.lead?.name || '').trim();
     const address = [r.houseNo, r.postOffice].filter(Boolean).join(', ');
-    let productName = r.title || 'Migraine Medicines';
-    if (productName.toLowerCase().startsWith('call ') || productName.trim() === fullName) productName = 'Migraine Medicines';
+    let rawTitle = r.title || '';
+    let tLow = rawTitle.toLowerCase();
+    let dept = (r.department || r.lead?.department || r.task?.department || '').toLowerCase();
+    
+    let mappedProduct = 'Migraine Wellness';
+    if (tLow.includes('pile') || tLow.includes('gastro') || dept.includes('pile') || dept.includes('gastro')) {
+      mappedProduct = 'Gastro Wellness';
+    } else if (tLow.includes('migraine')) {
+      mappedProduct = 'Migraine Wellness';
+    } else if (tLow.startsWith('call ') || rawTitle.trim() === fullName) {
+      mappedProduct = 'Migraine Wellness';
+    }
+
     setOrder(p => ({
       ...p,
       customer: { ...p.customer, name: fullName, phone: r.lead?.phone || '', email: r.lead?.email || '', address: address || r.lead?.address || '', landmark: r.landmark || '', city: r.cityVillage || r.district || '', pincode: r.pincode || '', state: r.state || '' },
-      products: [{ ...p.products[0], name: productName, sku: productName, price: r.price || '' }],
+      products: [{ ...p.products[0], name: mappedProduct, sku: mappedProduct, price: r.price || '' }],
     }));
     if (r._id) setRtsId(r._id);
     setSection('actions'); setStep(1);
@@ -981,7 +1038,13 @@ export default function Shipmaxx() {
           <div className="h-1 bg-purple-500" />
           <div className="px-5 py-3 border-b border-gray-50"><h3 className="font-semibold text-gray-700 text-sm">Product & Package</h3></div>
           <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Field label="SKU *"><input className={inp} value={order.products[0].sku} onChange={e => setProduct('sku', e.target.value)} /></Field>
+            <Field label="SKU *">
+              <select className={inp} value={order.products[0].sku} onChange={e => setProduct('sku', e.target.value)}>
+                <option value="">Select SKU</option>
+                <option value="Gastro Wellness">Gastro Wellness</option>
+                <option value="Migraine Wellness">Migraine Wellness</option>
+              </select>
+            </Field>
             <Field label="Name *"><input className={inp} value={order.products[0].name} onChange={e => setProduct('name', e.target.value)} /></Field>
             <Field label="Price (₹) *"><input className={inp} type="number" value={order.products[0].price} onChange={e => setProduct('price', e.target.value)} /></Field>
             <Field label="Qty *"><input className={inp} type="number" min="1" value={order.products[0].quantity} onChange={e => setProduct('quantity', Number(e.target.value))} /></Field>
@@ -1249,9 +1312,23 @@ export default function Shipmaxx() {
 
   return (
     <div className="space-y-4 p-1 sm:p-2">
-      {/* Section Tabs */}
-      <div className="flex justify-start sm:justify-end overflow-x-auto pb-1 scrollbar-hide shrink-0">
-        <div className="inline-flex gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm whitespace-nowrap">
+      {/* Top Bar & Section Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 overflow-x-auto pb-1 scrollbar-hide shrink-0">
+        <div className="flex items-center gap-3">
+          <div onClick={() => setClickedList({ title: 'Today\'s Orders', orders: todayOrdersList })} className="font-bold text-gray-700 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-sm flex items-center gap-2 w-fit cursor-pointer hover:bg-gray-50 hover:border-blue-300 transition select-none">
+            <span className="uppercase tracking-wide text-xs text-gray-500">Today</span>
+            <span className="text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg text-lg border border-blue-100">{todayCount}</span>
+          </div>
+          <div onClick={() => setClickedList({ title: 'Gastro Wellness', orders: gastroOrdersList })} className="font-bold text-gray-700 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-sm flex items-center gap-2 w-fit cursor-pointer hover:bg-gray-50 hover:border-emerald-300 transition select-none">
+            <span className="uppercase tracking-wide text-xs text-gray-500">Gastro</span>
+            <span className="text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg text-lg border border-emerald-100">{gastroCount}</span>
+          </div>
+          <div onClick={() => setClickedList({ title: 'Migraine Wellness', orders: migraineOrdersList })} className="font-bold text-gray-700 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-sm flex items-center gap-2 w-fit cursor-pointer hover:bg-gray-50 hover:border-purple-300 transition select-none">
+            <span className="uppercase tracking-wide text-xs text-gray-500">Migraine</span>
+            <span className="text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-lg text-lg border border-purple-100">{migraineCount}</span>
+          </div>
+        </div>
+        <div className="inline-flex gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm whitespace-nowrap w-fit">
           {SECTIONS.map(item => {
             const active = section === item.id;
             return (
@@ -1321,6 +1398,54 @@ export default function Shipmaxx() {
             </div>
           )}
         </>
+      )}
+
+      {/* Orders List Modal */}
+      {clickedList && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <h3 className="font-bold text-gray-800 text-lg">{clickedList.title} <span className="text-gray-400 text-sm font-semibold ml-2">({clickedList.orders.length})</span></h3>
+              <button onClick={() => setClickedList(null)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 bg-gray-50/30">
+              {clickedList.orders.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-8">No orders found.</p>
+              ) : (
+                <div className="space-y-2">
+                  {clickedList.orders.map(o => (
+                    <div key={o.order_id} className="p-4 border border-gray-100 rounded-2xl bg-white shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                      <div>
+                        <p className="font-bold text-gray-800 text-sm">{o.billing_customer_name}</p>
+                        <div className="flex flex-col gap-1.5 mt-1.5">
+                          {o.billing_phone && (
+                            <a href={`tel:${o.billing_phone}`} className="w-fit flex items-center gap-1.5 text-gray-600 hover:text-blue-600 font-semibold text-xs transition">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                              {o.billing_phone}
+                            </a>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="bg-blue-50 border border-blue-100 text-blue-700 px-2 py-0.5 rounded flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase">
+                              <span className="text-blue-400">ID</span> {o.order_id}
+                            </div>
+                            {o.awb_code && (
+                              <div className="bg-purple-50 border border-purple-100 text-purple-700 px-2 py-0.5 rounded flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase">
+                                <span className="text-purple-400">AWB</span> {o.awb_code}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border text-center whitespace-nowrap ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{o.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
