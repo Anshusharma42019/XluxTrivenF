@@ -39,3 +39,5 @@ export const sendLeadWhatsApp = (leadId, message, templateName, languageCode, at
     useStandardChat: !templateName // Force standard chat if no template is provided
   }).then(r => r.data.data);
 };
+
+export const getInteraktTemplates = () => API.get('/interakt/templates').then(r => r.data.data?.templates || []);

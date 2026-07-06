@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { getLeads, getLead, sendLeadWhatsApp } from '../services/lead.service';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { getLeads, getLead, sendLeadWhatsApp, getInteraktTemplates } from '../services/lead.service';
 import { useAuth } from '../context/AuthContext';
 
 // mock function since we haven't imported the shared one
@@ -34,6 +34,7 @@ const DetailRow = ({ label, value }) => {
 
 export default function Whatsapp({ onClose, initialLeadId }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
   const [chatLeads, setChatLeads] = useState([]);
@@ -46,11 +47,17 @@ export default function Whatsapp({ onClose, initialLeadId }) {
   const [chatMsg, setChatMsg] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [templates, setTemplates] = useState([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  useEffect(() => {
+    getInteraktTemplates().then(res => setTemplates(res)).catch(console.error);
+  }, []);
 
   const loadChatLeads = useCallback(async (silent = false) => {
     if (!silent) setChatLeadsLoading(true);
     try {
-      const res = await getLeads({ page: 1, limit: 1500, search: chatLeadSearch, whatsappOnly: true });
+      const res = await getLeads({ page: 1, limit: 100, search: chatLeadSearch, whatsappOnly: true });
       setChatLeads(res?.leads || []);
     } catch (err) {
       console.error(err);
@@ -86,12 +93,12 @@ export default function Whatsapp({ onClose, initialLeadId }) {
     }
   }, [selectedChatLead, loadActiveChat]);
 
-  // Polling for new chats and messages every 5 seconds
+  // Polling for new chats and messages
   useEffect(() => {
     const interval = setInterval(() => {
       loadChatLeads(true);
       if (selectedChatLead) loadActiveChat();
-    }, 5000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [loadChatLeads, loadActiveChat, selectedChatLead]);
 
@@ -108,9 +115,13 @@ export default function Whatsapp({ onClose, initialLeadId }) {
         <button className="text-white/60 hover:text-white transition-colors relative group w-full flex justify-center">
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7"><path d="M12 2C6.477 2 2 6.14 2 11.25c0 2.016.732 3.882 1.996 5.385-.297 1.543-1.077 3.013-1.127 3.107-.107.195-.083.432.062.602.144.168.369.227.57.147 1.77-.698 3.208-1.503 4.103-2.14.93.25 1.916.386 2.946.386 5.523 0 10-4.14 10-9.25S17.523 2 12 2zm0 16c-1.012 0-1.98-.147-2.887-.419-.24-.07-.5-.041-.715.086-.714.42-1.748.977-3.037 1.488.423-.837.76-1.714.982-2.585.067-.26-.008-.535-.195-.733-1.096-1.157-1.758-2.698-1.758-4.387 0-4.225 3.86-7.65 8.61-7.65s8.61 3.425 8.61 7.65-3.86 7.65-8.61 7.65z"/><path d="M8 10.5h8v1.5H8zm0 3h5v1.5H8z"/></svg>
         </button>
-        {onClose && (
+        {onClose ? (
           <button onClick={onClose} className="text-red-400 hover:text-red-300 transition-colors bg-white/5 p-2 rounded-xl mt-2" title="Close WhatsApp">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" /></svg>
+          </button>
+        ) : (
+          <button onClick={() => navigate(-1)} className="text-white/60 hover:text-white transition-colors bg-white/5 p-2 rounded-xl mt-2" title="Go Back">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           </button>
         )}
       </div>
@@ -126,15 +137,19 @@ export default function Whatsapp({ onClose, initialLeadId }) {
   );
 
   return (
-    <div className="flex w-full h-[100dvh] bg-[#f0f2f5] overflow-hidden fixed inset-0 z-50">
+    <div className={`flex w-full bg-[#f0f2f5] overflow-hidden ${onClose ? 'fixed inset-0 z-50 h-[100dvh]' : 'h-[calc(100vh-120px)] rounded-2xl shadow-xl border border-gray-200 relative'}`}>
       <SidebarIcons />
 
       {/* Contact List */}
       <div className={`${selectedChatLead ? 'hidden lg:flex' : 'flex'} w-full lg:w-[400px] xl:w-[450px] flex-col bg-white border-r border-gray-200 shrink-0 h-full`}>
         <div className="px-5 py-4 bg-[#f0f2f5] flex items-center justify-between shrink-0 h-[60px]">
           <div className="flex items-center gap-3">
-            {onClose && (
+            {onClose ? (
               <button onClick={onClose} className="md:hidden p-1 -ml-2 text-[#54656f] hover:text-[#111b21] transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+              </button>
+            ) : (
+              <button onClick={() => navigate(-1)} className="md:hidden p-1 -ml-2 text-[#54656f] hover:text-[#111b21] transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
               </button>
             )}
@@ -255,13 +270,14 @@ export default function Whatsapp({ onClose, initialLeadId }) {
                 return displayNotes.map((note, i) => {
                   const isOutbound = note.direction === 'outbound';
                   const isInterakt = (!isOutbound && note.text?.includes('[Interakt Message]')) || note.isSyntheticProblem;
-                  const displayText = note.text?.replace(/^\[Interakt Message\]\s*/, '') || note.text || '';
+                  const isFailed = isOutbound && note.text?.includes('[FAILED]');
+                  const displayText = note.text?.replace(/^\[Interakt Message\]\s*/, '')?.replace(/^\[FAILED\]\s*/, '') || note.text || '';
                   const time = note.createdAt ? new Date(note.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
                   
                   return (
                     <div key={note._id || i} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'} mb-1`}>
                       <div className={`max-w-[75%] rounded-lg px-2.5 py-1.5 shadow-sm relative text-[14.5px] leading-relaxed
-                        ${isOutbound ? 'bg-[#d9fdd3] rounded-tr-none text-[#111b21]' : 'bg-white rounded-tl-none text-[#111b21]'}`}>
+                        ${isOutbound ? (isFailed ? 'bg-red-100 rounded-tr-none text-red-900 border border-red-200' : 'bg-[#d9fdd3] rounded-tr-none text-[#111b21]') : 'bg-white rounded-tl-none text-[#111b21]'}`}>
                         
                         {isInterakt && !isOutbound && (
                           <div className="flex items-center gap-1.5 mb-1 opacity-80">
@@ -272,12 +288,15 @@ export default function Whatsapp({ onClose, initialLeadId }) {
                         <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
                           <p className="whitespace-pre-wrap break-words">{displayText}</p>
                           <div className="flex items-center gap-1 ml-auto shrink-0 mt-1 opacity-70">
-                            <span className="text-[10px] text-[#667781] font-medium">{time}</span>
-                            {isOutbound && (
+                            <span className={`text-[10px] font-medium ${isFailed ? 'text-red-500' : 'text-[#667781]'}`}>{time}</span>
+                            {isOutbound && !isFailed && (
                               <svg className="w-4 h-4 text-[#53bdeb]" viewBox="0 0 16 11" fill="currentColor">
                                 <path d="M11.071.653a.75.75 0 0 1 .025 1.06l-6.5 7a.75.75 0 0 1-1.086 0l-3-3.228a.75.75 0 1 1 1.086-1.034l2.457 2.643L10.01.678a.75.75 0 0 1 1.06-.025z"/>
                                 <path d="M14.571.653a.75.75 0 0 1 .025 1.06l-6.5 7a.75.75 0 0 1-1.086 0 .75.75 0 0 1 0-1.034l6-6.5a.75.75 0 0 1 1.061-.026l.5.5z" opacity=".8"/>
                               </svg>
+                            )}
+                            {isOutbound && isFailed && (
+                              <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                             )}
                           </div>
                         </div>
@@ -298,6 +317,57 @@ export default function Whatsapp({ onClose, initialLeadId }) {
               <button className="p-2 text-[#54656f] hover:text-[#111b21]">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M1.816 15.556v.002c0 1.502.584 2.912 1.646 3.972s2.472 1.647 3.974 1.647a5.58 5.58 0 0 0 3.972-1.645l9.547-9.548c.769-.768 1.147-1.767 1.058-2.817-.079-.968-.548-1.927-1.319-2.698-1.594-1.592-4.068-1.711-5.517-.262l-7.916 7.915c-.881.881-.792 2.25.214 3.261.959.958 2.423 1.053 3.263.215l5.511-5.512c.28-.28.267-.722.053-.936l-.244-.244c-.191-.191-.567-.349-.957.04l-5.506 5.506c-.18.18-.635.127-.976-.214-.098-.097-.576-.613-.213-.973l7.915-7.917c.818-.817 2.267-.699 3.23.262.5.501.802 1.1.849 1.685.051.573-.156 1.077-.546 1.465l-9.541 9.541c-.832.833-1.969 1.288-3.14 1.286-1.17-.002-2.31-.453-3.142-1.284s-1.282-1.973-1.284-3.143c-.002-1.171.453-2.311 1.286-3.141l7.17-7.17c.28-.28.267-.722.053-.936l-.244-.244c-.191-.191-.567-.349-.957.04l-7.17 7.17c-1.063 1.06-1.647 2.47-1.647 3.972z"/></svg>
               </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowTemplates(!showTemplates)}
+                  className={`p-2 hover:text-[#111b21] transition-colors rounded-full ${showTemplates ? 'bg-gray-200 text-[#111b21]' : 'text-[#54656f]'}`}
+                  title="Send Template"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                </button>
+
+                {showTemplates && templates.length > 0 && (
+                  <div className="absolute bottom-full mb-2 left-0 w-64 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden z-50">
+                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase">
+                      Select Template
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {templates.map(t => (
+                        <button 
+                          key={t.id || t.name}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 text-[#111b21] border-b border-gray-50 last:border-0"
+                          onClick={async () => {
+                            setShowTemplates(false);
+                            if (sending) return;
+                            setSending(true); setSendError('');
+                            
+                            const msgToSend = `[Template: ${t.name}]`;
+                            setChatNotes(prev => [...prev, { text: msgToSend, direction: 'outbound', createdAt: new Date().toISOString() }]);
+                            
+                            try {
+                              const res = await sendLeadWhatsApp(selectedChatLead._id, msgToSend, t.name, t.language);
+                              if (res && res.note) {
+                                setChatNotes(prev => {
+                                  const newNotes = [...prev];
+                                  newNotes[newNotes.length - 1] = res.note;
+                                  return newNotes;
+                                });
+                              }
+                            } catch (err) {
+                              console.error(err);
+                              setSendError('Failed to send template');
+                            } finally { setSending(false); }
+                          }}
+                        >
+                          <div className="font-semibold truncate">{t.name}</div>
+                          <div className="text-xs text-gray-400">{t.language}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <div className="flex-1 bg-white rounded-lg flex items-end relative h-10 px-3 border border-gray-100">
                 <input 
                   type="text" 
@@ -314,7 +384,15 @@ export default function Whatsapp({ onClose, initialLeadId }) {
                       setChatMsg('');
                       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
                       try {
-                        await sendLeadWhatsApp(selectedChatLead._id, msgToSend);
+                        const res = await sendLeadWhatsApp(selectedChatLead._id, msgToSend);
+                        // Refresh notes to get real status (success or [FAILED])
+                        if (res && res.note) {
+                          setChatNotes(prev => {
+                            const newNotes = [...prev];
+                            newNotes[newNotes.length - 1] = res.note;
+                            return newNotes;
+                          });
+                        }
                       } catch (err) {
                         console.error(err);
                         setSendError('Failed to send message');
@@ -335,7 +413,14 @@ export default function Whatsapp({ onClose, initialLeadId }) {
                     setChatMsg('');
                     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
                     try {
-                      await sendLeadWhatsApp(selectedChatLead._id, msgToSend);
+                      const res = await sendLeadWhatsApp(selectedChatLead._id, msgToSend);
+                      if (res && res.note) {
+                        setChatNotes(prev => {
+                          const newNotes = [...prev];
+                          newNotes[newNotes.length - 1] = res.note;
+                          return newNotes;
+                        });
+                      }
                     } catch (err) {
                       console.error(err);
                       setSendError('Failed to send message');

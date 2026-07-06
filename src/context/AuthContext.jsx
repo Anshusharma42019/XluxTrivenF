@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import API from '../api';
 
 const AuthContext = createContext();
@@ -18,7 +18,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = async (form) => {
+  const login = useCallback(async (form) => {
     const payload = { role: form.role, password: form.password };
     if (form.role === 'admin') payload.email = form.email;
     else payload.phone = form.phone;
@@ -27,9 +27,9 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('crmTokens', JSON.stringify(data.data.tokens));
     setUser(data.data.user);
     return data.data.user;
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       const tokens = JSON.parse(localStorage.getItem('crmTokens') || 'null');
       await API.post('/auth/logout', { refreshToken: tokens?.refresh?.token });
@@ -37,12 +37,12 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('crmUser');
     localStorage.removeItem('crmTokens');
     setUser(null);
-  };
+  }, []);
 
-  const updateUser = (updatedUser) => {
+  const updateUser = useCallback((updatedUser) => {
     localStorage.setItem('crmUser', JSON.stringify(updatedUser));
     setUser(updatedUser);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, login, logout, updateUser }}>

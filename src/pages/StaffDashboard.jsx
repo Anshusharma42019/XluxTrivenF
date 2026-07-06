@@ -150,7 +150,7 @@ export default function StaffDashboard() {
       if (att.status === 'fulfilled') setAttStatus(att.value);
     } catch { /* ignore */ }
     finally { if (!silent) setLoading(false); }
-  }, [user]);
+  }, [updateUser]);
 
   // Calculate streak from target history
   useEffect(() => {
