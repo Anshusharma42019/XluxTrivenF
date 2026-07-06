@@ -59,7 +59,7 @@ export default function Users() {
   const { success, error: toastError, info } = useToast();
 
   const load = useCallback(async () => {
-    getUsers().then(res => setData(res)).catch(() => {}).finally(() => setPageLoading(false));
+    getUsers({ limit: 1000 }).then(res => setData(res)).catch(() => {}).finally(() => setPageLoading(false));
     
     // Fetch global stats for attendance summary
     fetchStats(selectedDate).then(setStats).catch(() => {});
