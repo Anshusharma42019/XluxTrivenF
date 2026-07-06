@@ -47,7 +47,7 @@ export const getDeliveredStats = (params) => api.get(`${BASE}/orders/stats`, { p
 export const getStatusOrders   = (params) => api.get(`${BASE}/orders/status`, { params });
 
 // ── Sync & Import ─────────────────────────────────────────────────────────────
-export const syncShipmaxx  = ()          => api.post(`${BASE}/orders/sync`);
+export const syncShipmaxx  = ()          => api.post(`${BASE}/orders/sync`, {}, { timeout: 5 * 60 * 1000 });
 export const importByIds   = (order_ids) => api.post(`${BASE}/orders/import-by-ids`, { order_ids });
 
 // ── Order Notes ───────────────────────────────────────────────────────────────

@@ -296,7 +296,10 @@ export default function OrderStatusBoard({
     try {
       if (platform === 'shipmaxx') {
         const res = await smxSvc.syncShipmaxx();
-        setSyncMsg(`Sync complete! Updated ${res.data?.data?.updatedCount || 0} orders.`);
+        const d = res.data?.data || {};
+        const timeMsg = d.elapsed ? ` (${d.elapsed}s)` : '';
+        const warnMsg = d.timedOut ? ' ⚠ Partial sync' : '';
+        setSyncMsg(`Sync complete! Updated ${d.updatedCount || 0} orders${timeMsg}${warnMsg}`);
       } else {
         await srSvc.syncShiprocket();
         const backfill = await srSvc.backfillDeliveredAt();
