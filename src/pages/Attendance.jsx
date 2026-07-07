@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as svc from '../services/attendance.service';
-import { fetchAllStaffCommissions, saveCommissionOverride as dashboardSaveOverride } from '../services/dashboard.service';
+import { fetchAllStaffCommissions, saveCommissionOverride as dashboardSaveOverride, fetchUnassignedOrders, assignOrder } from '../services/dashboard.service';
 import { getUsers } from '../services/user.service';
 import Modal from '../components/ui/Modal';
 import { useToast } from '../context/ToastContext';
@@ -330,6 +330,9 @@ function AdminAttendance() {
   const [showCommission, setShowCommission] = useState(true);
   const [editingComm, setEditingComm] = useState(null); // { userId, field: 'commission' | 'base' }
   const [editVal, setEditVal] = useState('');
+  const [unassignedModalOpen, setUnassignedModalOpen] = useState(false);
+  const [unassignedOrders, setUnassignedOrders] = useState([]);
+  const [unassignedLoading, setUnassignedLoading] = useState(false);
   const { success, error: toastError, info } = useToast();
 
 
@@ -365,11 +368,12 @@ function AdminAttendance() {
   const handleSaveOverride = async () => {
     if (!editingComm) return;
     try {
+      const val = editVal === '' ? null : Number(editVal);
       await dashboardSaveOverride({
         userId: editingComm.userId,
         month: commMonth.month,
         year: commMonth.year,
-        [editingComm.field === 'commission' ? 'manualCommission' : 'manualBasePay']: Number(editVal)
+        [editingComm.field === 'commission' ? 'manualCommission' : 'manualBasePay']: val
       });
       success('Override saved successfully');
       setEditingComm(null);
@@ -379,6 +383,35 @@ function AdminAttendance() {
       setCommLoading(false);
     } catch (e) {
       toastError(e.response?.data?.message || 'Failed to save override');
+    }
+  };
+
+  const openUnassigned = async () => {
+    setUnassignedModalOpen(true);
+    setUnassignedLoading(true);
+    try {
+      const orders = await fetchUnassignedOrders(commMonth.month, commMonth.year);
+      setUnassignedOrders(orders);
+    } catch {
+      toastError('Failed to fetch unassigned orders');
+    }
+    setUnassignedLoading(false);
+  };
+
+  const handleAssignOrder = async (orderId, staffId, platform) => {
+    if (!staffId) return;
+    try {
+      await assignOrder(orderId, staffId, platform);
+      success('Order assigned successfully');
+      setUnassignedOrders(prev => prev.filter(o => o._id !== orderId));
+      
+      // Reload stats
+      setCommLoading(true);
+      const d = await fetchAllStaffCommissions(commMonth.month, commMonth.year);
+      setCommData(d);
+      setCommLoading(false);
+    } catch (e) {
+      toastError(e.response?.data?.message || 'Failed to assign order');
     }
   };
 
@@ -612,7 +645,7 @@ function AdminAttendance() {
                                   }}>
                                     <span className="font-black text-amber-600 text-sm">₹{(s.totalCommission || 0).toLocaleString()}</span>
                                     <div className="text-[9px] text-amber-400 font-bold uppercase tracking-tighter">
-                                      @{s.user.commissionRate || 5}% <span className="opacity-0 group-hover/comm:opacity-100">· EDIT</span>
+                                      {s.isManualCommission ? 'MANUAL' : (s.user.role === 'support' ? '@₹50/order' : `@${s.user.commissionRate || 5}%`)} <span className="opacity-0 group-hover/comm:opacity-100">· EDIT</span>
                                     </div>
                                   </div>
                                 )}
@@ -680,26 +713,24 @@ function AdminAttendance() {
                       {/* Desktop unassigned */}
                       <table className="hidden lg:table w-full text-xs opacity-60">
                         <tbody>
-                           <tr>
-                             <td className="py-5 px-6 w-[20%]">
-                               <div className="flex items-center gap-3">
-                                 <div className="w-10 h-10 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-400 text-sm font-black uppercase shadow-sm">U</div>
-                                 <div>
-                                   <p className="font-black text-gray-500 text-sm">Unassigned Orders</p>
-                                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">No Staff Assigned</p>
-                                 </div>
+                           <tr className="group border-t border-dashed border-gray-200 transition-colors cursor-pointer hover:bg-gray-50" onClick={openUnassigned}>
+                             <td colSpan="3" className="py-5 px-6">
+                               <div className="flex items-center gap-4 opacity-60 group-hover:opacity-100 transition-opacity">
+                                  <div className="w-10 h-10 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-400 font-black tracking-tighter">U</div>
+                                  <div className="flex flex-col">
+                                    <span className="text-[13px] font-black text-gray-400 italic">Unassigned Orders</span>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-0.5">NO STAFF ASSIGNED</span>
+                                  </div>
                                </div>
                              </td>
-                             <td className="text-center py-5 px-4 w-[12%]">—</td>
-                             <td className="text-center py-5 px-4 w-[12%]">—</td>
-                             <td className="text-center py-5 px-4 w-[12%]">
-                               <div className="flex flex-col">
+                             <td className="text-right py-5 px-4 w-[15%]">
+                               <div className="flex flex-col items-center justify-center w-[60px] h-[34px] rounded-full border-2 border-dashed border-gray-300 ml-auto opacity-60 group-hover:opacity-100 transition-opacity">
                                   <span className="font-black text-gray-400 text-sm">{commData.unassignedDeliveries}</span>
                                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">delivered</span>
                                </div>
                              </td>
                              <td className="text-right py-5 px-4 w-[12%]">
-                               <div className="flex flex-col items-end opacity-40">
+                               <div className="flex flex-col items-end opacity-40 group-hover:opacity-100 transition-opacity">
                                   <span className="font-black text-gray-500 text-[10px]">₹{commData.unassignedRevenue?.toLocaleString()}</span>
                                   <span className="text-[8px] font-black uppercase tracking-tighter">revenue</span>
                                 </div>
@@ -710,7 +741,7 @@ function AdminAttendance() {
                         </tbody>
                       </table>
                       {/* Mobile unassigned */}
-                      <div className="lg:hidden flex items-center justify-between opacity-60">
+                      <div className="lg:hidden flex items-center justify-between opacity-60 cursor-pointer hover:opacity-100" onClick={openUnassigned}>
                          <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-xl bg-gray-200 flex items-center justify-center text-gray-400 text-xs font-black">U</div>
                             <div>
@@ -788,6 +819,51 @@ function AdminAttendance() {
               </div>
             ) : (
               <AttendanceCalendar records={userRecords} year={year} month={month} onChangeMonth={changeMonth} />
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {unassignedModalOpen && (
+        <Modal title="Unassigned Orders" onClose={() => setUnassignedModalOpen(false)}>
+          <div className="p-4 max-h-[70vh] overflow-y-auto space-y-4 bg-gray-50/50">
+            {unassignedLoading ? (
+              <div className="flex items-center justify-center py-10"><div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>
+            ) : unassignedOrders.length === 0 ? (
+              <p className="text-center text-sm font-bold text-gray-400 py-10">No unassigned orders found.</p>
+            ) : (
+              <div className="grid gap-3">
+                {unassignedOrders.map(o => (
+                  <div key={o._id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-black text-gray-900">{o.billing_customer_name || 'Unknown Customer'}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">{o.platform} • {o.tracking_id || 'No AWB'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-black text-gray-900">₹{o.sub_total?.toLocaleString()}</p>
+                        <p className="text-[9px] font-black text-gray-400 uppercase">Revenue</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 mt-2">
+                      <select 
+                        className="flex-1 text-xs font-bold text-gray-600 bg-gray-50 border-0 rounded-lg p-2 ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-green-500 transition-all cursor-pointer"
+                        onChange={(e) => {
+                          const staffId = e.target.value;
+                          if (staffId) handleAssignOrder(o._id, staffId, o.platform);
+                        }}
+                        value=""
+                      >
+                        <option value="" disabled>Assign to Staff...</option>
+                        {users.filter(u => u.role === 'sales').map(u => (
+                          <option key={u._id} value={u._id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </Modal>

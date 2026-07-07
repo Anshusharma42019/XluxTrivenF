@@ -103,6 +103,7 @@ export default function Dashboard() {
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
   const [department, setDepartment] = useState('');
+  const [monthlyStats, setMonthlyStats] = useState(null);
   const canManage = user?.role === 'admin' || user?.role === 'manager';
 
   const load = useCallback(async (silent = false) => {
@@ -112,8 +113,13 @@ export default function Dashboard() {
     const selectedDate = (datePreset === 'today' || datePreset === 'all' || !from) ? new Date().toISOString().split('T')[0] : from;
 
     try {
-      const [s, lists, personal, chart, att, smxStats] = await Promise.allSettled([
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+
+      const [s, mStats, lists, personal, chart, att, smxStats] = await Promise.allSettled([
         fetchStats(selectedDate, from, to, department),
+        fetchStats(null, firstDay, lastDay, department),
         fetchStaffTodayLists(selectedDate, null, from, to, department),
         fetchStaffStats(selectedDate, null, from, to, department),
         fetchStaffMonthlyChart(),
@@ -121,6 +127,7 @@ export default function Dashboard() {
         smxSvc.getDeliveredStats({}) // No params = All Time
       ]);
       if (s.status === 'fulfilled') setStats(s.value);
+      if (mStats.status === 'fulfilled') setMonthlyStats(mStats.value);
       if (lists.status === 'fulfilled') setTodayLists(lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] });
       if (personal.status === 'fulfilled') setStaffStats(personal.value || null);
       if (chart.status === 'fulfilled') setMonthlyChart(Array.isArray(chart.value) ? chart.value : []);
@@ -360,34 +367,45 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ShipMaxx Overview Cards */}
+      {/* Filter-Based Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border rounded-2xl p-5 shadow-sm">
+        <div className="bg-white border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex justify-between items-center mb-3">
             <h4 className="text-sm font-bold text-gray-700">Delivered Orders</h4>
-            <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border">All Time</span>
+            <span className="text-[10px] text-gray-700 font-bold bg-gray-100 px-2 py-1 rounded-md border border-gray-200">{getPeriodLabel()}</span>
           </div>
-          <div className="text-3xl font-black text-emerald-600 tracking-tight">
-            {deliveredStats.count.toLocaleString()}
-          </div>
-        </div>
-
-        <div className="bg-white border rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-sm font-bold text-gray-700">Total Revenue</h4>
-            <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border">All Time</span>
-          </div>
-          <div className="text-3xl font-black text-gray-900 tracking-tight">
-            ₹{Math.round(deliveredStats.revenue).toLocaleString('en-IN')}
+          <div className="flex items-end gap-3">
+            <div className="text-3xl font-black text-emerald-600 tracking-tight">
+              {stats?.deliveredCount || 0}
+            </div>
+            <div className="mb-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded">Total</div>
           </div>
         </div>
 
-        <div className="bg-white border rounded-2xl p-5 shadow-sm">
+        <div className="bg-white border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex justify-between items-center mb-3">
-            <h4 className="text-sm font-bold text-gray-700">Shipping Cost</h4>
-            <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border">All Time</span>
+            <h4 className="text-sm font-bold text-gray-700">New Order Deliveries</h4>
+            <span className="text-[10px] text-gray-700 font-bold bg-gray-100 px-2 py-1 rounded-md border border-gray-200">{getPeriodLabel()}</span>
           </div>
-          <div className="text-3xl font-black text-gray-900 tracking-tight">₹0</div>
+          <div className="flex items-end gap-3">
+            <div className="text-3xl font-black text-blue-600 tracking-tight">
+              {stats?.newDeliveredCount || 0}
+            </div>
+            <div className="mb-1 bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-1 rounded">1st Kit</div>
+          </div>
+        </div>
+
+        <div className="bg-white border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-sm font-bold text-gray-700">Old Order Deliveries</h4>
+            <span className="text-[10px] text-gray-700 font-bold bg-gray-100 px-2 py-1 rounded-md border border-gray-200">{getPeriodLabel()}</span>
+          </div>
+          <div className="flex items-end gap-3">
+            <div className="text-3xl font-black text-purple-600 tracking-tight">
+              {stats?.oldDeliveredCount || 0}
+            </div>
+            <div className="mb-1 bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-1 rounded">2nd+ Kit</div>
+          </div>
         </div>
       </div>
 
@@ -412,9 +430,13 @@ export default function Dashboard() {
               <p className="text-xl font-black text-white">{stats?.readyToShipmentCount || 0}</p>
               <p className="text-[9px] font-bold text-emerald-200/70 uppercase tracking-widest">{t('Pending Ship')}</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-center flex flex-col justify-center">
               <p className="text-xl font-black text-white">{stats?.deliveredCount || 0}</p>
-              <p className="text-[9px] font-bold text-emerald-200/70 uppercase tracking-widest">{t('Delivered')}</p>
+              <p className="text-[9px] font-bold text-emerald-200/70 uppercase tracking-widest mb-1">{t('Delivered')}</p>
+              <div className="flex justify-center gap-2 text-[10px] font-medium text-emerald-100">
+                <span title="1st Kit">New: {stats?.newDeliveredCount || 0}</span>
+                <span title="2nd Kit+">Old: {stats?.oldDeliveredCount || 0}</span>
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
               <p className="text-xl font-black text-white">₹{(stats?.deliveredRevenue || 0).toLocaleString('en-IN')}</p>

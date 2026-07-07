@@ -930,8 +930,16 @@ export default function StaffDashboard() {
                 <p className="text-2xl font-bold text-white">₹{(commission.totalPay || 0).toLocaleString('en-IN')}</p>
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Total Salary</p>
                 {commission.totalDeliveries > 0 && (
-                  <div className="absolute top-3 right-3 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-lg border border-emerald-500/30">
-                    {commission.totalDeliveries} Delivered
+                  <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
+                    <div className="bg-emerald-500/20 text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                      {commission.totalDeliveries} Delivered
+                    </div>
+                    {(commission.total1KitCount !== undefined || commission.total2KitCount !== undefined) && (
+                      <div className="flex gap-1 text-[8px] font-bold text-gray-400">
+                        <span className="bg-white/10 px-1.5 py-0.5 rounded" title="1st Kit">New: {commission.total1KitCount || 0}</span>
+                        <span className="bg-white/10 px-1.5 py-0.5 rounded" title="2nd Kit+">Old: {commission.total2KitCount || 0}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
