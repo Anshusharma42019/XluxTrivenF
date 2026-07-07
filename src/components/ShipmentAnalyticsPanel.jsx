@@ -150,10 +150,12 @@ export default function ShipmentAnalyticsPanel({ department = '' }) {
   const handleBack            = () => { setDrillState(null); setDrillPincode(null); fetchStats(null, null, globalMonth); };
   const handleGlobalMonthChange = m => { setGlobalMonth(m); fetchStats(drillState, drillPincode, m); };
 
-  // Auto-load analytics on mount
   useEffect(() => {
-    fetchStats(null, null, currentMonth);
-  }, [fetchStats, currentMonth]);
+    setLoaded(false);
+    setStats(null);
+    setDrillState(null);
+    setDrillPincode(null);
+  }, [department]);
 
   const isDrilled   = !!(drillState || drillPincode);
   const drillLabel  = drillState || drillPincode;

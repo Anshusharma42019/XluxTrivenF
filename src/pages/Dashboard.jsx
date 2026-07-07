@@ -103,7 +103,6 @@ export default function Dashboard() {
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
   const [department, setDepartment] = useState('');
-  const [monthlyStats, setMonthlyStats] = useState(null);
   const canManage = user?.role === 'admin' || user?.role === 'manager';
 
   const load = useCallback(async (silent = false) => {
@@ -113,34 +112,44 @@ export default function Dashboard() {
     const selectedDate = (datePreset === 'today' || datePreset === 'all' || !from) ? new Date().toISOString().split('T')[0] : from;
 
     try {
-      const today = new Date();
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
 
-      const [s, mStats, lists, personal, chart, att, smxStats] = await Promise.allSettled([
+      const [s, personal, att] = await Promise.allSettled([
         fetchStats(selectedDate, from, to, department),
-        fetchStats(null, firstDay, lastDay, department),
-        fetchStaffTodayLists(selectedDate, null, from, to, department),
         fetchStaffStats(selectedDate, null, from, to, department),
-        fetchStaffMonthlyChart(),
         attendanceSvc.getTodayStatus(),
-        smxSvc.getDeliveredStats({}) // No params = All Time
       ]);
-      if (s.status === 'fulfilled') setStats(s.value);
-      if (mStats.status === 'fulfilled') setMonthlyStats(mStats.value);
-      if (lists.status === 'fulfilled') setTodayLists(lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] });
-      if (personal.status === 'fulfilled') setStaffStats(personal.value || null);
-      if (chart.status === 'fulfilled') setMonthlyChart(Array.isArray(chart.value) ? chart.value : []);
-      if (att.status === 'fulfilled') setAttStatus(att.value);
-      if (smxStats.status === 'fulfilled') {
-        const { count, revenue, statusBreakdown } = smxStats.value.data?.data || {};
-        setDeliveredStats({ count: count || 0, revenue: revenue || 0, statusBreakdown: statusBreakdown || [] });
-      }
-    } catch (e) { console.error('Dashboard load error:', e); }
-    finally { if (!silent) setLoading(false); setLastUpdated(new Date()); }
-  }, [datePreset, filterFrom, filterTo, department]);
 
-  useAutoRefresh(load, 60000);
+      if (s.status === 'fulfilled') setStats(s.value);
+      if (personal.status === 'fulfilled') setStaffStats(personal.value || null);
+      if (att.status === 'fulfilled') setAttStatus(att.value);
+      setLastUpdated(new Date());
+      if (!silent) setLoading(false);
+
+      if (silent) return;
+
+      Promise.allSettled([
+        user?.role === 'sales'
+          ? fetchStaffTodayLists(selectedDate, null, from, to, department)
+          : Promise.resolve(null),
+        fetchStaffMonthlyChart(),
+        smxSvc.getDeliveredStats({}),
+      ]).then(([lists, chart, smxStats]) => {
+        if (lists.status === 'fulfilled' && lists.value) {
+          setTodayLists(lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] });
+        }
+        if (chart.status === 'fulfilled') setMonthlyChart(Array.isArray(chart.value) ? chart.value : []);
+        if (smxStats.status === 'fulfilled') {
+          const { count, revenue, statusBreakdown } = smxStats.value.data?.data || {};
+          setDeliveredStats({ count: count || 0, revenue: revenue || 0, statusBreakdown: statusBreakdown || [] });
+        }
+      }).catch((e) => console.error('Dashboard secondary load error:', e));
+    } catch (e) {
+      console.error('Dashboard load error:', e);
+      if (!silent) setLoading(false);
+    }
+  }, [datePreset, filterFrom, filterTo, department, user?.role]);
+
+  useAutoRefresh(load, 120000);
 
   useEffect(() => {
     load();
@@ -148,33 +157,42 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    let timer;
     setCommLoading(true);
 
     const isPrivileged = user?.role === 'admin' || user?.role === 'manager';
     const fetchFunc = isPrivileged ? fetchAllStaffCommissions : fetchStaffCommission;
 
-    fetchFunc(commMonth.month, commMonth.year)
-      .then(d => {
-        if (!cancelled) {
-          if (isPrivileged) {
-            setCommission({
-              totalPay: d.grandTotalPay,
-              basePay: (d.grandTotalPay || 0) - (d.grandTotalCommission || 0),
-              totalCommission: d.grandTotalCommission,
-              revenue: d.grandTotalRevenue
-            });
-          } else {
-            setCommission(d);
+    timer = setTimeout(() => {
+      fetchFunc(commMonth.month, commMonth.year)
+        .then(d => {
+          if (!cancelled) {
+            if (isPrivileged) {
+              setCommission({
+                totalPay: d.grandTotalPay,
+                basePay: (d.grandTotalPay || 0) - (d.grandTotalCommission || 0),
+                totalCommission: d.grandTotalCommission,
+                revenue: d.grandTotalRevenue
+              });
+            } else {
+              setCommission(d);
+            }
           }
-        }
-      })
-      .catch(e => { if (!cancelled) console.error(e); })
-      .finally(() => { if (!cancelled) setCommLoading(false); });
-    return () => { cancelled = true; };
+        })
+        .catch(e => { if (!cancelled) console.error(e); })
+        .finally(() => { if (!cancelled) setCommLoading(false); });
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [commMonth, user?.role]);
 
   useEffect(() => {
     let cancelled = false;
+    let timer;
+
     if (canManage) {
       let from, to;
       const today = new Date();
@@ -197,11 +215,17 @@ export default function Dashboard() {
         to = from;
       }
 
-      fetchAllStaffStats(null, from, to).then(data => {
-        if (!cancelled) setAllStaffStats(data || []);
-      }).catch(e => console.error(e));
+      timer = setTimeout(() => {
+        fetchAllStaffStats(null, from, to).then(data => {
+          if (!cancelled) setAllStaffStats(data || []);
+        }).catch(e => console.error(e));
+      }, 500);
     }
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [teamOverviewPeriod, canManage]);
 
   const [csvLoading, setCsvLoading] = useState(false);
@@ -998,3 +1022,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
