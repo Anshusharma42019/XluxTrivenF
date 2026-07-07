@@ -83,53 +83,134 @@ export default function Verification() {
   const [dayFilter, setDayFilter] = useState('all');
   const [customDate, setCustomDate] = useState('');
   const [search, setSearch] = useState('');
+  const [searchText, setSearchText] = useState('');
   const [activeTab, setActiveTab] = useState('pending');
   const [onHoldRecords, setOnHoldRecords] = useState([]);
   const [ohDayFilter, setOhDayFilter] = useState('all');
   const [ohCustomDate, setOhCustomDate] = useState('');
   const [ohSearch, setOhSearch] = useState('');
+  const [ohSearchText, setOhSearchText] = useState('');
+
+  // Debounce search input values
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearch(searchText);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchText]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setOhSearch(ohSearchText);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [ohSearchText]);
   const [allUsers, setAllUsers] = useState([]);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignTo, setAssignTo] = useState('');
   const [showPatientTypeModal, setShowPatientTypeModal] = useState(false);
   const [selectedPatientType, setSelectedPatientType] = useState('new');
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    setError('');
     try {
-      const data = await getVerificationRecords(department ? { department } : {});
-      setRecords(Array.isArray(data) ? data : []);
+      const params = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(department && { department }),
+        ...(dayFilter !== 'all' && { dayFilter }),
+        ...(customDate && { customDate }),
+        ...(search && { search })
+      };
+      const data = await getVerificationRecords(params);
+      setRecords(data?.records || []);
+      if (activeTab === 'pending') {
+        setTotalItems(data?.total || 0);
+        setTotalPages(data?.totalPages || 1);
+      }
     } catch (e) {
       if (!silent) setError(e?.response?.data?.message || e.message || 'Failed to load');
     } finally { if (!silent) setLoading(false); }
-  }, [department]);
+  }, [department, currentPage, dayFilter, customDate, search, activeTab]);
 
   const loadOnHold = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError('');
     try {
-      const data = await getOnHoldVerificationRecords(department ? { department } : {});
-      setOnHoldRecords(Array.isArray(data) ? data : []);
-    } catch { }
-  }, [department]);
+      const params = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(department && { department }),
+        ...(ohDayFilter !== 'all' && { dayFilter: ohDayFilter }),
+        ...(ohCustomDate && { customDate: ohCustomDate }),
+        ...(ohSearch && { search: ohSearch })
+      };
+      const data = await getOnHoldVerificationRecords(params);
+      setOnHoldRecords(data?.records || []);
+      if (activeTab === 'on_hold') {
+        setTotalItems(data?.total || 0);
+        setTotalPages(data?.totalPages || 1);
+      }
+    } catch (e) {
+      if (!silent) setError(e?.response?.data?.message || e.message || 'Failed to load');
+    } finally { if (!silent) setLoading(false); }
+  }, [department, currentPage, ohDayFilter, ohCustomDate, ohSearch, activeTab]);
 
-  const autoFetch = useCallback((silent) => {
-    load(silent);
-    loadOnHold(silent);
-  }, [load, loadOnHold]);
-
-  useAutoRefresh(autoFetch, 15000);
-
-  useEffect(() => {
-    load(false);
-    loadOnHold(false);
-    const filter = department ? { department } : {};
+  // Sync fresh records quietly in the background
+  const runSync = useCallback(() => {
     syncVerificationRecords()
-      .then(() => Promise.all([getVerificationRecords(filter), getOnHoldVerificationRecords(filter)]))
-      .then(([pending, onHold]) => {
-        setRecords(Array.isArray(pending) ? pending : []);
-        setOnHoldRecords(Array.isArray(onHold) ? onHold : []);
+      .then(() => {
+        if (activeTab === 'pending') {
+          load(true);
+        } else {
+          loadOnHold(true);
+        }
       })
-      .catch(() => { });
-  }, [load, loadOnHold, department]);
+      .catch(() => {});
+  }, [activeTab, load, loadOnHold]);
+
+  // Load correct list on filters or tab change
+  useEffect(() => {
+    if (activeTab === 'pending') {
+      load();
+    } else {
+      loadOnHold();
+    }
+  }, [
+    activeTab,
+    department,
+    currentPage,
+    dayFilter,
+    customDate,
+    search,
+    ohDayFilter,
+    ohCustomDate,
+    ohSearch
+  ]);
+
+  // Run periodic sync in background
+  useEffect(() => {
+    runSync();
+    const interval = setInterval(runSync, 30000);
+    return () => clearInterval(interval);
+  }, [runSync]);
+
+  const refreshActiveTab = useCallback((silent = true) => {
+    if (activeTab === 'pending') {
+      load(silent);
+    } else {
+      loadOnHold(silent);
+    }
+  }, [activeTab, load, loadOnHold]);
+
+  useAutoRefresh(refreshActiveTab, 15000);
 
   useEffect(() => {
     if (canManage) {
@@ -168,6 +249,32 @@ export default function Verification() {
       } else {
         setDayFilter('all');
       }
+    } else {
+      API.get(`/verification/by-task/${openId}`).then(res => {
+        if (res.data?.data) {
+          const flattened = flattenRecord(res.data.data);
+          setSelected(flattened);
+          if (res.data.data.status === 'on_hold') {
+            setActiveTab('on_hold');
+            setOhDayFilter('all');
+          } else {
+            setDayFilter('all');
+          }
+        }
+      }).catch(() => {
+        API.get(`/verification/${openId}`).then(res => {
+          if (res.data?.data) {
+            const flattened = flattenRecord(res.data.data);
+            setSelected(flattened);
+            if (res.data.data.status === 'on_hold') {
+              setActiveTab('on_hold');
+              setOhDayFilter('all');
+            } else {
+              setDayFilter('all');
+            }
+          }
+        }).catch(() => {});
+      });
     }
     setSearchParams({}, { replace: true });
   }, [records, onHoldRecords, searchParams]);
@@ -191,62 +298,15 @@ export default function Verification() {
     };
   };
 
-  const filterRecords = (recs) => {
-    // Use IST midnight (UTC+5:30) for correct day boundaries
-    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-    const nowIST = new Date(Date.now() + IST_OFFSET);
-    const todayIST = new Date(Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate()) - IST_OFFSET);
-    const yesterdayIST = new Date(todayIST.getTime() - 24 * 60 * 60 * 1000);
-    let filtered = recs.filter(r => r.status !== 'on_hold');
+  const activeList = activeTab === 'on_hold' ? onHoldRecords : records;
+  const indexOffset = (currentPage - 1) * itemsPerPage;
 
-    if (dayFilter === 'today') filtered = filtered.filter(r => new Date(r.createdAt) >= todayIST);
-    else if (dayFilter === 'yesterday') {
-      filtered = filtered.filter(r => { const d = new Date(r.createdAt); return d >= yesterdayIST && d < todayIST; });
-    } else if (dayFilter === 'custom' && customDate) {
-      const from = new Date(`${customDate}T00:00:00.000+05:30`);
-      const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(r => { const d = new Date(r.createdAt); return d >= from && d < to; });
-    }
+  // Reset page when search or tab filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, department, dayFilter, search, ohDayFilter, ohSearch, customDate, ohCustomDate]);
 
-    if (search) {
-      const q = search.toLowerCase();
-      filtered = filtered.filter(r =>
-        r.title?.toLowerCase().includes(q) ||
-        r.lead?.name?.toLowerCase().includes(q) ||
-        r.lead?.phone?.includes(q) ||
-        r.assignedTo?.name?.toLowerCase().includes(q) ||
-        r.district?.toLowerCase().includes(q)
-      );
-    }
-    return filtered;
-  };
-
-  const filteredRecords = filterRecords(records);
-
-  const filteredOnHold = (() => {
-    const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const today = startOf(new Date());
-    let filtered = [...onHoldRecords];
-    if (ohDayFilter === 'today') filtered = filtered.filter(r => new Date(r.onHoldAt || r.updatedAt || r.createdAt) >= today);
-    else if (ohDayFilter === 'yesterday') {
-      const y = new Date(today); y.setDate(y.getDate() - 1);
-      filtered = filtered.filter(r => { const d = new Date(r.onHoldAt || r.updatedAt || r.createdAt); return d >= y && d < today; });
-    } else if (ohDayFilter === 'custom' && ohCustomDate) {
-      const from = new Date(ohCustomDate);
-      const to = new Date(from); to.setDate(from.getDate() + 1);
-      filtered = filtered.filter(r => { const d = new Date(r.onHoldAt || r.updatedAt || r.createdAt); return d >= from && d < to; });
-    }
-    if (ohSearch) {
-      const q = ohSearch.toLowerCase();
-      filtered = filtered.filter(r =>
-        r.title?.toLowerCase().includes(q) ||
-        r.lead?.name?.toLowerCase().includes(q) ||
-        r.lead?.phone?.includes(q) ||
-        r.assignedTo?.name?.toLowerCase().includes(q)
-      );
-    }
-    return filtered;
-  })();
+  const paginatedRecords = activeList;
 
   const startEdit = () => {
     setEditForm({
@@ -391,15 +451,11 @@ export default function Verification() {
 
   // Avatar color helper — works for both pending and on-hold records
   const getAvatarColor = (id) => {
-    const idx = [...filteredRecords, ...filteredOnHold].findIndex(r => r._id === id);
+    const idx = [...records, ...onHoldRecords].findIndex(r => r._id === id);
     return PIN_COLORS[Math.max(0, idx) % PIN_COLORS.length];
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+
 
   return (
     <div className="flex gap-4 scroll-container-h overflow-hidden animate-slide-up mobile-p-safe">
@@ -433,12 +489,12 @@ export default function Verification() {
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
               </svg>
-              <input value={ohSearch} onChange={e => setOhSearch(e.target.value)} placeholder="Search name, phone, task..."
+              <input value={ohSearchText} onChange={e => setOhSearchText(e.target.value)} placeholder="Search name, phone, task..."
                 className="w-full pl-9 pr-16 py-2.5 rounded-xl border border-gray-100 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400/20 focus:border-gray-400 transition shadow-sm" />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">{filteredOnHold.length}</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">{totalItems}</span>
             </div>
             <div className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-bold shadow-md shrink-0 bg-gray-600">
-              {filteredOnHold.length} On Hold
+              {totalItems} On Hold
             </div>
             {canManage && (
               <select value={department} onChange={e => setDepartment(e.target.value)}
@@ -463,14 +519,14 @@ export default function Verification() {
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
             </svg>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, task..."
+            <input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="Search name, phone, task..."
               className="w-full pl-9 pr-16 py-2.5 rounded-xl border border-gray-100 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition shadow-sm" />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">{filteredRecords.length}</span>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">{totalItems}</span>
           </div>
           <div className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-bold shadow-md shrink-0"
             style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)' }}>
             <VerifyIcon className="w-3.5 h-3.5" />
-            {filteredRecords.length} Pending ✓
+            {totalItems} Pending ✓
           </div>
           {canManage && (
             <select value={department} onChange={e => setDepartment(e.target.value)}
@@ -482,29 +538,89 @@ export default function Verification() {
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-          {activeTab === 'on_hold' ? (
-            filteredOnHold.length === 0 ? (
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : activeTab === 'on_hold' ? (
+              onHoldRecords.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+                  <p className="text-gray-500 text-sm font-medium">No on hold records</p>
+                </div>
+              ) : (
+                <div className="space-y-2 pb-4">
+                  {paginatedRecords.map((r, i) => {
+                    const color = PIN_COLORS[(i + indexOffset) % PIN_COLORS.length];
+                    const isActive = selected?._id === r._id;
+                    const flattened = flattenRecord(r);
+                    return (
+                      <div key={r._id} onClick={() => handleSelect(r)} className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border ${isActive ? 'bg-gray-50 border-gray-300 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300 hover:bg-gray-50/50 hover:shadow-sm'}`}>
+                        <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${color}`} />
+                        <span className="text-[11px] font-bold text-gray-300 w-5 text-center shrink-0 ml-2">{i + 1 + indexOffset}</span>
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${color}`}>
+                          {initials(flattened.lead?.name || flattened.title)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-gray-800 truncate">{flattened.title}</p>
+                            {getDisplayKit(flattened) ? (
+                              <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200 uppercase shrink-0 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />{getKitText(getDisplayKit(flattened))}
+                              </span>
+                            ) : (
+                              <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200 uppercase shrink-0 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />NEW
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {flattened.lead?.name && <span className="text-xs text-gray-500">{flattened.lead.name}</span>}
+                            {flattened.lead?.phone && <span className="text-xs text-gray-400">{flattened.lead.phone}</span>}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-gray-50 text-gray-600 border-gray-100">ON HOLD</span>
+                          {r.onHoldUntil && (
+                            <span className="text-[10px] text-gray-400">
+                              Until {new Date(r.onHoldUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </span>
+                          )}
+                          {flattened.assignedTo?.name && <span className="text-[10px] text-gray-400 hidden sm:block">Assigned: {flattened.assignedTo.name}</span>}
+                          {flattened.department && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{flattened.department}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : records.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
-                <p className="text-gray-500 text-sm font-medium">No on hold records</p>
+                <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center mb-3 text-green-300">
+                  <VerifyIcon className="w-6 h-6" />
+                </div>
+                <p className="text-gray-500 text-sm font-medium">No tasks found</p>
+                <p className="text-gray-400 text-xs mt-1">{search ? 'Try a different search' : 'Nothing here yet'}</p>
               </div>
             ) : (
               <div className="space-y-2 pb-4">
-                {filteredOnHold.map((r, i) => {
-                  const color = PIN_COLORS[i % PIN_COLORS.length];
+                {paginatedRecords.map((r, i) => {
+                  const color = PIN_COLORS[(i + indexOffset) % PIN_COLORS.length];
                   const isActive = selected?._id === r._id;
                   const flattened = flattenRecord(r);
                   return (
-                    <div key={r._id} onClick={() => handleSelect(r)} className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border ${isActive ? 'bg-gray-50 border-gray-300 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300 hover:bg-gray-50/50 hover:shadow-sm'}`}>
+                    <div key={r._id} onClick={() => handleSelect(r)}
+                      className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border ${isActive ? 'bg-green-50 border-green-200 shadow-sm' : 'bg-white border-gray-100 hover:border-green-200 hover:bg-green-50/30 hover:shadow-sm'}`}>
                       <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${color}`} />
-                      <span className="text-[11px] font-bold text-gray-300 w-5 text-center shrink-0 ml-2">{i + 1}</span>
+                      <span className="text-[11px] font-bold text-gray-300 w-5 text-center shrink-0 ml-2">{i + 1 + indexOffset}</span>
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${color}`}>
                         {initials(flattened.lead?.name || flattened.title)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-gray-800 truncate">{flattened.title}</p>
-                          {getDisplayKit(flattened) ? (
+                          {isOldPatientVerification(flattened) ? (
                             <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200 uppercase shrink-0 flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />{getKitText(getDisplayKit(flattened))}
                             </span>
@@ -516,85 +632,116 @@ export default function Verification() {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           {flattened.lead?.name && <span className="text-xs text-gray-500">{flattened.lead.name}</span>}
-                          {flattened.lead?.phone && <span className="text-xs text-gray-400">{flattened.lead.phone}</span>}
+                          {flattened.lead?.phone && (
+                            <span className="text-xs text-gray-400 flex items-center gap-0.5">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+                              {flattened.lead.phone}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-gray-50 text-gray-600 border-gray-100">ON HOLD</span>
-                        {r.onHoldUntil && (
-                          <span className="text-[10px] text-gray-400">
-                            Until {new Date(r.onHoldUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                          </span>
-                        )}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${flattened.status === 'on_hold' ? 'bg-gray-50 text-gray-600 border-gray-100' : flattened.status === 'verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : flattened.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                          {flattened.status?.replace(/_/g, ' ').toUpperCase()}
+                        </span>
                         {flattened.assignedTo?.name && <span className="text-[10px] text-gray-400 hidden sm:block">Assigned: {flattened.assignedTo.name}</span>}
-                        {flattened.department && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{flattened.department}</span>}
+                        {(flattened.department || flattened.lead?.department || flattened.task?.department) && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{flattened.department || flattened.lead?.department || flattened.task?.department}</span>
+                        )}
                       </div>
+                      <button onClick={(e) => handleDelete(r._id, e)}
+                        className="w-8 h-8 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 transition shrink-0 font-bold text-base">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
+                      </button>
                     </div>
                   );
                 })}
               </div>
-            )
-          ) : filteredRecords.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
-              <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center mb-3 text-green-300">
-                <VerifyIcon className="w-6 h-6" />
+            )}
+          </div>
+          
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 bg-white shrink-0">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+                >
+                  Next
+                </button>
               </div>
-              <p className="text-gray-500 text-sm font-medium">No tasks found</p>
-              <p className="text-gray-400 text-xs mt-1">{search ? 'Try a different search' : 'Nothing here yet'}</p>
-            </div>
-          ) : (
-            <div className="space-y-2 pb-4">
-              {filteredRecords.map((r, i) => {
-                const color = PIN_COLORS[i % PIN_COLORS.length];
-                const isActive = selected?._id === r._id;
-                const flattened = flattenRecord(r);
-                return (
-                  <div key={r._id} onClick={() => handleSelect(r)}
-                    className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border ${isActive ? 'bg-green-50 border-green-200 shadow-sm' : 'bg-white border-gray-100 hover:border-green-200 hover:bg-green-50/30 hover:shadow-sm'}`}>
-                    <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${color}`} />
-                    <span className="text-[11px] font-bold text-gray-300 w-5 text-center shrink-0 ml-2">{i + 1}</span>
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${color}`}>
-                      {initials(flattened.lead?.name || flattened.title)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{flattened.title}</p>
-                        {isOldPatientVerification(flattened) ? (
-                          <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200 uppercase shrink-0 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />{getKitText(getDisplayKit(flattened))}
-                          </span>
-                        ) : (
-                          <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200 uppercase shrink-0 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />NEW
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {flattened.lead?.name && <span className="text-xs text-gray-500">{flattened.lead.name}</span>}
-                        {flattened.lead?.phone && (
-                          <span className="text-xs text-gray-400 flex items-center gap-0.5">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
-                            {flattened.lead.phone}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${flattened.status === 'on_hold' ? 'bg-gray-50 text-gray-600 border-gray-100' : flattened.status === 'verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : flattened.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-                        {flattened.status?.replace(/_/g, ' ').toUpperCase()}
-                      </span>
-                      {flattened.assignedTo?.name && <span className="text-[10px] text-gray-400 hidden sm:block">Assigned: {flattened.assignedTo.name}</span>}
-                      {(flattened.department || flattened.lead?.department || flattened.task?.department) && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{flattened.department || flattened.lead?.department || flattened.task?.department}</span>
-                      )}
-                    </div>
-                    <button onClick={(e) => handleDelete(r._id, e)}
-                      className="w-8 h-8 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 transition shrink-0 font-bold text-base">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Showing Page <span className="font-bold text-gray-800">{currentPage}</span> of{' '}
+                    <span className="font-bold text-gray-800">{totalPages}</span> (<span className="font-bold text-gray-800">{totalItems}</span> total items)
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md -space-x-px" aria-label="Pagination">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(1)}
+                      className="relative inline-flex items-center px-2 py-1.5 rounded-l-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      «
                     </button>
-                  </div>
-                );
-              })}
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      ‹
+                    </button>
+                    
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum = currentPage - 2 + i;
+                      if (currentPage <= 2) pageNum = i + 1;
+                      if (currentPage >= totalPages - 1) pageNum = totalPages - 4 + i;
+                      pageNum = Math.max(1, Math.min(pageNum, totalPages));
+                      
+                      if (pageNum < 1 || pageNum > totalPages) return null;
+                      const isPageActive = currentPage === pageNum;
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-bold transition
+                            ${isPageActive
+                              ? 'z-10 bg-green-50 border-green-500 text-green-600'
+                              : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      ›
+                    </button>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="relative inline-flex items-center px-2 py-1.5 rounded-r-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      »
+                    </button>
+                  </nav>
+                </div>
+              </div>
             </div>
           )}
         </div>

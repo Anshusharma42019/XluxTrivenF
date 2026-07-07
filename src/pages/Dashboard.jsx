@@ -78,6 +78,7 @@ const icons = {
   verify: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
 };
 
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { success, error, info } = useToast();
@@ -119,8 +120,12 @@ export default function Dashboard() {
         attendanceSvc.getTodayStatus(),
       ]);
 
-      if (s.status === 'fulfilled') setStats(s.value);
-      if (personal.status === 'fulfilled') setStaffStats(personal.value || null);
+      if (s.status === 'fulfilled') {
+        setStats(s.value);
+      }
+      if (personal.status === 'fulfilled') {
+        setStaffStats(personal.value || null);
+      }
       if (att.status === 'fulfilled') setAttStatus(att.value);
       setLastUpdated(new Date());
       if (!silent) setLoading(false);
@@ -135,19 +140,24 @@ export default function Dashboard() {
         smxSvc.getDeliveredStats({}),
       ]).then(([lists, chart, smxStats]) => {
         if (lists.status === 'fulfilled' && lists.value) {
-          setTodayLists(lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] });
+          const val = lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] };
+          setTodayLists(val);
         }
-        if (chart.status === 'fulfilled') setMonthlyChart(Array.isArray(chart.value) ? chart.value : []);
+        if (chart.status === 'fulfilled') {
+          const val = Array.isArray(chart.value) ? chart.value : [];
+          setMonthlyChart(val);
+        }
         if (smxStats.status === 'fulfilled') {
           const { count, revenue, statusBreakdown } = smxStats.value.data?.data || {};
-          setDeliveredStats({ count: count || 0, revenue: revenue || 0, statusBreakdown: statusBreakdown || [] });
+          const val = { count: count || 0, revenue: revenue || 0, statusBreakdown: statusBreakdown || [] };
+          setDeliveredStats(val);
         }
       }).catch((e) => console.error('Dashboard secondary load error:', e));
     } catch (e) {
       console.error('Dashboard load error:', e);
       if (!silent) setLoading(false);
     }
-  }, [datePreset, filterFrom, filterTo, department, user?.role]);
+  }, [datePreset, filterFrom, filterTo, department, user?.role, user?._id]);
 
   useAutoRefresh(load, 120000);
 

@@ -44,13 +44,28 @@ export default function ReadyToShipment() {
   const canManage = user?.role === 'admin' || user?.role === 'manager';
   const [searchParams] = useSearchParams();
   const [records, setRecords] = useState([]);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [department, setDepartment] = useState('');
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('phone') || '');
+  const [searchText, setSearchText] = useState(() => new URLSearchParams(window.location.search).get('phone') || '');
   const [dayFilter, setDayFilter] = useState(() => new URLSearchParams(window.location.search).get('phone') ? 'all' : 'today');
   const [typeFilter, setTypeFilter] = useState('all');
   const [customDate, setCustomDate] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearch(searchText);
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchText]);
   const [repairing, setRepairing] = useState(false);
   const [shipProvider, setShipProvider] = useState(() => localStorage.getItem('shipProvider') || 'shiprocket');
   const [showStats, setShowStats] = useState(false);
@@ -64,13 +79,23 @@ export default function ReadyToShipment() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const params = department ? { department } : {};
+      const params = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(department && { department }),
+        ...(dayFilter && { dayFilter }),
+        ...(customDate && { customDate }),
+        ...(typeFilter && { typeFilter }),
+        ...(search && { search })
+      };
       const res = await API.get('/ready-to-shipment', { params });
       const data = res.data.data;
-      setRecords(Array.isArray(data) ? data : []);
+      setRecords(data?.records || []);
+      setTotalItems(data?.total || 0);
+      setTotalPages(data?.totalPages || 1);
     } catch { /* ignore */ }
     finally { if (!silent) setLoading(false); }
-  }, [department]);
+  }, [department, currentPage, dayFilter, customDate, typeFilter, search]);
 
   useAutoRefresh(load, 15000);
 
@@ -112,9 +137,8 @@ export default function ReadyToShipment() {
     setRepairing(true);
     try {
       const params = department ? { department } : {};
-      const res = await API.post('/ready-to-shipment/sync', null, { params });
-      const data = res.data.data;
-      setRecords(Array.isArray(data) ? data : []);
+      await API.post('/ready-to-shipment/sync', null, { params });
+      load();
     } catch { /* ignore */ }
     finally { setRepairing(false); }
   };
@@ -133,7 +157,7 @@ export default function ReadyToShipment() {
     try { await API.post('/integrations/shipping-provider', { provider: next }); } catch { /* ignore */ }
   };
 
-  useEffect(() => { load(); }, [load, department]);
+  useEffect(() => { load(); }, [load]);
   useEffect(() => { if (showStats) loadStats(drillState, drillPincode); }, [showStats, loadStats]); // eslint-disable-line
 
   const handleDelete = async (record) => {
@@ -147,41 +171,8 @@ export default function ReadyToShipment() {
     }
   };
 
-  const filtered = records.filter(r => {
-    const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const today = startOf(new Date());
-    if (dayFilter === 'today' && new Date(r.createdAt) < today) return false;
-    if (dayFilter === 'yesterday') {
-      const y = new Date(today); y.setDate(y.getDate() - 1);
-      const d = new Date(r.createdAt);
-      if (d < y || d >= today) return false;
-    }
-    if (dayFilter === 'custom' && customDate) {
-      const from = new Date(customDate);
-      const to = new Date(from); to.setDate(to.getDate() + 1);
-      const d = new Date(r.createdAt);
-      if (d < from || d >= to) return false;
-    }
-    
-    const isOld = r.lead?.status === 'old' || !!r.lead?.pending_reorder_source;
-    if (typeFilter === 'new' && isOld) return false;
-    if (typeFilter === 'old' && !isOld) return false;
-    
-    const q = search.toLowerCase();
-    return !q ||
-      r.title?.toLowerCase().includes(q) ||
-      r.lead?.name?.toLowerCase().includes(q) ||
-      r.lead?.phone?.includes(q) ||
-      r.assignedTo?.name?.toLowerCase().includes(q) ||
-      r.state?.toLowerCase().includes(q) ||
-      r.district?.toLowerCase().includes(q);
-  });
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  const indexOffset = (currentPage - 1) * itemsPerPage;
+  const paginatedRecords = records;
 
   return (
     <div className="flex gap-4 scroll-container-h overflow-hidden animate-slide-up mobile-p-safe">
@@ -191,13 +182,13 @@ export default function ReadyToShipment() {
         {/* Header & Filters (Fixed) */}
         <div className="flex items-center gap-3 shrink-0 glass px-4 py-3 rounded-2xl border border-white/50 shadow-sm">
           {[['all', 'All'], ['today', 'Today'], ['yesterday', 'Yesterday']].map(([val, label]) => (
-            <button key={val} onClick={() => { setDayFilter(val); setCustomDate(''); }}
+            <button key={val} onClick={() => { setDayFilter(val); setCustomDate(''); setCurrentPage(1); }}
               className={`px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition-all shrink-0 ${
                 dayFilter === val ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
               }`}>{label}</button>
           ))}
           <input type="date" value={customDate} max={new Date().toISOString().slice(0, 10)}
-            onChange={e => { setCustomDate(e.target.value); setDayFilter(e.target.value ? 'custom' : 'all'); }}
+            onChange={e => { setCustomDate(e.target.value); setDayFilter(e.target.value ? 'custom' : 'all'); setCurrentPage(1); }}
             className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer outline-none shrink-0 ${
               dayFilter === 'custom' ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-gray-400 border-gray-100'
             }`} />
@@ -205,12 +196,12 @@ export default function ReadyToShipment() {
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
             </svg>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, location..."
+            <input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="Search name, phone, location..."
               className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-100 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-300/50 focus:border-amber-400 transition shadow-sm" />
           </div>
           <select
             value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value)}
+            onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1); }}
             className="w-auto border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition shrink-0"
           >
             <option value="all">All Types</option>
@@ -220,7 +211,7 @@ export default function ReadyToShipment() {
           {canManage && (
             <select
               value={department}
-              onChange={e => setDepartment(e.target.value)}
+              onChange={e => { setDepartment(e.target.value); setCurrentPage(1); }}
               className="w-auto border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition shrink-0"
             >
               <option value="">All Depts</option>
@@ -243,105 +234,196 @@ export default function ReadyToShipment() {
           <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white text-xs font-bold shadow-sm shrink-0"
             style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
             <TruckIcon />
-            {records.length} pending
+            {totalItems} pending
           </div>
         </div>
 
         {/* List (Scrollable) */}
-        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center mb-3 text-amber-300">
-                <TruckIcon className="w-6 h-6" />
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
               </div>
-              <p className="text-gray-500 text-sm font-medium">No orders found</p>
-              <p className="text-gray-400 text-xs mt-1">{search ? 'Try a different search' : 'Nothing here yet'}</p>
-            </div>
-          ) : (
-            <div className="space-y-2 pb-4">
-              {filtered.map((r, i) => {
-                const color = PIN_COLORS[i % PIN_COLORS.length];
-                const isActive = selected?._id === r._id;
-                const dept = r.department || r.lead?.department || r.task?.department;
-                return (
-                  <div
-                    key={r._id}
-                    onClick={() => setSelected(isActive ? null : r)}
-                    className={`relative flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-4 py-4 sm:py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border
-                      ${isActive
-                        ? 'bg-amber-50 border-amber-200 shadow-sm'
-                        : 'bg-white border-gray-100 hover:border-amber-200 hover:bg-amber-50/30 hover:shadow-sm'}`}>
-
-                    {/* Left color strip */}
-                    <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${color}`} />
-
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {/* Avatar */}
-                      <div className={`w-10 h-10 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-white text-sm sm:text-xs font-bold shrink-0 ${color}`}>
-                        {initials(r.lead?.name || r.title)}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between sm:justify-start gap-2">
-                          <p className="text-sm font-bold text-gray-800 truncate">{r.title}</p>
-                          <span className="sm:hidden text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100">
-                            {i + 1}
-                          </span>
+            ) : records.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center mb-3 text-amber-300">
+                  <TruckIcon className="w-6 h-6" />
+                </div>
+                <p className="text-gray-500 text-sm font-medium">No orders found</p>
+                <p className="text-gray-400 text-xs mt-1">{search ? 'Try a different search' : 'Nothing here yet'}</p>
+              </div>
+            ) : (
+              <div className="space-y-2 pb-4">
+                {paginatedRecords.map((r, i) => {
+                  const color = PIN_COLORS[(i + indexOffset) % PIN_COLORS.length];
+                  const isActive = selected?._id === r._id;
+                  const dept = r.department || r.lead?.department || r.task?.department;
+                  return (
+                    <div
+                      key={r._id}
+                      onClick={() => setSelected(isActive ? null : r)}
+                      className={`relative flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-4 py-4 sm:py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border
+                        ${isActive
+                          ? 'bg-amber-50 border-amber-200 shadow-sm'
+                          : 'bg-white border-gray-100 hover:border-amber-200 hover:bg-amber-50/30 hover:shadow-sm'}`}>
+  
+                      {/* Left color strip */}
+                      <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${color}`} />
+  
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {/* Avatar */}
+                        <div className={`w-10 h-10 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-white text-sm sm:text-xs font-bold shrink-0 ${color}`}>
+                          {initials(r.lead?.name || r.title)}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {r.lead?.name && <span className="text-xs text-gray-500 font-medium">{r.lead.name}</span>}
-                          {r.lead?.phone && (
-                            <span className="text-xs text-gray-400 flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
-                              {r.lead.phone}
+  
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between sm:justify-start gap-2">
+                            <p className="text-sm font-bold text-gray-800 truncate">{r.title}</p>
+                            <span className="sm:hidden text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100">
+                              {i + 1 + indexOffset}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {r.lead?.name && <span className="text-xs text-gray-500 font-medium">{r.lead.name}</span>}
+                            {r.lead?.phone && (
+                              <span className="text-xs text-gray-400 flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+                                {r.lead.phone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+  
+                      {/* Desktop Status/Price */}
+                      <div className="flex items-center justify-between sm:flex-col sm:items-end gap-1 shrink-0 mt-1 sm:mt-0 pt-2 sm:pt-0 border-t border-gray-50 sm:border-0">
+                        <div className="flex items-center gap-2">
+                          {dept && (
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100 uppercase tracking-wide">
+                              {dept}
                             </span>
                           )}
+                          {r.price && (
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg">
+                              ₹{r.price}
+                            </span>
+                          )}
+                          {(r.lead?.status === 'old' || !!r.lead?.pending_reorder_source) ? (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg uppercase">
+                              Old
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg uppercase">
+                              New
+                            </span>
+                          )}
+                          <span className="sm:hidden text-[10px] font-bold text-gray-400">Order #{i + 1 + indexOffset}</span>
                         </div>
+                        
+                        {(r.district || r.state) && (
+                          <span className="text-[11px] text-gray-400 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" /><circle cx="12" cy="9" r="2.5" /></svg>
+                            <span className="truncate max-w-[120px]">{[r.district, r.state].filter(Boolean).join(', ')}</span>
+                          </span>
+                        )}
                       </div>
+  
+                      {/* Chevron (Desktop only) */}
+                      <svg className={`hidden sm:block w-4 h-4 text-gray-300 shrink-0 transition-transform duration-200 ${isActive ? 'rotate-90 text-amber-400' : ''}`}
+                        fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
                     </div>
-
-                    {/* Desktop Status/Price */}
-                    <div className="flex items-center justify-between sm:flex-col sm:items-end gap-1 shrink-0 mt-1 sm:mt-0 pt-2 sm:pt-0 border-t border-gray-50 sm:border-0">
-                      <div className="flex items-center gap-2">
-                        {dept && (
-                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100 uppercase tracking-wide">
-                            {dept}
-                          </span>
-                        )}
-                        {r.price && (
-                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg">
-                            ₹{r.price}
-                          </span>
-                        )}
-                        {(r.lead?.status === 'old' || !!r.lead?.pending_reorder_source) ? (
-                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg uppercase">
-                            Old
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg uppercase">
-                            New
-                          </span>
-                        )}
-                        <span className="sm:hidden text-[10px] font-bold text-gray-400">Order #{i + 1}</span>
-                      </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 bg-white shrink-0">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Showing Page <span className="font-bold text-gray-800">{currentPage}</span> of{' '}
+                    <span className="font-bold text-gray-800">{totalPages}</span> (<span className="font-bold text-gray-800">{totalItems}</span> total orders)
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md -space-x-px" aria-label="Pagination">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(1)}
+                      className="relative inline-flex items-center px-2 py-1.5 rounded-l-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      «
+                    </button>
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      ‹
+                    </button>
+                    
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum = currentPage - 2 + i;
+                      if (currentPage <= 2) pageNum = i + 1;
+                      if (currentPage >= totalPages - 1) pageNum = totalPages - 4 + i;
+                      pageNum = Math.max(1, Math.min(pageNum, totalPages));
                       
-                      {(r.district || r.state) && (
-                        <span className="text-[11px] text-gray-400 flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" /><circle cx="12" cy="9" r="2.5" /></svg>
-                          <span className="truncate max-w-[120px]">{[r.district, r.state].filter(Boolean).join(', ')}</span>
-                        </span>
-                      )}
-                    </div>
+                      if (pageNum < 1 || pageNum > totalPages) return null;
+                      const isPageActive = currentPage === pageNum;
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-bold transition
+                            ${isPageActive
+                              ? 'z-10 bg-amber-50 border-amber-500 text-amber-600'
+                              : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
 
-                    {/* Chevron (Desktop only) */}
-                    <svg className={`hidden sm:block w-4 h-4 text-gray-300 shrink-0 transition-transform duration-200 ${isActive ? 'rotate-90 text-amber-400' : ''}`}
-                      fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="m9 18 6-6-6-6" />
-                    </svg>
-                  </div>
-                );
-              })}
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      ›
+                    </button>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="relative inline-flex items-center px-2 py-1.5 rounded-r-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      »
+                    </button>
+                  </nav>
+                </div>
+              </div>
             </div>
           )}
         </div>

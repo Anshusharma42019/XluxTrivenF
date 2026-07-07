@@ -56,6 +56,10 @@ export default function CNP() {
   const [callAgainLeads, setCallAgainLeads] = useState([]);
   const [cnpTasks, setCnpTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   const [updating, setUpdating] = useState(null);
   const _initPhone = new URLSearchParams(window.location.search).get('phone') || '';
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'tasks');
@@ -203,14 +207,10 @@ export default function CNP() {
 
   const load = useCallback(async (cnpFilter = '', caFilter = '', deptFilter = '') => {
     try {
-      const [cnpRes, allRes, tasksRes, callAgainRes] = await Promise.all([
-        getLeads({ cnp: "true", limit: 200, department: deptFilter || undefined }),
-        getLeads({ limit: 200, department: deptFilter || undefined }),
+      const [tasksRes, callAgainRes] = await Promise.all([
         getCnpRecords({ filter: cnpFilter || undefined, department: deptFilter || undefined }),
         getCallAgains({ filter: caFilter || undefined, department: deptFilter || undefined }),
       ]);
-      setLeads(Array.isArray(cnpRes?.leads) ? cnpRes.leads : []);
-      setAllLeads(Array.isArray(allRes?.leads) ? allRes.leads : []);
       setCnpTasks(Array.isArray(tasksRes) ? tasksRes.filter(t => t.lead?.status !== 'closed_lost') : []);
       setCallAgainLeads(Array.isArray(callAgainRes) ? callAgainRes : []);
     } catch {
@@ -269,6 +269,16 @@ export default function CNP() {
       );
     });
   }, [tab, cnpTasks, callAgainLeads, search]);
+
+  const totalItems = filteredItems.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const indexOffset = (currentPage - 1) * itemsPerPage;
+  const paginatedItems = filteredItems.slice(indexOffset, currentPage * itemsPerPage);
+
+  // Reset page when search or tab filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tab, search, dateFilter, callAgainDateFilter, department]);
 
   if (loading)
     return (
@@ -346,65 +356,152 @@ export default function CNP() {
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-          {filteredItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${tab === 'tasks' ? 'bg-red-50 text-red-300' : 'bg-amber-50 text-amber-300'}`}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" /><line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {filteredItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${tab === 'tasks' ? 'bg-red-50 text-red-300' : 'bg-amber-50 text-amber-300'}`}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" /><line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </div>
+                <p className="text-gray-500 text-sm font-medium">No {tab === 'tasks' ? 'CNP tasks' : 'call-again leads'} found</p>
               </div>
-              <p className="text-gray-500 text-sm font-medium">No {tab === 'tasks' ? 'CNP tasks' : 'call-again leads'} found</p>
-            </div>
-          ) : (
-            <div className="space-y-2 pb-4">
-              {filteredItems.map((item, i) => {
-                const color = PIN_COLORS[i % PIN_COLORS.length];
-                const isActive = selected?._id === item._id;
-                const lead = item.lead || {};
-                return (
-                  <div key={item._id} onClick={() => setSelected(isActive ? null : item)}
-                    className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border
-                      ${isActive
-                        ? (tab === 'tasks' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200') + ' shadow-sm'
-                        : 'bg-white border-gray-100 hover:border-red-200 hover:bg-red-50/30'}`}>
-                    
-                    <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${tab === 'tasks' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                    
-                    <span className="text-[11px] font-bold text-gray-400 w-5 text-center shrink-0">{i + 1}</span>
-
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${color}`}>
-                      {initials(lead.name || item.title)}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{lead.name || item.title}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-gray-400">{lead.phone || 'No Phone'}</span>
-                        {tab === 'tasks' && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${item.cnpCount >= 3 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                            {item.cnpCount || 1}/3
-                          </span>
-                        )}
-                        {(lead.department || item.department) && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{lead.department || item.department}</span>}
+            ) : (
+              <div className="space-y-2 pb-4">
+                {paginatedItems.map((item, i) => {
+                  const color = PIN_COLORS[(i + indexOffset) % PIN_COLORS.length];
+                  const isActive = selected?._id === item._id;
+                  const lead = item.lead || {};
+                  return (
+                    <div key={item._id} onClick={() => setSelected(isActive ? null : item)}
+                      className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border
+                        ${isActive
+                          ? (tab === 'tasks' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200') + ' shadow-sm'
+                          : 'bg-white border-gray-100 hover:border-red-200 hover:bg-red-50/30'}`}>
+                      
+                      <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${tab === 'tasks' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                      
+                      <span className="text-[11px] font-bold text-gray-400 w-5 text-center shrink-0">{i + 1 + indexOffset}</span>
+  
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${color}`}>
+                        {initials(lead.name || item.title)}
                       </div>
+  
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{lead.name || item.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-400">{lead.phone || 'No Phone'}</span>
+                          {tab === 'tasks' && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${item.cnpCount >= 3 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                              {item.cnpCount || 1}/3
+                            </span>
+                          )}
+                          {(lead.department || item.department) && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{lead.department || item.department}</span>}
+                        </div>
+                      </div>
+  
+                      <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                          {new Date(item.lastCnpAt || item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </span>
+                        {item.assignedTo?.name && (
+                          <span className="text-[10px] text-gray-400">By {item.assignedTo.name}</span>
+                        )}
+                      </div>
+  
+                      <svg className={`w-4 h-4 text-gray-300 transition-transform ${isActive ? 'rotate-90 text-red-400' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 bg-white shrink-0">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  className={`relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition`}
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition`}
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Showing Page <span className="font-bold text-gray-800">{currentPage}</span> of{' '}
+                    <span className="font-bold text-gray-800">{totalPages}</span> (<span className="font-bold text-gray-800">{totalItems}</span> total records)
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md -space-x-px" aria-label="Pagination">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(1)}
+                      className="relative inline-flex items-center px-2 py-1.5 rounded-l-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      «
+                    </button>
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      ‹
+                    </button>
+                    
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum = currentPage - 2 + i;
+                      if (currentPage <= 2) pageNum = i + 1;
+                      if (currentPage >= totalPages - 1) pageNum = totalPages - 4 + i;
+                      pageNum = Math.max(1, Math.min(pageNum, totalPages));
+                      
+                      if (pageNum < 1 || pageNum > totalPages) return null;
+                      const isPageActive = currentPage === pageNum;
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-bold transition
+                            ${isPageActive
+                              ? `z-10 ${tab === 'tasks' ? 'bg-red-50 border-red-500 text-red-600' : 'bg-amber-50 border-amber-500 text-amber-600'}`
+                              : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
 
-                    <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                        {new Date(item.lastCnpAt || item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                      </span>
-                      {item.assignedTo?.name && (
-                        <span className="text-[10px] text-gray-400">By {item.assignedTo.name}</span>
-                      )}
-                    </div>
-
-                    <svg className={`w-4 h-4 text-gray-300 transition-transform ${isActive ? 'rotate-90 text-red-400' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="m9 18 6-6-6-6" />
-                    </svg>
-                  </div>
-                );
-              })}
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      ›
+                    </button>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="relative inline-flex items-center px-2 py-1.5 rounded-r-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                    >
+                      »
+                    </button>
+                  </nav>
+                </div>
+              </div>
             </div>
           )}
         </div>

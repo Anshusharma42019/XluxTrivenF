@@ -140,13 +140,20 @@ export default function StaffDashboard() {
       ]);
       
       if (s.status === 'fulfilled' || staffS.status === 'fulfilled') {
-        setStats({
+        const newStats = {
           ...(s.status === 'fulfilled' ? s.value : {}),
           ...(staffS.status === 'fulfilled' ? staffS.value : {})
-        });
+        };
+        setStats(newStats);
       }
-      if (lists?.status === 'fulfilled') setTodayLists(lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [], verificationList: [] });
-      if (chart.status === 'fulfilled') setMonthlyChart(Array.isArray(chart.value) ? chart.value : []);
+      if (lists?.status === 'fulfilled') {
+        const val = lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [], verificationList: [] };
+        setTodayLists(val);
+      }
+      if (chart.status === 'fulfilled') {
+        const val = Array.isArray(chart.value) ? chart.value : [];
+        setMonthlyChart(val);
+      }
       if (att.status === 'fulfilled') setAttStatus(att.value);
     } catch { /* ignore */ }
     finally { if (!silent) setLoading(false); }

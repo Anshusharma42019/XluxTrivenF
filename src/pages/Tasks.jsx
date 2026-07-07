@@ -82,11 +82,21 @@ export default function Tasks() {
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
   const [whatsappLeadId, setWhatsappLeadId] = useState(null);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const pendingOpenId = searchParams.get('openId');
   const canManage = user?.role === 'admin' || user?.role === 'manager';
+
+  // Reset pagination on tab/filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tab, filters]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) {
@@ -98,19 +108,24 @@ export default function Tasks() {
       if (filters.status) params.status = filters.status;
       if (filters.type) params.type = filters.type;
       if (filters.department) params.department = filters.department;
+      
       const yestDate = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const [all, day, yestData] = await Promise.all([
-        getTasks(params), 
+      const [allRes, day, yestData] = await Promise.all([
+        getTasks({ ...params, page: currentPage, limit: 20 }), 
         getDailyTasks(params),
-        getTasks({ ...params, date: yestDate })
+        getTasks({ ...params, date: yestDate, limit: 100 })
       ]);
-      setTasks(Array.isArray(all) ? all : []);
+      
+      setTasks(allRes && Array.isArray(allRes.tasks) ? allRes.tasks : []);
+      setTotalTasks(allRes?.total || 0);
+      setTotalPages(allRes?.totalPages || 1);
+      
       setDaily(Array.isArray(day) ? day : []);
-      setYesterdayTasks(Array.isArray(yestData) ? yestData : []);
+      setYesterdayTasks(yestData && Array.isArray(yestData.tasks) ? yestData.tasks : []);
     } catch (err) {
       if (!silent) setLoadError(err.response?.data?.message || err.message || 'Failed to load tasks');
     } finally { if (!silent) setPageLoading(false); }
-  }, [filters]);
+  }, [filters, currentPage]);
 
   useAutoRefresh(load, 15000);
 
@@ -482,6 +497,91 @@ export default function Tasks() {
               </div>
             )}
         </div>
+        
+        {tab === 'all' && totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 bg-white shrink-0">
+            <div className="flex-1 flex justify-between sm:hidden">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                className="relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+              >
+                Previous
+              </button>
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-200 text-xs font-bold rounded-xl text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+              >
+                Next
+              </button>
+            </div>
+            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs text-gray-500 font-medium">
+                  Showing Page <span className="font-bold text-gray-800">{currentPage}</span> of{' '}
+                  <span className="font-bold text-gray-800">{totalPages}</span> (<span className="font-bold text-gray-800">{totalTasks}</span> total tasks)
+                </p>
+              </div>
+              <div>
+                <nav className="relative z-0 inline-flex rounded-md -space-x-px" aria-label="Pagination">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(1)}
+                    className="relative inline-flex items-center px-2 py-1.5 rounded-l-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                  >
+                    «
+                  </button>
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                  >
+                    ‹
+                  </button>
+                  
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum = currentPage - 2 + i;
+                    if (currentPage <= 2) pageNum = i + 1;
+                    if (currentPage >= totalPages - 1) pageNum = totalPages - 4 + i;
+                    pageNum = Math.max(1, Math.min(pageNum, totalPages));
+                    
+                    if (pageNum < 1 || pageNum > totalPages) return null;
+                    const isPageActive = currentPage === pageNum;
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-bold transition
+                          ${isPageActive
+                            ? 'z-10 bg-emerald-50 border-emerald-500 text-emerald-600'
+                            : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    className="relative inline-flex items-center px-3 py-1.5 border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                  >
+                    ›
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="relative inline-flex items-center px-2 py-1.5 rounded-r-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition"
+                  >
+                    »
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── RIGHT DETAIL PANEL ── */}
