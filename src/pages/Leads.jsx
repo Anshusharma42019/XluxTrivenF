@@ -99,7 +99,7 @@ export default function Leads() {
     } finally { if (!silent) setPageLoading(false); }
   }, [filters]);
 
-  useAutoRefresh(load, 15000);
+  useAutoRefresh(load);
 
   useEffect(() => { load(); }, [load]);
 

@@ -110,24 +110,25 @@ export default function Tasks() {
       if (filters.department) params.department = filters.department;
       
       const yestDate = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const [allRes, day, yestData] = await Promise.all([
-        getTasks({ ...params, page: currentPage, limit: 20 }), 
-        getDailyTasks(params),
-        getTasks({ ...params, date: yestDate, limit: 100 })
-      ]);
       
-      setTasks(allRes && Array.isArray(allRes.tasks) ? allRes.tasks : []);
-      setTotalTasks(allRes?.total || 0);
-      setTotalPages(allRes?.totalPages || 1);
-      
-      setDaily(Array.isArray(day) ? day : []);
-      setYesterdayTasks(yestData && Array.isArray(yestData.tasks) ? yestData.tasks : []);
+      if (tab === 'daily') {
+        const day = await getDailyTasks(params);
+        setDaily(Array.isArray(day) ? day : []);
+      } else if (tab === 'yesterday') {
+        const yestData = await getTasks({ ...params, date: yestDate, limit: 100 });
+        setYesterdayTasks(yestData && Array.isArray(yestData.tasks) ? yestData.tasks : []);
+      } else {
+        const allRes = await getTasks({ ...params, page: currentPage, limit: 20 });
+        setTasks(allRes && Array.isArray(allRes.tasks) ? allRes.tasks : []);
+        setTotalTasks(allRes?.total || 0);
+        setTotalPages(allRes?.totalPages || 1);
+      }
     } catch (err) {
       if (!silent) setLoadError(err.response?.data?.message || err.message || 'Failed to load tasks');
     } finally { if (!silent) setPageLoading(false); }
-  }, [filters, currentPage]);
+  }, [filters, currentPage, tab]);
 
-  useAutoRefresh(load, 15000);
+  useAutoRefresh(load);
 
   useEffect(() => { load(); }, [load]);
 

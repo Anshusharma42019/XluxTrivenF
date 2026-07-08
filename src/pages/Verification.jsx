@@ -374,7 +374,6 @@ export default function Verification() {
         setRecords(prev => prev.filter(r => r._id !== selected._id));
         setSelected(null);
         if (status === 'on_hold') {
-          await API.post('/verification/repair').catch(() => { });
           await loadOnHold();
         }
       } else if (status === 'pending') {

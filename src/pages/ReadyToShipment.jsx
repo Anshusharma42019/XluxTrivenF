@@ -97,7 +97,7 @@ export default function ReadyToShipment() {
     finally { if (!silent) setLoading(false); }
   }, [department, currentPage, dayFilter, customDate, typeFilter, search]);
 
-  useAutoRefresh(load, 15000);
+  useAutoRefresh(load);
 
   const loadStats = useCallback(async (filterState = null, filterPincode = null) => {
     setStatsLoading(true);

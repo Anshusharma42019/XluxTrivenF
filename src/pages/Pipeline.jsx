@@ -76,8 +76,6 @@ export default function Pipeline() {
       setError('');
     }
     try {
-      API.post('/verification/repair').catch(() => {});
-
       const query = { limit: 500 };
       if (department) query.department = department;
 
@@ -100,7 +98,7 @@ export default function Pipeline() {
     } finally { if (!silent) setLoading(false); }
   }, [department]);
 
-  useAutoRefresh(load, 15000);
+  useAutoRefresh(load);
 
   useEffect(() => { load(); }, [load]);
 

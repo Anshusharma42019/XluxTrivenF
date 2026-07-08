@@ -4,10 +4,10 @@ import { useEffect } from 'react';
  * A custom hook to automatically poll a fetch function silently in the background.
  * 
  * @param {Function} callback - The fetch function to run. It should accept a boolean `silent` parameter (e.g. `(silent) => { ... }`).
- * @param {number} intervalMs - Polling interval in milliseconds (default 15000).
+ * @param {number} intervalMs - Polling interval in milliseconds (default 60000).
  * @param {Array} dependencies - React dependencies array to trigger re-binding of the interval.
  */
-export function useAutoRefresh(callback, intervalMs = 15000, dependencies = []) {
+export function useAutoRefresh(callback, intervalMs = 60000, dependencies = []) {
   useEffect(() => {
     if (typeof callback !== 'function') return;
 
