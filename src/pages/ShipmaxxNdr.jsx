@@ -299,7 +299,7 @@ function NdrList({ onActionItem }) {
     fetchNdrs(statusFilter); 
     const interval = setInterval(() => {
       fetchNdrs(statusFilter, true);
-    }, 15000); // Auto-refresh every 15 seconds
+    }, 300000); // Auto-refresh every 5 minutes
     return () => clearInterval(interval);
   }, [statusFilter, fetchNdrs]);
 
