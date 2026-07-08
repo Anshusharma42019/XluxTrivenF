@@ -436,7 +436,7 @@ export default function ReadyToShipment() {
           <div className="h-1.5 shrink-0" style={{ background: 'linear-gradient(90deg,#f59e0b,#d97706,#f59e0b)' }} />
           <div className="px-5 py-4 flex items-center justify-between border-b border-gray-50 shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold ${PIN_COLORS[filtered.findIndex(r => r._id === selected._id) % PIN_COLORS.length]}`}>
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold ${PIN_COLORS[records.findIndex(r => r._id === selected._id) % PIN_COLORS.length]}`}>
                 {initials(selected.lead?.name || selected.title)}
               </div>
               <div>
@@ -517,7 +517,7 @@ export default function ReadyToShipment() {
                 ×
               </button>
               <div className="flex items-center gap-4 pr-8">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-xl ${PIN_COLORS[filtered.findIndex(r => r._id === selected._id) % PIN_COLORS.length]}`}>
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-xl ${PIN_COLORS[records.findIndex(r => r._id === selected._id) % PIN_COLORS.length]}`}>
                   {initials(selected.lead?.name || selected.title)}
                 </div>
                 <div className="flex-1 min-w-0">

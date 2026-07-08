@@ -62,6 +62,7 @@ export default function Pipeline() {
   const [leadTask, setLeadTask] = useState(null);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   
   const canManage = user?.role === 'admin' || user?.role === 'manager';
   // Follow-up state
@@ -130,6 +131,17 @@ export default function Pipeline() {
       );
     });
   }, [filter, interestedLeads, onHoldLeads, closedLostLeads, cnpLeads, callAgainLeads, search]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, search, department]);
+
+  const itemsPerPage = 20;
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const paginatedItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredItems.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredItems, currentPage]);
 
   const handleMove = async (lead, newStage) => {
     setUpdating(lead._id);
@@ -344,7 +356,7 @@ export default function Pipeline() {
                 <p className="text-gray-400 text-sm font-medium">No leads found in this stage</p>
               </div>
             ) : (
-              filteredItems.map((item, i) => {
+              paginatedItems.map((item, i) => {
                 const lead = item.lead || item;
                 const isActive = selected?._id === item._id;
                 const color = PIN_COLORS[i % PIN_COLORS.length];
@@ -403,7 +415,7 @@ export default function Pipeline() {
                     
                     <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${barColor}`} />
                     
-                    <span className="text-[11px] font-bold text-gray-400 w-5 text-center shrink-0">{i + 1}</span>
+                    <span className="text-[11px] font-bold text-gray-400 w-5 text-center shrink-0">{(currentPage - 1) * itemsPerPage + i + 1}</span>
 
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${color}`}>
                       {initials(lead.name || item.title)}
@@ -432,6 +444,34 @@ export default function Pipeline() {
                   </div>
                 );
               }))}
+
+            {totalPages > 1 && filter !== 'follow_up' && (
+              <div className="flex items-center justify-between px-4 py-3 bg-white border border-gray-100 rounded-2xl mt-4 shadow-sm">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => {
+                    setCurrentPage(p => Math.max(1, p - 1));
+                    document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-50 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition"
+                >
+                  Previous
+                </button>
+                <span className="text-xs font-medium text-gray-500">
+                  Page <span className="font-bold text-gray-800">{currentPage}</span> of {totalPages}
+                </span>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => {
+                    setCurrentPage(p => Math.min(totalPages, p + 1));
+                    document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-50 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

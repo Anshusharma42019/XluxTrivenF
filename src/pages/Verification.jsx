@@ -702,28 +702,31 @@ export default function Verification() {
                       ‹
                     </button>
                     
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum = currentPage - 2 + i;
-                      if (currentPage <= 2) pageNum = i + 1;
-                      if (currentPage >= totalPages - 1) pageNum = totalPages - 4 + i;
-                      pageNum = Math.max(1, Math.min(pageNum, totalPages));
+                    {(() => {
+                      let startPage = Math.max(1, currentPage - 2);
+                      let endPage = Math.min(totalPages, startPage + 4);
+                      if (endPage - startPage < 4) {
+                        startPage = Math.max(1, endPage - 4);
+                      }
                       
-                      if (pageNum < 1 || pageNum > totalPages) return null;
-                      const isPageActive = currentPage === pageNum;
+                      const pages = [];
+                      for (let p = startPage; p <= endPage; p++) {
+                        pages.push(p);
+                      }
                       
-                      return (
+                      return pages.map(pageNum => (
                         <button
                           key={pageNum}
                           onClick={() => setCurrentPage(pageNum)}
                           className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-bold transition
-                            ${isPageActive
+                            ${currentPage === pageNum
                               ? 'z-10 bg-green-50 border-green-500 text-green-600'
                               : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
                         >
                           {pageNum}
                         </button>
-                      );
-                    })}
+                      ));
+                    })()}
 
                     <button
                       disabled={currentPage === totalPages}
