@@ -159,7 +159,7 @@ export default function Dashboard() {
     }
   }, [datePreset, filterFrom, filterTo, department, user?.role, user?._id]);
 
-  useAutoRefresh(load, 120000);
+  useAutoRefresh(load, 300000); // refresh every 5 minutes — reduces server load significantly
 
   useEffect(() => {
     load();

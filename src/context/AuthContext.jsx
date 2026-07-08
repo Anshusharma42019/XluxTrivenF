@@ -16,6 +16,12 @@ export const AuthProvider = ({ children }) => {
         }
       }).catch(() => {});
     }
+
+    // Keep server warm — ping every 4 minutes to prevent cold starts on Vercel/serverless
+    const warmup = setInterval(() => {
+      fetch(`${import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'https://xluxtriven.de'}/ping`).catch(() => {});
+    }, 4 * 60 * 1000);
+    return () => clearInterval(warmup);
   }, []);
 
   const login = useCallback(async (form) => {
