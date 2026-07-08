@@ -135,28 +135,19 @@ export default function CNP() {
       const leadId = selected?.lead?._id;
       if (!leadId) throw new Error('No lead ID found');
       
-      console.log('Sending edit data:', editForm);
-      
-      // Save to database first
       const updated = await updateLead(leadId, editForm);
-      console.log('Server response:', updated);
       
-      // Merge all data: original + form + server response
       const updatedLeadData = { 
         ...selected.lead, 
         ...editForm, 
         ...(updated || {})
       };
       
-      console.log('Final merged data:', updatedLeadData);
-      
-      // Update the selected item with new data immediately
       setSelected(prev => ({ 
         ...prev, 
         lead: updatedLeadData
       }));
       
-      // Update the lists as well
       setCnpTasks(prev => prev.map(task => 
         task._id === selected._id 
           ? { ...task, lead: updatedLeadData }
@@ -172,7 +163,6 @@ export default function CNP() {
       setEditModal(false);
       
     } catch (err) { 
-      console.error('Failed to update lead:', err);
       setEditError(err.response?.data?.message || 'Failed to update lead permanently'); 
     }
     finally { 
@@ -462,28 +452,25 @@ export default function CNP() {
                       ‹
                     </button>
                     
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum = currentPage - 2 + i;
-                      if (currentPage <= 2) pageNum = i + 1;
-                      if (currentPage >= totalPages - 1) pageNum = totalPages - 4 + i;
-                      pageNum = Math.max(1, Math.min(pageNum, totalPages));
-                      
-                      if (pageNum < 1 || pageNum > totalPages) return null;
-                      const isPageActive = currentPage === pageNum;
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                          className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-bold transition
-                            ${isPageActive
-                              ? `z-10 ${tab === 'tasks' ? 'bg-red-50 border-red-500 text-red-600' : 'bg-amber-50 border-amber-500 text-amber-600'}`
-                              : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
+                    {(() => {
+                      const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+                      const end = Math.min(totalPages, start + 4);
+                      return Array.from({ length: end - start + 1 }, (_, i) => start + i).map(pageNum => {
+                        const isPageActive = currentPage === pageNum;
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-bold transition
+                              ${isPageActive
+                                ? `z-10 ${tab === 'tasks' ? 'bg-red-50 border-red-500 text-red-600' : 'bg-amber-50 border-amber-500 text-amber-600'}`
+                                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      });
+                    })()}
 
                     <button
                       disabled={currentPage === totalPages}

@@ -5,9 +5,6 @@ API.interceptors.request.use((config) => {
   const tokens = JSON.parse(localStorage.getItem('crmTokens') || 'null');
   if (tokens?.access?.token) {
     config.headers.Authorization = `Bearer ${tokens.access.token}`;
-    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url} - Token attached`);
-  } else {
-    console.warn(`[API Request] ${config.method?.toUpperCase()} ${config.url} - No token found`);
   }
   return config;
 });
@@ -30,7 +27,6 @@ API.interceptors.response.use(
     const original = error.config;
     
     if (error.response?.status === 401 && !original._retry) {
-      console.warn(`[API Response] 401 Unauthorized for ${original.url}. Attempting token refresh...`);
       
       if (isRefreshing) {
         return new Promise((resolve) => {
@@ -54,7 +50,6 @@ API.interceptors.response.use(
           refreshToken: tokens.refresh.token,
         });
 
-        console.log('[API Refresh] Token refreshed successfully');
         const newTokens = data.data;
         localStorage.setItem('crmTokens', JSON.stringify(newTokens));
         
@@ -64,7 +59,6 @@ API.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newTokens.access.token}`;
         return API(original);
       } catch (refreshError) {
-        console.error('[API Refresh] Token refresh failed:', refreshError.message);
         isRefreshing = false;
         
         const status = refreshError.response?.status;

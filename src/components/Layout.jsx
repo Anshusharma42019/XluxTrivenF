@@ -286,11 +286,8 @@ export default function Layout() {
           setUnreadCount(res.unreadCount || 0);
           if (res.notifications && res.notifications.length > 0) {
             const latest = res.notifications[0];
-            console.log('Polled Notification:', latest._id, 'Last:', lastNotifRef.current, 'Type:', latest.type);
             if (lastNotifRef.current && lastNotifRef.current !== latest._id) {
-              console.log('NEW NOTIFICATION DETECTED!', latest);
               if (latest.type === 'task' || latest.type === 'lead_assigned') {
-                console.log('TRIGGERING TOAST AND BEEP!');
                 toastSuccess(latest.message || 'New Lead or Task Assigned!', '🔔 NEW ALERT');
                 try {
                   const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -307,9 +304,7 @@ export default function Layout() {
                     gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
                     osc.stop(ctx.currentTime + 0.5);
                   }
-                } catch(e){
-                  console.error('Audio beep error:', e);
-                }
+                } catch(e){}
               } else {
                 toastInfo(latest.message || 'You have a new notification', latest.title || 'Notification');
               }
