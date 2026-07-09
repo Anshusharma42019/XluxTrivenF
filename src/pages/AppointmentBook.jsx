@@ -13,7 +13,7 @@ const EMPTY = {
   status: 'scheduled', notes: '', patientType: 'new',
   problem: '', address: '', houseNo: '', cityVillage: '',
   postOffice: '', landmark: '', district: '', state: '', pincode: '',
-  medicineDeliveryDate: '',
+  medicineDeliveryDate: '', department: ''
 };
 
 const inputCls = 'w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition';
@@ -42,7 +42,7 @@ const DetailRow = ({ label, value }) =>
     </div>
   ) : null;
 
-function FormFields({ form, sf, error, loading, onSubmit, submitLabel, selected, canManage, onDelete, onPhoneChange, phoneSearching, doctors = [], bookedDoctors = [] }) {
+function FormFields({ form, sf, error, loading, onSubmit, submitLabel, selected, canManage, onDelete, onPhoneChange, phoneSearching, doctors = [], bookedDoctors = [], user }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && (
@@ -88,10 +88,19 @@ function FormFields({ form, sf, error, loading, onSubmit, submitLabel, selected,
         </div>
       </div>
       <div>
+        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department</label>
+        <select className={`${inputCls} mt-1`} value={form.department} onChange={e => { sf('department', e.target.value); sf('doctorName', ''); }}>
+          <option value="">Select Department</option>
+          {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? ['migraine', 'piles'] : user.departments).map(d => (
+            <option key={d} value={d}>{d.toUpperCase()}</option>
+          ))}
+        </select>
+      </div>
+      <div>
         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Doctor Name *</label>
         <select required className={`${inputCls} mt-1`} value={form.doctorName} onChange={e => sf('doctorName', e.target.value)}>
           <option value="">Select Doctor</option>
-          {doctors.map(d => {
+          {doctors.filter(d => !form.department || !d.departments?.length || d.departments.includes(form.department)).map(d => {
             const isBooked = bookedDoctors.includes(d.name);
             return (
               <option key={d._id} value={d.name} disabled={isBooked}>
@@ -178,7 +187,7 @@ export default function AppointmentBook() {
 
   const [data, setData] = useState({ appointments: [], total: 0, totalPages: 1 });
   const today = new Date().toISOString().split('T')[0];
-  const [filters, setFilters] = useState({ search: '', dateFrom: today, dateTo: today, status: '', page: 1 });
+  const [filters, setFilters] = useState({ search: '', dateFrom: today, dateTo: today, status: '', page: 1, department: '' });
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'completed' | 'cancelled' | 'no_show'
   const [loadError, setLoadError] = useState('');
   const [rightPanel, setRightPanel] = useState(null); // { mode: 'view'|'edit', appt }
@@ -207,6 +216,7 @@ export default function AppointmentBook() {
       if (filters.search) params.search = filters.search;
       if (filters.dateFrom) params.dateFrom = filters.dateFrom;
       if (filters.dateTo) params.dateTo = filters.dateTo;
+      if (filters.department) params.department = filters.department;
       if (user?.role === 'doctor' && activeTab === 'all') params.doctorName = user.name;
       if (activeTab === 'completed') params.status = 'completed';
       else if (activeTab === 'cancelled') params.status = 'cancelled';
@@ -227,13 +237,37 @@ export default function AppointmentBook() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    if (canManage) getUsers({ role: 'sales' }).then(r => setSalesUsers(r.results || [])).catch(() => {});
+  }, [canManage]);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pendingOpenId = searchParams.get('openId');
+
+  useEffect(() => {
+    if (pendingOpenId) {
+      API.get(`/appointments/${pendingOpenId}`).then(res => {
+        const matching = res.data?.data;
+        if (matching) {
+          setSelected(matching);
+          const { createdBy, ...rest } = matching;
+          setForm({ ...EMPTY, ...rest });
+          setSearchParams({}, { replace: true });
+        }
+      }).catch(() => {});
+    }
+  }, [pendingOpenId, setSearchParams]);
+
+  useEffect(() => {
     getUsers({ role: 'doctor' })
       .then(r => {
         const list = r?.results || r?.users || (Array.isArray(r) ? r : []);
-        setDoctors(list);
+        const filteredDoctors = (user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length)
+          ? list
+          : list.filter(d => !d.departments?.length || d.departments.some(dept => user.departments.includes(dept)));
+        setDoctors(filteredDoctors);
       })
       .catch(() => {});
-  }, []);
+  }, [user]);
 
   const sf = (k, v) => {
     setForm(f => ({ ...f, [k]: v }));
@@ -357,7 +391,7 @@ export default function AppointmentBook() {
     setFilters(prev => ({ ...prev, dateFrom: from, dateTo: to, page: 1 }));
   };
 
-  const sharedFormProps = { form, sf, error, loading, selected: rightPanel?.appt, canManage, onDelete: handleDelete, doctors, bookedDoctors };
+  const sharedFormProps = { form, sf, error, loading, selected: rightPanel?.appt, canManage, onDelete: handleDelete, doctors, bookedDoctors, user };
 
   if (pageLoading) return (
     <div className="flex items-center justify-center h-64">
@@ -437,6 +471,13 @@ export default function AppointmentBook() {
             </button>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
+            {canManage && (
+              <select value={filters.department} onChange={e => setFilters(f => ({ ...f, department: e.target.value, page: 1 }))}
+                className="border border-gray-100 rounded-xl px-4 py-2 text-xs bg-white font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm min-w-[120px]">
+                <option value="">All Departments</option>
+                {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? ['migraine', 'piles'] : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+              </select>
+            )}
             <span className="text-xs text-gray-400 font-medium ml-auto">
               {data.total} appointment{data.total !== 1 ? 's' : ''}
             </span>
@@ -553,6 +594,7 @@ export default function AppointmentBook() {
             <div className="px-6 py-5 overflow-y-auto flex-1 custom-scrollbar">
               <div className="space-y-0">
                 <DetailRow label="Doctor" value={`Dr. ${rightPanel.appt.doctorName}`} />
+                <DetailRow label="Department" value={rightPanel.appt.department?.toUpperCase()} />
                 <DetailRow label="Patient Type" value={rightPanel.appt.patientType} />
                 <DetailRow label="Date" value={fmt(rightPanel.appt.appointmentDate)} />
                 <DetailRow label="Time" value={rightPanel.appt.timeSlot} />
@@ -671,6 +713,7 @@ export default function AppointmentBook() {
             <Modal title="Appointment Detail" onClose={() => setRightPanel(null)}>
               <div className="space-y-0 mb-4">
                 <DetailRow label="Doctor" value={`Dr. ${rightPanel.appt.doctorName}`} />
+                <DetailRow label="Department" value={rightPanel.appt.department?.toUpperCase()} />
                 <DetailRow label="Patient Type" value={rightPanel.appt.patientType} />
                 <DetailRow label="Date" value={fmt(rightPanel.appt.appointmentDate)} />
                 <DetailRow label="Time" value={rightPanel.appt.timeSlot} />

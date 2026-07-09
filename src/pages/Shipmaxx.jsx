@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import * as smxSvc from '../services/shipmaxx.service';
 import api from '../api';
@@ -326,6 +326,8 @@ function OrdersSection() {
   const [detailTracking, setDetailTracking] = useState(null);
   const [detailTrackLoading, setDetailTrackLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pendingOpenId = searchParams.get('openId');
 
   const fetchOrders = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(''); }
@@ -411,6 +413,41 @@ function OrdersSection() {
   };
 
   useEffect(() => { fetchOrders(); }, [page, status]);
+
+  useEffect(() => {
+    if (pendingOpenId && orders.length > 0) {
+      const order = orders.find(o => String(o._id) === pendingOpenId || String(o.order_id) === pendingOpenId);
+      if (order) {
+        handleViewDetails(order);
+        setSearchParams({}, { replace: true });
+      } else {
+        // Fetch specific order if not in list
+        api.get(`/shipmaxx/orders/search-by-phone?phone=${pendingOpenId}`).then(res => {
+           if (res.data && res.data.length > 0) {
+              const matched = res.data.find(o => String(o._id) === pendingOpenId || String(o.order_id) === pendingOpenId);
+              if (matched) {
+                 handleViewDetails(matched);
+                 setSearchParams({}, { replace: true });
+              }
+           } else {
+              api.get(`/shipmaxx/orders/${pendingOpenId}`).then(res2 => {
+                 if (res2.data) {
+                    handleViewDetails(res2.data);
+                    setSearchParams({}, { replace: true });
+                 }
+              }).catch(() => {});
+           }
+        }).catch(() => {
+           api.get(`/shipmaxx/orders/${pendingOpenId}`).then(res2 => {
+              if (res2.data) {
+                 handleViewDetails(res2.data);
+                 setSearchParams({}, { replace: true });
+              }
+           }).catch(() => {});
+        });
+      }
+    }
+  }, [pendingOpenId, orders, setSearchParams]);
 
   const handleViewDetails = async (order) => {
     setDetailOrder(order);
@@ -841,7 +878,8 @@ function ImportSection() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Shipmaxx() {
-  const [section, setSection] = useState('actions');
+  const [searchParams] = useSearchParams();
+  const [section, setSection] = useState(() => searchParams.get('openId') ? 'orders' : 'actions');
   const [step, setStep] = useState(0);
   const [token, setToken] = useState(() => getSavedToken());
   const [loading, setLoading] = useState(false);

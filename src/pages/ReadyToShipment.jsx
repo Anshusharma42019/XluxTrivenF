@@ -42,7 +42,7 @@ const SectionHead = ({ label }) => (
 export default function ReadyToShipment() {
   const { user } = useAuth();
   const canManage = user?.role === 'admin' || user?.role === 'manager';
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [records, setRecords] = useState([]);
   
   // Pagination states
@@ -66,6 +66,19 @@ export default function ReadyToShipment() {
     }, 350);
     return () => clearTimeout(handler);
   }, [searchText]);
+
+  useEffect(() => {
+    const openId = searchParams.get('openId');
+    if (openId) {
+      API.get(`/ready-to-shipment?search=${openId}`).then(res => {
+        const matching = res.data?.data?.records?.find(r => String(r._id) === openId || String(r.lead?._id) === openId || String(r.task?._id || r.task) === openId);
+        if (matching) {
+          setSelected(matching);
+          setSearchParams({}, { replace: true });
+        }
+      }).catch(() => {});
+    }
+  }, [searchParams, setSearchParams]);
   const [repairing, setRepairing] = useState(false);
   const [shipProvider, setShipProvider] = useState(() => localStorage.getItem('shipProvider') || 'shiprocket');
   const [showStats, setShowStats] = useState(false);

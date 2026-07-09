@@ -167,36 +167,30 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    let timer;
     setCommLoading(true);
 
     const isPrivileged = user?.role === 'admin' || user?.role === 'manager';
     const fetchFunc = isPrivileged ? fetchAllStaffCommissions : fetchStaffCommission;
 
-    timer = setTimeout(() => {
-      fetchFunc(commMonth.month, commMonth.year)
-        .then(d => {
-          if (!cancelled) {
-            if (isPrivileged) {
-              setCommission({
-                totalPay: d.grandTotalPay,
-                basePay: (d.grandTotalPay || 0) - (d.grandTotalCommission || 0),
-                totalCommission: d.grandTotalCommission,
-                revenue: d.grandTotalRevenue
-              });
-            } else {
-              setCommission(d);
-            }
+    fetchFunc(commMonth.month, commMonth.year)
+      .then(d => {
+        if (!cancelled) {
+          if (isPrivileged) {
+            setCommission({
+              totalPay: d.grandTotalPay,
+              basePay: (d.grandTotalPay || 0) - (d.grandTotalCommission || 0),
+              totalCommission: d.grandTotalCommission,
+              revenue: d.grandTotalRevenue
+            });
+          } else {
+            setCommission(d);
           }
-        })
-        .catch(e => { if (!cancelled) console.error(e); })
-        .finally(() => { if (!cancelled) setCommLoading(false); });
-    }, 800);
+        }
+      })
+      .catch(e => { if (!cancelled) console.error(e); })
+      .finally(() => { if (!cancelled) setCommLoading(false); });
 
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
+    return () => { cancelled = true; };
   }, [commMonth, user?.role]);
 
   useEffect(() => {

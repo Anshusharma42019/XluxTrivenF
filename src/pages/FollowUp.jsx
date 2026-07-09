@@ -185,6 +185,34 @@ export default function FollowUp() {
     });
   }, [load, loadCompleted, loadSettings, department]);
 
+  useEffect(() => {
+    const openId = searchParams.get('openId');
+    if (openId) {
+      const match = all.find(o => String(o._id) === openId) || completedList.find(o => String(o._id) === openId);
+      if (match) {
+        setSelected(match);
+        setShowCompleted(!!completedList.find(o => String(o._id) === openId));
+        setSearchParams({}, { replace: true });
+      } else {
+        api.get(`/shiprocket/orders/show/${openId}`).then(res => {
+          if (res.data?.data) {
+            const order = res.data.data;
+            setSelected(order);
+            const totalFollowups = Number(settings.total_followups) || 5;
+            if (order.followups?.length >= totalFollowups && order.followups.every(f => f.completed)) {
+              setCompletedList(prev => [order, ...prev]);
+              setShowCompleted(true);
+            } else {
+              setAll(prev => [order, ...prev.filter(o => o._id !== order._id)]);
+              setShowCompleted(false);
+            }
+          }
+        }).catch(() => {});
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, all, completedList, setSearchParams, settings]);
+
   const handleFollowUpDone = async (orderId) => {
     const oid = String(orderId);
     setDoneLoading(oid);

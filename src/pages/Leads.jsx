@@ -47,6 +47,8 @@ export default function Leads() {
   const [data, setData] = useState({ leads: [], total: 0, totalPages: 1 });
   const today = new Date().toISOString().split('T')[0];
   const [filters, setFilters] = useState({ search: '', dateFrom: today, dateTo: today, status: 'new', datePreset: 'today', page: 1, department: '' });
+  const [searchInput, setSearchInput] = useState('');
+  const searchDebounceRef = useRef(null);
   const [highlightId, setHighlightId] = useState(null);
   const [salesUsers, setSalesUsers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -280,8 +282,15 @@ export default function Leads() {
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
               </svg>
               <input
-                value={filters.search}
-                onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+                value={searchInput}
+                onChange={e => {
+                  const val = e.target.value;
+                  setSearchInput(val);
+                  clearTimeout(searchDebounceRef.current);
+                  searchDebounceRef.current = setTimeout(() => {
+                    setFilters(f => ({ ...f, search: val, page: 1 }));
+                  }, 400);
+                }}
                 placeholder={t('Search name, phone...')}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-100 bg-white text-xs font-bold text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition shadow-sm"
               />
@@ -293,7 +302,7 @@ export default function Leads() {
                 className="w-full md:w-auto px-4 py-2.5 rounded-xl border border-gray-100 bg-white text-xs font-bold text-gray-700 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition shadow-sm shrink-0"
               >
                 <option value="">{t('All Departments')}</option>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
               </select>
             )}
             <button onClick={() => { setIsCreating(true); setSelected(null); setForm(EMPTY); }}
@@ -444,7 +453,7 @@ export default function Leads() {
                     <select className="w-full px-2.5 py-1 bg-transparent text-[13px] font-semibold text-gray-700 focus:outline-none cursor-pointer appearance-none" 
                       value={form.department || ''} onChange={e => sf('department', e.target.value)}>
                       <option value="" disabled className="text-gray-400">Select...</option>
-                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                      {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
                     </select>
                   </div>
                 )}
@@ -722,7 +731,7 @@ export default function Leads() {
               <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department</label>
                 <select className={`${inputCls} mt-1.5`} value={form.department || ''} onChange={e => sf('department', e.target.value)}>
                   <option value="">Select Department</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                  {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
                 </select>
               </div>
 
@@ -760,7 +769,9 @@ export default function Leads() {
              <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">Select Sales Person</label>
                <select required className={inputCls} value={assignTo} onChange={e => setAssignTo(e.target.value)}>
                  <option value="">Select salesperson</option>
-                 {salesUsers.map(u => <option key={u._id} value={u._id}>{u.name} ({u.email})</option>)}
+                 {salesUsers
+                   .filter(u => !selected?.department || !u.departments?.length || u.departments.includes(selected.department))
+                   .map(u => <option key={u._id} value={u._id}>{u.name} ({u.email})</option>)}
                </select></div>
              <button type="submit" disabled={loading} className="w-full py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-md transition-all">Assign Now</button>
            </form>

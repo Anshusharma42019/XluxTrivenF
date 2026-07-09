@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
 import { getNotifications } from '../services/notification.service';
-import { globalSearch, getLead } from '../services/lead.service';
+import { getLead } from '../services/lead.service';
+import UniversalSearch from './UniversalSearch';
 import * as attendanceSvc from '../services/attendance.service';
 import API from '../api';
 
@@ -433,101 +434,8 @@ export default function Layout() {
               <h1 className="hidden md:block text-xl font-bold text-gray-800 tracking-tight">{pageTitle}</h1>
             )}
             {/* Global Phone Search */}
-            <div ref={searchRef} className="relative flex-1 md:ml-4">
-              <div className="flex items-center gap-2.5 bg-gray-50 md:bg-white/50 rounded-2xl shadow-sm px-4 py-2.5 md:py-2 border border-gray-100 md:border-gray-200 focus-within:border-green-400 focus-within:ring-4 focus-within:ring-green-500/10 transition-all w-full md:w-72">
-                <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                <input
-                  type="text"
-                  value={phoneQuery}
-                  onChange={e => setPhoneQuery(e.target.value)}
-                  onFocus={() => phoneQuery.trim().length >= 3 && setSearchOpen(true)}
-                  placeholder="Search lead or order..."
-                  className="flex-1 text-sm bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                />
-                {searchLoading && (
-                  <svg className="w-3.5 h-3.5 animate-spin text-green-500" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                  </svg>
-                )}
-                {phoneQuery && !searchLoading && (
-                  <button onClick={() => { setPhoneQuery(''); setSearchResults([]); setSearchOpen(false); }} className="text-gray-400 hover:text-gray-600">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                  </button>
-                )}
-              </div>
-              {searchOpen && (
-                <div className="absolute top-full left-0 mt-1.5 w-[92vw] sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
-                  {searchResults.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-gray-400">No results found</div>
-                  ) : (
-                    <div className="max-h-96 overflow-y-auto">
-                      {['lead', 'order', 'rts', 'callagain', 'task'].map(type => {
-                        const items = searchResults.filter(r => r.type === type && r.category !== 'verification');
-                        if (!items.length) return null;
-                        const labels = { lead: '👤 Leads', order: '📦 Orders', rts: '🚚 Ready to Ship', callagain: '📞 Call Again', task: '✅ Tasks' };
-                        return (
-                          <div key={type}>
-                            <div className="px-4 py-1.5 bg-gray-50 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 sticky top-0">
-                              {labels[type]}
-                            </div>
-                            {items.map(item => (
-                              <button key={item._id} onClick={() => handleResultClick(item)}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 flex items-center gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-semibold text-gray-800 truncate">{item.title}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                                      STATUS_COLORS[item.meta?.toLowerCase()] || 'bg-gray-100 text-gray-500'
-                                    }`}>{item.type === 'rts' ? (item.meta || 'Ready to Ship') : item.meta?.replace(/_/g, ' ')}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    {item.subtitle && <span className="text-xs text-green-700 font-medium">{item.subtitle}</span>}
-                                    {item.orderId && <span className="text-xs text-gray-400">#{item.orderId}</span>}
-                                    {item.awb && <span className="text-xs text-gray-400">AWB: {item.awb}</span>}
-                                    {item.assignedTo && <span className="text-xs text-blue-500">→ {item.assignedTo}</span>}
-                                  </div>
-                                </div>
-                                <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })}
-                      {/* Verification section */}
-                      {(() => {
-                        const vItems = searchResults.filter(r => r.category === 'verification');
-                        if (!vItems.length) return null;
-                        return (
-                          <div>
-                            <div className="px-4 py-1.5 bg-gray-50 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 sticky top-0">✅ Verification</div>
-                            {vItems.map(item => (
-                              <button key={item._id} onClick={() => handleResultClick(item)}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 flex items-center gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-semibold text-gray-800 truncate">{item.title}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                                      STATUS_COLORS[item.meta?.toLowerCase()] || 'bg-violet-100 text-violet-600'
-                                    }`}>{item.meta?.replace(/_/g, ' ')}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    {item.subtitle && <span className="text-xs text-green-700 font-medium">{item.subtitle}</span>}
-                                    {item.assignedTo && <span className="text-xs text-blue-500">→ {item.assignedTo}</span>}
-                                  </div>
-                                </div>
-                                <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-                </div>
-              )}
+            <div className="relative flex-1 md:ml-4 flex items-center w-full md:w-auto">
+              <UniversalSearch />
             </div>
           </div>
           <div className="flex items-center gap-2">

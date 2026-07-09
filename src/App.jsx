@@ -4,35 +4,44 @@ import { LanguageProvider } from './context/LanguageContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastProvider } from './context/ToastContext';
 import Layout from './components/Layout';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import StaffDashboard from './pages/StaffDashboard';
-import Leads from './pages/Leads';
-import Pipeline from './pages/Pipeline';
-import Tasks from './pages/Tasks';
-import Notifications from './pages/Notifications';
-import Users from './pages/Users';
-import CNP from './pages/CNP';
-import Verification from './pages/Verification';
-import ReadyToShipment from './pages/ReadyToShipment';
-import Shiprocket from './pages/Shiprocket';
-import NdrDetail from './pages/NdrDetail';
-import FollowUp from './pages/FollowUp';
-import CallAgain from './pages/CallAgain';
-import Attendance from './pages/Attendance';
-import OrderDetail from './pages/OrderDetail';
-import AppointmentBook from './pages/AppointmentBook';
-import DoctorDashboard from './pages/DoctorDashboard';
-import ReorderCommission from './pages/ReorderCommission';
-import Shipmaxx from './pages/Shipmaxx';
-import NdrPage from './pages/NdrPage';
-import ShipmaxxNdr from './pages/ShipmaxxNdr';
-import ShipmaxxFollowup from './pages/ShipmaxxFollowup';
-import Whatsapp from './pages/Whatsapp';
+import { lazy, Suspense } from 'react';
+
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const StaffDashboard = lazy(() => import('./pages/StaffDashboard'));
+const Leads = lazy(() => import('./pages/Leads'));
+const Pipeline = lazy(() => import('./pages/Pipeline'));
+const Tasks = lazy(() => import('./pages/Tasks'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const Users = lazy(() => import('./pages/Users'));
+const CNP = lazy(() => import('./pages/CNP'));
+const Verification = lazy(() => import('./pages/Verification'));
+const ReadyToShipment = lazy(() => import('./pages/ReadyToShipment'));
+const Shiprocket = lazy(() => import('./pages/Shiprocket'));
+const NdrDetail = lazy(() => import('./pages/NdrDetail'));
+const FollowUp = lazy(() => import('./pages/FollowUp'));
+const CallAgain = lazy(() => import('./pages/CallAgain'));
+const Attendance = lazy(() => import('./pages/Attendance'));
+const OrderDetail = lazy(() => import('./pages/OrderDetail'));
+const AppointmentBook = lazy(() => import('./pages/AppointmentBook'));
+const DoctorDashboard = lazy(() => import('./pages/DoctorDashboard'));
+const ReorderCommission = lazy(() => import('./pages/ReorderCommission'));
+const Shipmaxx = lazy(() => import('./pages/Shipmaxx'));
+const NdrPage = lazy(() => import('./pages/NdrPage'));
+const ShipmaxxNdr = lazy(() => import('./pages/ShipmaxxNdr'));
+const ShipmaxxFollowup = lazy(() => import('./pages/ShipmaxxFollowup'));
+const Whatsapp = lazy(() => import('./pages/Whatsapp'));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-full min-h-[300px]">
+    <div className="w-8 h-8 border-[3px] border-green-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 function AppRoutes() {
   const { user } = useAuth();
   return (
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -124,6 +133,7 @@ function AppRoutes() {
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 

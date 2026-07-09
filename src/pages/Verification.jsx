@@ -202,6 +202,20 @@ export default function Verification() {
     return () => clearInterval(interval);
   }, [runSync]);
 
+  const pendingOpenId = searchParams.get('openId');
+
+  useEffect(() => {
+    if (pendingOpenId) {
+      API.get(`/verification?search=${pendingOpenId}`).then(res => {
+        const matching = res.data?.data?.records?.find(r => String(r._id) === pendingOpenId);
+        if (matching) {
+          setSelected(matching);
+          setSearchParams({}, { replace: true });
+        }
+      }).catch(() => {});
+    }
+  }, [pendingOpenId, setSearchParams]);
+
   const refreshActiveTab = useCallback((silent = true) => {
     if (activeTab === 'pending') {
       load(silent);
@@ -227,57 +241,7 @@ export default function Verification() {
     }
   }, [canManage]);
 
-  // Handle openId from search navigation — runs after records are populated
-  useEffect(() => {
-    const openId = searchParams.get('openId');
-    if (!openId) return;
-    const allRecs = [...records, ...onHoldRecords];
-    if (allRecs.length === 0) return;
-    const match = allRecs.find(r =>
-      r._id === openId ||
-      r.lead?._id === openId ||
-      r.lead === openId ||
-      r.task?._id === openId ||
-      r.task === openId
-    );
-    if (match) {
-      const flattened = flattenRecord(match);
-      setSelected(flattened);
-      if (match.status === 'on_hold') {
-        setActiveTab('on_hold');
-        setOhDayFilter('all');
-      } else {
-        setDayFilter('all');
-      }
-    } else {
-      API.get(`/verification/by-task/${openId}`).then(res => {
-        if (res.data?.data) {
-          const flattened = flattenRecord(res.data.data);
-          setSelected(flattened);
-          if (res.data.data.status === 'on_hold') {
-            setActiveTab('on_hold');
-            setOhDayFilter('all');
-          } else {
-            setDayFilter('all');
-          }
-        }
-      }).catch(() => {
-        API.get(`/verification/${openId}`).then(res => {
-          if (res.data?.data) {
-            const flattened = flattenRecord(res.data.data);
-            setSelected(flattened);
-            if (res.data.data.status === 'on_hold') {
-              setActiveTab('on_hold');
-              setOhDayFilter('all');
-            } else {
-              setDayFilter('all');
-            }
-          }
-        }).catch(() => {});
-      });
-    }
-    setSearchParams({}, { replace: true });
-  }, [records, onHoldRecords, searchParams]);
+
 
   const flattenRecord = (r) => {
     const taskData = r.task && typeof r.task === 'object' ? r.task : {};
@@ -342,17 +306,10 @@ export default function Verification() {
       if (selected.lead?._id) await updateLead(selected.lead._id, { name, phone });
 
       // Reload both pending and on-hold lists so neither tab goes stale
-      const [freshData, freshOnHold] = await Promise.all([
-        getVerificationRecords(),
-        getOnHoldVerificationRecords(department ? { department } : {}),
-      ]);
-      const freshRecords = Array.isArray(freshData) ? freshData : [];
-      setRecords(freshRecords);
-      setOnHoldRecords(Array.isArray(freshOnHold) ? freshOnHold : []);
+      load(true);
+      loadOnHold(true);
 
-      const freshSelected = freshRecords.find(r => r._id === selected._id)
-        || (Array.isArray(freshOnHold) ? freshOnHold : []).find(r => r._id === selected._id);
-      const flattened = freshSelected ? flattenRecord(freshSelected) : { ...selected, ...verificationFields };
+      const flattened = flattenRecord({ ...selected, ...verificationFields });
       setSelected({ ...flattened, lead: { ...(flattened.lead || selected.lead || {}), name, phone } });
       setEditMode(false);
     } catch { }
@@ -499,7 +456,7 @@ export default function Verification() {
               <select value={department} onChange={e => setDepartment(e.target.value)}
                 className="px-3 py-2.5 rounded-xl border border-gray-100 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400/20 transition shadow-sm shrink-0">
                 <option value="">All Depts</option>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
               </select>
             )}
           </div>
@@ -531,7 +488,7 @@ export default function Verification() {
             <select value={department} onChange={e => setDepartment(e.target.value)}
               className="px-3 py-2.5 rounded-xl border border-gray-100 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition shadow-sm shrink-0">
               <option value="">All Depts</option>
-              {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+              {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
             </select>
           )}
         </div>

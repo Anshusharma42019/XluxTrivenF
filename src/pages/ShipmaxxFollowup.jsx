@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Fragment, useMemo } from 'react';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { useSearchParams } from 'react-router-dom';
 import * as smxSvc from '../services/shipmaxx.service';
+import { useAuth } from '../context/AuthContext';
 
 const PER_PAGE = 20;
 const TOTAL_FU = 5;
@@ -65,6 +67,10 @@ const SectionHead = ({ label }) => (
 );
 
 export default function ShipmaxxFollowup() {
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'support';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [department, setDepartment] = useState('');
   const [all, setAll] = useState([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -135,6 +141,33 @@ export default function ShipmaxxFollowup() {
   useEffect(() => {
     load(false).then(() => loadCompleted(false, 1));
   }, [load, loadCompleted]);
+
+  useEffect(() => {
+    const openId = searchParams.get('openId');
+    if (openId) {
+      const match = all.find(o => String(o._id) === openId) || completedList.find(o => String(o._id) === openId);
+      if (match) {
+        setSelected(match);
+        setShowCompleted(!!completedList.find(o => String(o._id) === openId));
+        setSearchParams({}, { replace: true });
+      } else {
+        smxSvc.getOrder(openId).then(res => {
+          if (res.data?.data) {
+            const order = res.data.data;
+            setSelected(order);
+            if (order.followups?.length >= TOTAL_FU && order.followups.every(f => f.completed)) {
+              setCompletedList(prev => [order, ...prev]);
+              setShowCompleted(true);
+            } else {
+              setAll(prev => [order, ...prev.filter(o => o._id !== order._id)]);
+              setShowCompleted(false);
+            }
+          }
+        }).catch(() => {});
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, all, completedList, setSearchParams]);
 
   // Phone autofill for manual form
   useEffect(() => {

@@ -408,7 +408,7 @@ export default function Tasks() {
                   <select value={filters.department} onChange={(e) => setFilters(f => ({ ...f, department: e.target.value }))}
                     className="border border-gray-100 rounded-xl px-4 py-2 text-xs bg-white font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm min-w-[120px]">
                     <option value="">All Depts</option>
-                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                    {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
                   </select>
                 )}
                 {tab === 'all' && (
@@ -836,7 +836,9 @@ export default function Tasks() {
                 <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assign To</label>
                   <select className={`${inputCls} mt-1`} value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
                     <option value="">Auto-assign</option>
-                    {salesUsers.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
+                    {salesUsers
+                      .filter(u => !form.department || !u.departments?.length || u.departments.includes(form.department))
+                      .map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
                   </select></div>
               )}
             </div>
@@ -856,7 +858,7 @@ export default function Tasks() {
               <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department</label>
                 <select className={`${inputCls} mt-1`} value={form.department || ''} onChange={(e) => setForm({ ...form, department: e.target.value })}>
                   <option value="">Select Department</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                  {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
                 </select></div>
             )}
 

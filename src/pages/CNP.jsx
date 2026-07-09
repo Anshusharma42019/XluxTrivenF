@@ -64,10 +64,12 @@ export default function CNP() {
   const _initPhone = new URLSearchParams(window.location.search).get('phone') || '';
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'tasks');
   const [selected, setSelected] = useState(null);
+  const [selectedLeadDetail, setSelectedLeadDetail] = useState(null);
   const [search, setSearch] = useState(() => _initPhone);
   const [department, setDepartment] = useState('');
   const [dateFilter, setDateFilter] = useState(() => _initPhone ? 'all' : 'today');
   const [callAgainDateFilter, setCallAgainDateFilter] = useState(() => _initPhone ? 'all' : 'today');
+  const [monthFilter, setMonthFilter] = useState(new Date().getMonth());
   const [note, setNote] = useState('');
   const [nextDate, setNextDate] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -178,28 +180,23 @@ export default function CNP() {
       const res = await API.post(`/leads/${leadId}/follow-up`, { note, next_date: nextDate || undefined });
       const updated = res.data.data;
       const newFollowUp = { note, next_date: nextDate || undefined, date: new Date().toISOString() };
-      const updatedLead = { 
-        ...(selected.lead || {}), 
+      const updatedDetail = { 
+        ...(selectedLeadDetail || selected.lead || {}), 
         ...updated,
-        follow_ups: [...(selected.lead?.follow_ups || []), newFollowUp]
+        follow_ups: [...((selectedLeadDetail || selected.lead)?.follow_ups || []), newFollowUp]
       };
-      setSelected(prev => ({ ...prev, lead: updatedLead }));
-      setCnpTasks(prev => prev.map(task =>
-        task._id === selected._id ? { ...task, lead: updatedLead } : task
-      ));
-      setCallAgainLeads(prev => prev.map(lead =>
-        lead._id === selected._id ? { ...lead, lead: updatedLead } : lead
-      ));
+      setSelectedLeadDetail(updatedDetail);
       setNote(''); setNextDate('');
     } catch { }
     finally { setSavingNote(false); }
   };
 
-  const load = useCallback(async (cnpFilter = '', caFilter = '', deptFilter = '') => {
+  const load = useCallback(async (cnpFilter = '', caFilter = '', deptFilter = '', mFilter) => {
     try {
+      const month = mFilter !== undefined ? mFilter : monthFilter;
       const [tasksRes, callAgainRes] = await Promise.all([
-        getCnpRecords({ filter: cnpFilter || undefined, department: deptFilter || undefined }),
-        getCallAgains({ filter: caFilter || undefined, department: deptFilter || undefined }),
+        getCnpRecords({ filter: cnpFilter || undefined, department: deptFilter || undefined, month }),
+        getCallAgains({ filter: caFilter || undefined, department: deptFilter || undefined, month }),
       ]);
       setCnpTasks(Array.isArray(tasksRes) ? tasksRes.filter(t => t.lead?.status !== 'closed_lost') : []);
       setCallAgainLeads(Array.isArray(callAgainRes) ? callAgainRes : []);
@@ -210,7 +207,7 @@ export default function CNP() {
     }
   }, []);
 
-  useEffect(() => { load(dateFilter, callAgainDateFilter, department); }, [load, dateFilter, callAgainDateFilter, department]);
+  useEffect(() => { load(dateFilter, callAgainDateFilter, department, monthFilter); }, [load, dateFilter, callAgainDateFilter, department, monthFilter]);
 
   const handleStatusChange = async (leadId, status, taskId = null) => {
     setUpdating(leadId);
@@ -268,7 +265,7 @@ export default function CNP() {
   // Reset page when search or tab filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [tab, search, dateFilter, callAgainDateFilter, department]);
+  }, [tab, search, dateFilter, callAgainDateFilter, department, monthFilter]);
 
   if (loading)
     return (
@@ -306,7 +303,6 @@ export default function CNP() {
                 { label: 'Today', value: 'today' },
                 { label: 'Yesterday', value: 'yesterday' },
                 { label: 'Week', value: 'this_week' },
-                { label: 'Month', value: 'this_month' },
               ].map(f => {
                 const active = tab === 'tasks' ? dateFilter === f.value : callAgainDateFilter === f.value;
                 return (
@@ -318,6 +314,17 @@ export default function CNP() {
                     }`}>{f.label}</button>
                 );
               })}
+              <select
+                value={monthFilter}
+                onChange={e => setMonthFilter(Number(e.target.value))}
+                className="px-3 py-2 rounded-xl border border-gray-100 bg-white text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400/20 transition shadow-sm"
+              >
+                {Array.from({ length: new Date().getMonth() + 1 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {new Date(new Date().getFullYear(), i).toLocaleString('en-IN', { month: 'short' })}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="relative w-full md:w-1/2 flex items-center gap-2">
               <div className="relative flex-1">
@@ -338,7 +345,7 @@ export default function CNP() {
                   className="w-full md:w-auto px-4 py-2.5 rounded-xl border border-gray-100 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400/20 transition shadow-sm shrink-0"
                 >
                   <option value="">All Depts</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                  {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
                 </select>
               )}
             </div>
@@ -364,7 +371,15 @@ export default function CNP() {
                   const isActive = selected?._id === item._id;
                   const lead = item.lead || {};
                   return (
-                    <div key={item._id} onClick={() => setSelected(isActive ? null : item)}
+                    <div key={item._id} onClick={async () => {
+                      if (isActive) { setSelected(null); setSelectedLeadDetail(null); return; }
+                      setSelected(item);
+                      setSelectedLeadDetail(null);
+                      // Lazy load notes/follow_ups only when detail panel opens
+                      if (item.lead?._id) {
+                        getLead(item.lead._id).then(full => setSelectedLeadDetail(full)).catch(() => {});
+                      }
+                    }}
                       className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 border
                         ${isActive
                           ? (tab === 'tasks' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200') + ' shadow-sm'
@@ -516,7 +531,7 @@ export default function CNP() {
                   <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
               </button>
-              <button onClick={() => setSelected(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition text-xl">×</button>
+              <button onClick={() => { setSelected(null); setSelectedLeadDetail(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition text-xl">×</button>
             </div>
           </div>
 
@@ -565,11 +580,11 @@ export default function CNP() {
               </div>
             )}
 
-            {(selected.notes?.length > 0 || selected.lead?.notes?.length > 0) && (
+            {(selectedLeadDetail?.notes?.length > 0) && (
               <div className="mt-4">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notes</p>
                 <div className="space-y-2">
-                  {[...(selected.notes?.length ? selected.notes : selected.lead?.notes || [])].reverse().slice(0, 3).map((n, i) => (
+                  {[...selectedLeadDetail.notes].reverse().slice(0, 3).map((n, i) => (
                     <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                       <p className="text-xs text-gray-600 leading-relaxed">{n.text}</p>
                       <p className="text-[9px] text-gray-400 mt-1 font-bold uppercase">{new Date(n.createdAt).toLocaleString()}</p>
@@ -593,9 +608,9 @@ export default function CNP() {
                 </button>
               </div>
               {/* Activity history */}
-              {(selected.lead?.follow_ups?.length > 0) && (
+              {(selectedLeadDetail?.follow_ups?.length > 0) && (
                 <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
-                  {[...selected.lead.follow_ups].reverse().slice(0, 5).map((f, i) => (
+                  {[...selectedLeadDetail.follow_ups].reverse().slice(0, 5).map((f, i) => (
                     <div key={i} className="p-2 rounded-lg bg-white border border-gray-100">
                       {f.note && <p className="text-xs text-gray-700">{f.note}</p>}
                       {f.next_date && <p className="text-[10px] text-green-600 font-bold">Next: {new Date(f.next_date).toLocaleDateString('en-IN')}</p>}
@@ -661,7 +676,7 @@ export default function CNP() {
       {/* Mobile Modal */}
       {selected && (
         <div className="lg:hidden">
-          <Modal hideHeader={true} onClose={() => setSelected(null)}>
+          <Modal hideHeader={true} onClose={() => { setSelected(null); setSelectedLeadDetail(null); }}>
             <div className={`-mx-4 -mt-4 mb-5 px-6 py-6 rounded-b-3xl relative ${tab === 'tasks' ? 'bg-gradient-to-br from-red-900 to-red-800' : 'bg-gradient-to-br from-amber-900 to-amber-800'}`}>
               <div className="absolute right-4 top-4 flex items-center gap-2">
                 <button onClick={() => openEditModal(selected)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 transition">
@@ -772,7 +787,7 @@ export default function CNP() {
             <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department</label>
               <select className={`${inputCls} mt-1`} value={editForm.department||''} onChange={e => setEditForm(f => ({...f, department: e.target.value}))}>
                 <option value="">No Department</option>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
+                {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
               </select>
             </div>
             <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Address</label>

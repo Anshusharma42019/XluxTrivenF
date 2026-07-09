@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLeads, getLead, updateLead, getCallAgains, updateCallAgain, markCNP, createCallAgain, deleteLead } from '../services/lead.service';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
@@ -62,7 +62,10 @@ export default function Pipeline() {
   const [leadTask, setLeadTask] = useState(null);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
+  const [monthFilter, setMonthFilter] = useState(new Date().getMonth());
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pendingOpenId = searchParams.get('openId');
   
   const canManage = user?.role === 'admin' || user?.role === 'manager';
   // Follow-up state
@@ -76,27 +79,42 @@ export default function Pipeline() {
       setError('');
     }
     try {
-      const query = { limit: 500 };
-      if (department) query.department = department;
+      const q = { limit: 200 };
+      if (department) q.department = department;
+      const mq = { ...q, month: monthFilter };
 
-      const [interestedRes, onHoldRes, closedLostRes, ordersRes, cnpRes, callAgainRes] = await Promise.all([
-        getLeads({ ...query, status: 'interested' }),
-        getLeads({ ...query, status: 'on_hold' }),
-        getLeads({ ...query, status: 'closed_lost' }),
-        API.get('/shiprocket/orders/with-followups'),
-        getCnpRecords(query),
-        getCallAgains(query),
-      ]);
-      setInterestedLeads(Array.isArray(interestedRes?.leads) ? interestedRes.leads : []);
-      setOnHoldLeads(Array.isArray(onHoldRes?.leads) ? onHoldRes.leads.filter(l => !l.cnp) : []);
-      setClosedLostLeads(Array.isArray(closedLostRes?.leads) ? closedLostRes.leads : []);
-      setDeliveredOrders(Array.isArray(ordersRes.data?.data) ? ordersRes.data.data : []);
-      setCnpLeads(Array.isArray(cnpRes) ? cnpRes : []);
-      setCallAgainLeads(Array.isArray(callAgainRes) ? callAgainRes : []);
+      // Fetch active tab first for fast render
+      const fetchByFilter = (f) => {
+        if (f === 'cnp') return getCnpRecords(mq);
+        if (f === 'call_again') return getCallAgains(mq);
+        if (f === 'on_hold') return getLeads({ ...mq, status: 'on_hold' });
+        if (f === 'closed_lost') return getLeads({ ...mq, status: 'closed_lost' });
+        return getLeads({ ...mq, status: 'interested' });
+      };
+
+      const setByFilter = (f, res) => {
+        if (f === 'cnp') setCnpLeads(Array.isArray(res) ? res : []);
+        else if (f === 'call_again') setCallAgainLeads(Array.isArray(res) ? res : []);
+        else if (f === 'on_hold') setOnHoldLeads(Array.isArray(res?.leads) ? res.leads.filter(l => !l.cnp) : []);
+        else if (f === 'closed_lost') setClosedLostLeads(Array.isArray(res?.leads) ? res.leads : []);
+        else setInterestedLeads(Array.isArray(res?.leads) ? res.leads : []);
+      };
+
+      // Load active tab immediately
+      const activeRes = await fetchByFilter(filter);
+      setByFilter(filter, activeRes);
+      if (!silent) setLoading(false);
+
+      // Load remaining tabs in background
+      const otherFilters = ['interested', 'on_hold', 'closed_lost', 'cnp', 'call_again'].filter(f => f !== filter);
+      const otherResults = await Promise.all(otherFilters.map(f => fetchByFilter(f).catch(() => null)));
+      otherFilters.forEach((f, i) => { if (otherResults[i]) setByFilter(f, otherResults[i]); });
+
     } catch (err) {
       if (!silent) setError(err.response?.data?.message || err.message || 'Failed to load');
-    } finally { if (!silent) setLoading(false); }
-  }, [department]);
+      if (!silent) setLoading(false);
+    }
+  }, [department, monthFilter, filter]);
 
   useAutoRefresh(load);
 
@@ -108,6 +126,18 @@ export default function Pipeline() {
       window.history.replaceState({}, '');
     }
   }, [location.state]);
+
+  useEffect(() => {
+    if (pendingOpenId) {
+      // Find what type it is or just use getLead since Pipeline items are mostly leads/cnp/callagain
+      // In Pipeline, selected item can be a lead directly or a wrapper { lead: { ... } }
+      // To be safe, we fetch it via getLead
+      getLead(pendingOpenId).then(full => {
+        setSelected(full);
+        setSearchParams({}, { replace: true });
+      }).catch(() => {});
+    }
+  }, [pendingOpenId, setSearchParams]);
 
   const filteredItems = useMemo(() => {
     let items = [];
@@ -132,7 +162,7 @@ export default function Pipeline() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter, search, department]);
+  }, [filter, search, department, monthFilter]);
 
   const itemsPerPage = 20;
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -268,8 +298,9 @@ export default function Pipeline() {
       <div className={`flex flex-col gap-4 transition-all duration-300 ${selected ? 'w-full lg:w-[55%]' : 'w-full'} h-full overflow-hidden`}>
         
         {/* Header & Filters */}
-        <div className="flex items-center justify-between gap-3 shrink-0 glass px-5 py-3 rounded-3xl border border-white/50 shadow-sm">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+        <div className="flex flex-col gap-3 shrink-0 glass px-5 py-3 rounded-3xl border border-white/50 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {[
                 ...STAGES,
                 { key: 'cnp', label: 'CNP', bar: 'bg-red-600' },
@@ -284,8 +315,20 @@ export default function Pipeline() {
                   {s.label}
                 </button>
               ))}
+            </div>
+            <select
+              value={monthFilter}
+              onChange={e => setMonthFilter(Number(e.target.value))}
+              className="px-3 py-2 rounded-xl border border-gray-100 bg-white text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition shadow-sm shrink-0"
+            >
+              {Array.from({ length: new Date().getMonth() + 1 }, (_, i) => (
+                <option key={i} value={i}>
+                  {new Date(new Date().getFullYear(), i).toLocaleString('en-IN', { month: 'short' })}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="relative w-full md:w-1/2 flex items-center gap-2">
+          <div className="relative w-full flex items-center gap-2">
             <div className="relative flex-1">
               <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
