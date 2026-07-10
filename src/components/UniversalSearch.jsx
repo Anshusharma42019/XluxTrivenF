@@ -123,7 +123,10 @@ export default function UniversalSearch() {
             </div>
           ) : (
             <div className="p-2 space-y-3">
-              {results.map((customerGroup, idx) => (
+              {results.map((customerGroup, idx) => {
+                const kitNum = customerGroup.latestStatus.kit_number || 1;
+
+                return (
                 <div key={idx} className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-3 border border-gray-100 dark:border-gray-800 transition-all hover:border-green-200 dark:hover:border-green-900/50">
                   {/* LATEST STATUS BLOCK */}
                   <div 
@@ -151,12 +154,9 @@ export default function UniversalSearch() {
                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 capitalize border border-green-200 dark:border-green-800/50">
                                {customerGroup.latestStatus.status.replace(/_/g, ' ')}
                              </span>
-                             {customerGroup.latestStatus.kit_number > 0 && (
+                             {kitNum > 1 && customerGroup.latestStatus.status?.toUpperCase() === 'DELIVERED' && (
                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50 uppercase tracking-wide">
-                                 {customerGroup.latestStatus.kit_number === 1 ? '1st Kit' : 
-                                  customerGroup.latestStatus.kit_number === 2 ? '2nd Kit' : 
-                                  customerGroup.latestStatus.kit_number === 3 ? '3rd Kit' : 
-                                  `${customerGroup.latestStatus.kit_number}th Kit`}
+                                 {`Kit ${kitNum}`}
                                </span>
                              )}
                            </div>
@@ -258,7 +258,8 @@ export default function UniversalSearch() {
                     </div>
                   )}
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </div>

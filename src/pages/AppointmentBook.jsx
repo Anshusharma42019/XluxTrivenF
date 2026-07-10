@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { getAppointments, createAppointment, updateAppointment, deleteAppointment, searchByPhone, getAvailability, getBookedSlots, addFieldNote } from '../services/appointment.service';
 import { getUsers } from '../services/user.service';
 import Modal from '../components/ui/Modal';
+import { useSearchParams } from 'react-router-dom';
+import API from '../api';
 
 const TYPES = ['consultation', 'follow_up', 'panchakarma', 'ayurveda', 'other'];
 const STATUSES = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'];
