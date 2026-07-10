@@ -179,7 +179,7 @@ export default function CNP() {
     try {
       const res = await API.post(`/leads/${leadId}/follow-up`, { note, next_date: nextDate || undefined });
       const updated = res.data.data;
-      const newFollowUp = { note, next_date: nextDate || undefined, date: new Date().toISOString() };
+      const newFollowUp = { note, next_date: nextDate || undefined, date: new Date().toISOString(), createdBy: { name: user?.name || 'You' } };
       const updatedDetail = { 
         ...(selectedLeadDetail || selected.lead || {}), 
         ...updated,
@@ -609,12 +609,15 @@ export default function CNP() {
               </div>
               {/* Activity history */}
               {(selectedLeadDetail?.follow_ups?.length > 0) && (
-                <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
-                  {[...selectedLeadDetail.follow_ups].reverse().slice(0, 5).map((f, i) => (
+                <div className="mt-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                  {[...selectedLeadDetail.follow_ups].reverse().map((f, i) => (
                     <div key={i} className="p-2 rounded-lg bg-white border border-gray-100">
                       {f.note && <p className="text-xs text-gray-700">{f.note}</p>}
                       {f.next_date && <p className="text-[10px] text-green-600 font-bold">Next: {new Date(f.next_date).toLocaleDateString('en-IN')}</p>}
-                      <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(f.date).toLocaleString()}</p>
+                      <div className="flex justify-between items-center mt-1">
+                        <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(f.date).toLocaleString()}</p>
+                        {f.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {f.createdBy.name}</p>}
+                      </div>
                     </div>
                   ))}
                 </div>
