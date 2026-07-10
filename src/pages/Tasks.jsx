@@ -303,19 +303,20 @@ export default function Tasks() {
         } catch { /* ignore */ }
       }
 
+      const promises = [];
       if (action === 'cnp') {
-        await updateTask(selected._id, { status: 'cnp' }).catch(() => {});
-        if (leadId) await updateLead(leadId, { cnp: true }).catch(() => {});
+        promises.push(updateTask(selected._id, { status: 'cnp' }).catch(() => {}));
         setSelected(prev => ({ ...prev, status: 'cnp', notes: finalNotes }));
       } else if (action === 'mark_loss') {
-        await updateTask(selected._id, { status: 'cancel_call' }).catch(() => {});
-        if (leadId) await updateLead(leadId, { status: 'closed_lost' }).catch(() => {});
+        promises.push(updateTask(selected._id, { status: 'cancel_call' }).catch(() => {}));
+        if (leadId) promises.push(updateLead(leadId, { status: 'closed_lost' }).catch(() => {}));
         setSelected(prev => ({ ...prev, status: 'cancel_call', notes: finalNotes }));
       } else if (action === 'callagain') {
-        // createCallAgain API already sets: lead → follow_up, tasks → cancel_call
-        if (leadId) await createCallAgain(leadId, finalNotes);
+        if (leadId) promises.push(createCallAgain(leadId, finalNotes).catch(() => {}));
         setSelected(prev => ({ ...prev, status: 'cancel_call', notes: finalNotes }));
       }
+      
+      await Promise.all(promises);
       load();
     } catch (err) {
       console.error(err);
