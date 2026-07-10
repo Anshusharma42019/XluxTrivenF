@@ -580,19 +580,26 @@ export default function CNP() {
               </div>
             )}
 
-            {(selectedLeadDetail?.notes?.length > 0) && (
-              <div className="mt-4">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notes</p>
-                <div className="space-y-2">
-                  {[...selectedLeadDetail.notes].reverse().slice(0, 3).map((n, i) => (
-                    <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                      <p className="text-xs text-gray-600 leading-relaxed">{n.text}</p>
-                      <p className="text-[9px] text-gray-400 mt-1 font-bold uppercase">{new Date(n.createdAt).toLocaleString()}</p>
-                    </div>
-                  ))}
+            {(() => {
+              const staffNotes = (selectedLeadDetail?.notes || []).filter(n => {
+                if (!n.text) return true;
+                return !String(n.text).toLowerCase().includes('[interakt message]');
+              });
+              if (staffNotes.length === 0) return null;
+              return (
+                <div className="mt-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notes</p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                    {[...staffNotes].reverse().map((n, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                        <p className="text-xs text-gray-600 leading-relaxed">{n.text}</p>
+                        <p className="text-[9px] text-gray-400 mt-1 font-bold uppercase">{new Date(n.createdAt).toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="mt-4 p-3 rounded-xl bg-gray-50 border border-gray-100">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Note</p>
@@ -608,20 +615,27 @@ export default function CNP() {
                 </button>
               </div>
               {/* Activity history */}
-              {(selectedLeadDetail?.follow_ups?.length > 0) && (
-                <div className="mt-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                  {[...selectedLeadDetail.follow_ups].reverse().map((f, i) => (
-                    <div key={i} className="p-2 rounded-lg bg-white border border-gray-100">
-                      {f.note && <p className="text-xs text-gray-700">{f.note}</p>}
-                      {f.next_date && <p className="text-[10px] text-green-600 font-bold">Next: {new Date(f.next_date).toLocaleDateString('en-IN')}</p>}
-                      <div className="flex justify-between items-center mt-1">
-                        <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(f.date).toLocaleString()}</p>
-                        {f.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {f.createdBy.name}</p>}
+              {(() => {
+                const staffFollowUps = (selectedLeadDetail?.follow_ups || []).filter(f => {
+                  if (!f.note) return true;
+                  return !String(f.note).toLowerCase().includes('[interakt message]');
+                });
+                if (staffFollowUps.length === 0) return null;
+                return (
+                  <div className="mt-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                    {[...staffFollowUps].reverse().map((f, i) => (
+                      <div key={i} className="p-2 rounded-lg bg-white border border-gray-100">
+                        {f.note && <p className="text-xs text-gray-700">{f.note}</p>}
+                        {f.next_date && <p className="text-[10px] text-green-600 font-bold">Next: {new Date(f.next_date).toLocaleDateString('en-IN')}</p>}
+                        <div className="flex justify-between items-center mt-1">
+                          <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(f.date).toLocaleString()}</p>
+                          {f.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {f.createdBy.name}</p>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
