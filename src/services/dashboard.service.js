@@ -46,4 +46,6 @@ export const fetchStaffCommission = (month, year) => API.get(`/dashboard/staff-c
 export const fetchAllStaffCommissions = (month, year) => API.get(`/dashboard/all-staff-commissions?month=${month}&year=${year}`).then(r => r.data.data);
 export const saveCommissionOverride = (data) => API.post('/dashboard/save-commission-override', data).then(r => r.data.data);
 export const fetchUnassignedOrders = (month, year) => API.get(`/dashboard/unassigned-orders?month=${month}&year=${year}`).then(r => r.data.data);
+export const fetchStaffDeliveryStats = (month, year) => API.get(`/dashboard/staff-delivery-stats?month=${month}&year=${year}`).then(r => r.data.data);
+export const fetchMyDeliveryStats = (month, year) => API.get(`/dashboard/my-delivery-stats?month=${month}&year=${year}`).then(r => r.data.data);
 export const assignOrder = (orderId, staffId, platform) => API.post('/dashboard/assign-order', { orderId, staffId, platform }).then(r => r.data.data);

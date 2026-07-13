@@ -11,7 +11,8 @@ import {
   fetchStaffTodayLists, 
   fetchStaffMonthlyChart, 
   fetchStaffCommission,
-  fetchTargetHistory 
+  fetchTargetHistory,
+  fetchMyDeliveryStats
 } from '../services/dashboard.service';
 import * as attendanceSvc from '../services/attendance.service';
 import { useToast } from '../context/ToastContext';
@@ -108,7 +109,22 @@ export default function StaffDashboard() {
   const [historyDays, setHistoryDays] = useState(7);
   const [historyMonth, setHistoryMonth] = useState(() => { const n = new Date(); return { month: n.getMonth(), year: n.getFullYear() }; });
 
+  const [myDelivery, setMyDelivery] = useState(null);
+  const [deliveryMonth, setDeliveryMonth] = useState(() => { const n = new Date(); return { month: n.getMonth(), year: n.getFullYear() }; });
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+
   const workingTime = useLiveTimer(attStatus?.checkIn && !attStatus?.checkOut ? attStatus.checkIn : null);
+
+  useEffect(() => {
+    if (!['sales', 'support'].includes(user?.role)) return;
+    let cancelled = false;
+    setDeliveryLoading(true);
+    fetchMyDeliveryStats(deliveryMonth.month, deliveryMonth.year)
+      .then(d => { if (!cancelled) setMyDelivery(d); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setDeliveryLoading(false); });
+    return () => { cancelled = true; };
+  }, [deliveryMonth, user?.role]);
 
   const MOTIVATIONS = [
     'Sunday warrior — legends don\'t take days off! 💪🔥',
@@ -909,6 +925,135 @@ export default function StaffDashboard() {
           </>
         )}
       </div>
+
+      {/* My Delivery Score */}
+      {['sales', 'support'].includes(user?.role) && (() => {
+        const [openList, setOpenList] = useState(null); // 'delivered' | 'rto' | null
+        const [search, setSearch] = useState('');
+        const list = openList === 'delivered' ? (myDelivery?.deliveredOrders || []) : (myDelivery?.rtoOrders || []);
+        const filtered = list.filter(o =>
+          o.name?.toLowerCase().includes(search.toLowerCase()) ||
+          o.phone?.includes(search) ||
+          o.awb?.toLowerCase().includes(search.toLowerCase())
+        );
+        return (
+          <div className={cardCls} style={cardStyle}>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-800">My Delivery Score</h3>
+                  <p className="text-[10px] text-gray-400">
+                    {user?.role === 'sales' ? 'New orders (1st Kit) — click to view list' : 'Old/Re-orders (2nd+ Kit) — click to view list'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setDeliveryMonth(p => { const m = p.month - 1; return m < 0 ? { month: 11, year: p.year - 1 } : { month: m, year: p.year }; })}
+                  className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span className="text-[11px] font-black min-w-[80px] text-center text-gray-700 uppercase tracking-tight">
+                  {new Date(deliveryMonth.year, deliveryMonth.month).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                </span>
+                <button onClick={() => setDeliveryMonth(p => { const m = p.month + 1; return m > 11 ? { month: 0, year: p.year + 1 } : { month: m, year: p.year }; })}
+                  className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            {deliveryLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                {/* DELIVERED card */}
+                <button onClick={() => { setOpenList(openList === 'delivered' ? null : 'delivered'); setSearch(''); }}
+                  className={`rounded-2xl border p-4 text-center transition-all hover:shadow-md active:scale-95 ${
+                    openList === 'delivered' ? 'bg-emerald-600 border-emerald-600' : 'bg-emerald-50 border-emerald-100 hover:border-emerald-300'
+                  }`}>
+                  <p className={`text-3xl font-black leading-none ${openList === 'delivered' ? 'text-white' : 'text-emerald-700'}`}>{myDelivery?.delivered ?? 0}</p>
+                  <p className={`text-[10px] font-black uppercase tracking-widest mt-2 ${openList === 'delivered' ? 'text-emerald-100' : 'text-emerald-600'}`}>Delivered</p>
+                </button>
+                {/* RTO card */}
+                <button onClick={() => { setOpenList(openList === 'rto' ? null : 'rto'); setSearch(''); }}
+                  className={`rounded-2xl border p-4 text-center transition-all hover:shadow-md active:scale-95 ${
+                    openList === 'rto'
+                      ? 'bg-red-600 border-red-600'
+                      : (myDelivery?.rto ?? 0) > 0 ? 'bg-red-50 border-red-100 hover:border-red-300' : 'bg-gray-50 border-gray-100'
+                  }`}>
+                  <p className={`text-3xl font-black leading-none ${
+                    openList === 'rto' ? 'text-white' : (myDelivery?.rto ?? 0) > 0 ? 'text-red-600' : 'text-gray-300'
+                  }`}>{myDelivery?.rto ?? 0}</p>
+                  <p className={`text-[10px] font-black uppercase tracking-widest mt-2 ${
+                    openList === 'rto' ? 'text-red-100' : (myDelivery?.rto ?? 0) > 0 ? 'text-red-500' : 'text-gray-400'
+                  }`}>RTO</p>
+                </button>
+                {/* TOTAL card */}
+                <div className="rounded-2xl bg-gray-900 p-4 text-center">
+                  <p className="text-3xl font-black text-white leading-none">
+                    {(myDelivery?.delivered ?? 0) + (myDelivery?.rto ?? 0)}
+                  </p>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">Total</p>
+                </div>
+              </div>
+            )}
+
+            {/* Expandable order list */}
+            {openList && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="relative flex-1">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input
+                      autoFocus
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Search name, phone, AWB..."
+                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-400 bg-gray-50"
+                    />
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${
+                    openList === 'delivered' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                  }`}>{filtered.length} orders</span>
+                </div>
+                <div className="max-h-72 overflow-y-auto custom-scrollbar space-y-2">
+                  {filtered.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-6">No orders found</p>
+                  ) : filtered.map((o, i) => (
+                    <div key={String(o._id)} className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-800 truncate">{o.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-[10px] text-gray-500">{o.phone}</span>
+                            {o.awb !== '—' && <span className="text-[10px] font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{o.awb}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs font-black text-gray-800">₹{o.amount.toLocaleString('en-IN')}</p>
+                          <p className="text-[9px] text-gray-400 mt-0.5">
+                            {o.date ? new Date(o.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-1.5">
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                          openList === 'delivered' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                        }`}>{o.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Earnings & Chart Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

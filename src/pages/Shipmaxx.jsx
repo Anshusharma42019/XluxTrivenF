@@ -545,6 +545,7 @@ function OrdersSection() {
                     <th className="px-4 py-3 text-left">Product</th>
                     <th className="px-4 py-3 text-left">AWB</th>
                     <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Verified By</th>
                     <th className="px-4 py-3 text-left">Amount</th>
                     <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
@@ -565,6 +566,16 @@ function OrdersSection() {
                       <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${pClass}`}>{pTag}</span></td>
                       <td className="px-4 py-3 font-mono text-xs text-blue-600 font-bold">{o.awb_code || '—'}</td>
                       <td className="px-4 py-3"><span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{o.status}</span></td>
+                      <td className="px-4 py-3">
+                        {o.verification_staff_id ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-[11px] text-gray-800">{o.verification_staff_name || "Unknown Staff"}</span>
+                            <span className="text-[9px] text-gray-400 font-mono">ID: {o.verification_staff_id}</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-gray-400 font-medium">Not Verified</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 font-bold text-gray-800 text-xs">₹{o.sub_total || 0}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1.5">
@@ -1476,7 +1487,16 @@ export default function Shipmaxx() {
                           </div>
                         </div>
                       </div>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border text-center whitespace-nowrap ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{o.status}</span>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border text-center whitespace-nowrap ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{o.status}</span>
+                        {o.verification_staff_id && (
+                          <div className="flex flex-col items-end">
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Verified By</span>
+                            <span className="text-xs font-bold text-gray-800">{o.verification_staff_name || 'Unknown Staff'}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">ID: {o.verification_staff_id}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

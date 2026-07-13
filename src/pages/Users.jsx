@@ -24,7 +24,7 @@ const DEPT_COLOR = {
   migraine: 'bg-purple-50 text-purple-600 border-purple-100',
   piles: 'bg-amber-50 text-amber-600 border-amber-100',
 };
-const EMPTY = { name: '', phone: '', password: '', role: 'manager', departments: [], baseSalary: 0, commissionRate: 5, specialization: '', joiningDate: '' };
+const EMPTY = { name: '', employeeId: '', phone: '', password: '', role: 'manager', departments: [], baseSalary: 0, commissionRate: 5, specialization: '', joiningDate: '' };
 
 const ROLE_GRADIENT = {
   admin:   'from-purple-500 to-violet-600',
@@ -140,6 +140,7 @@ export default function Users() {
     setSelected(u);
     setForm({ 
       name: u.name, 
+      employeeId: u.employeeId || '',
       phone: u.phone || '', 
       password: '', 
       role: u.role, 
@@ -311,7 +312,10 @@ export default function Users() {
                             {u.name?.charAt(0)}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-bold text-gray-800 text-sm">{u.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-gray-800 text-sm">{u.name}</p>
+                              {u.employeeId && <span className="text-[10px] font-medium bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">{u.employeeId}</span>}
+                            </div>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 py-0.5 px-1.5 bg-gray-50 rounded-lg">{u.role}</span>
                               {(u.departments || []).map(dept => (
@@ -616,6 +620,10 @@ export default function Users() {
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Name *</label>
               <input required className={`${inputCls} mt-1.5`} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Employee ID (Optional)</label>
+              <input className={`${inputCls} mt-1.5`} placeholder="e.g. EMP-001" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Phone *</label>

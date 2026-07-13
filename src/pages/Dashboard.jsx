@@ -8,7 +8,8 @@ import {
   fetchStaffStats,
   fetchStaffMonthlyChart,
   fetchStaffCommission,
-  fetchAllStaffCommissions
+  fetchAllStaffCommissions,
+  fetchStaffDeliveryStats
 } from '../services/dashboard.service';
 import * as attendanceSvc from '../services/attendance.service';
 import { useAuth } from '../context/AuthContext';
@@ -99,6 +100,10 @@ export default function Dashboard() {
   const [openSection, setOpenSection] = useState(null);
   const [allStaffStats, setAllStaffStats] = useState([]);
   const [teamOverviewPeriod, setTeamOverviewPeriod] = useState('today');
+
+  const [staffDelivery, setStaffDelivery] = useState(null);
+  const [deliveryMonth, setDeliveryMonth] = useState(() => { const n = new Date(); return { month: n.getMonth(), year: n.getFullYear() }; });
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
 
   const [datePreset, setDatePreset] = useState('today');
   const [filterFrom, setFilterFrom] = useState('');
@@ -231,6 +236,17 @@ export default function Dashboard() {
       if (timer) clearTimeout(timer);
     };
   }, [teamOverviewPeriod, canManage]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    setDeliveryLoading(true);
+    fetchStaffDeliveryStats(deliveryMonth.month, deliveryMonth.year)
+      .then(d => { if (!cancelled) setStaffDelivery(d && typeof d === 'object' ? d : null); })
+      .catch(e => { console.error('Delivery stats error:', e); })
+      .finally(() => { if (!cancelled) setDeliveryLoading(false); });
+    return () => { cancelled = true; };
+  }, [deliveryMonth, canManage, user?._id]);
 
   const [csvLoading, setCsvLoading] = useState(false);
 
@@ -937,6 +953,132 @@ export default function Dashboard() {
       {/* Shipment Analytics — Admin/Manager only */}
       {canManage && (
         <ShipmentAnalyticsPanel department={department} />
+      )}
+
+      {/* Staff Delivery Scorecard */}
+      {canManage && (
+        <div className={cardCls} style={cardStyle}>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-gray-800">Staff Delivery Scorecard</h3>
+                <p className="text-[10px] text-gray-400">New orders → Sales staff · Old/Re-orders → Support staff</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setDeliveryMonth(p => { const m = p.month - 1; return m < 0 ? { month: 11, year: p.year - 1 } : { month: m, year: p.year }; })}
+                className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <span className="text-[11px] font-black min-w-[80px] text-center text-gray-700 uppercase tracking-tight">
+                {new Date(deliveryMonth.year, deliveryMonth.month).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+              </span>
+              <button onClick={() => setDeliveryMonth(p => { const m = p.month + 1; return m > 11 ? { month: 0, year: p.year + 1 } : { month: m, year: p.year }; })}
+                className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          {deliveryLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (!staffDelivery || (!staffDelivery?.staff?.length && !staffDelivery?.unassignedDelivered && !staffDelivery?.unassignedRto)) ? (
+            <p className="text-xs text-gray-400 text-center py-8">No delivery data for this month</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[400px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="py-3 px-4 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">#</th>
+                    <th className="py-3 px-4 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Staff</th>
+                    <th className="py-3 px-4 text-center text-[10px] font-black uppercase tracking-widest text-emerald-600">Delivered</th>
+                    <th className="py-3 px-4 text-center text-[10px] font-black uppercase tracking-widest text-red-500">RTO</th>
+                    <th className="py-3 px-4 text-center text-[10px] font-black uppercase tracking-widest text-gray-600">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(staffDelivery?.staff || []).map((s, i) => {
+                    const total = s.delivered + s.rto;
+                    const grandTotal = (staffDelivery?.totalDelivered || 0) + (staffDelivery?.totalRto || 0);
+                    const pct = grandTotal > 0 ? Math.round((total / grandTotal) * 100) : 0;
+                    return (
+                      <tr key={String(s.user._id)} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                        <td className="py-3 px-4 font-bold text-gray-400">{i + 1}</td>
+                        <td className="py-3 px-4">
+                          <div>
+                            <p className="font-bold text-gray-800">{s.user.name}</p>
+                            <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                              s.user.role === 'support' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
+                            }`}>{s.user.role}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 font-black text-sm">{s.delivered}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl font-black text-sm ${
+                            s.rto > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-300'
+                          }`}>{s.rto}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="font-black text-gray-800 text-sm">{total}</span>
+                            <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[9px] font-bold text-gray-400">{pct}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Unassigned row */}
+                  {((staffDelivery?.unassignedDelivered || 0) + (staffDelivery?.unassignedRto || 0)) > 0 && (
+                    <tr className="border-b border-gray-50 hover:bg-amber-50/30 transition-colors">
+                      <td className="py-3 px-4 font-bold text-gray-300">—</td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="font-bold text-amber-600">Unassigned</p>
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-50 text-amber-600">no verification</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-50 text-amber-700 font-black text-sm">{staffDelivery?.unassignedDelivered || 0}</span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl font-black text-sm ${
+                          (staffDelivery?.unassignedRto || 0) > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-300'
+                        }`}>{staffDelivery?.unassignedRto || 0}</span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="font-black text-amber-700 text-sm">{(staffDelivery?.unassignedDelivered || 0) + (staffDelivery?.unassignedRto || 0)}</span>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 border-t-2 border-gray-200">
+                    <td colSpan={2} className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Grand Total</td>
+                    <td className="py-3 px-4 text-center font-black text-emerald-700">
+                      {staffDelivery?.totalDelivered || 0}
+                    </td>
+                    <td className="py-3 px-4 text-center font-black text-red-600">
+                      {staffDelivery?.totalRto || 0}
+                    </td>
+                    <td className="py-3 px-4 text-center font-black text-gray-800">
+                      {(staffDelivery?.totalDelivered || 0) + (staffDelivery?.totalRto || 0)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Admin Monitoring Staff Overview */}

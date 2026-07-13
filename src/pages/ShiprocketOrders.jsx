@@ -655,6 +655,7 @@ export default function ShiprocketOrders() {
                         "AWB",
                         "Courier",
                         "Status",
+                        "Verified By",
                         "Amount",
                         "Actions",
                       ].map((h) => (
@@ -702,6 +703,16 @@ export default function ShiprocketOrders() {
                             >
                               {o.status || "—"}
                             </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {o.verification_staff_id ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-bold text-[12px] text-gray-800">{o.verification_staff_name || "Unknown Staff"}</span>
+                                <span className="text-[10px] text-gray-400 font-mono">ID: {o.verification_staff_id}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-gray-400 font-medium">Not Verified</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 font-bold text-gray-900 text-[13px]">
                             ₹{o.total}
@@ -802,6 +813,20 @@ export default function ShiprocketOrders() {
                               {o.shipments?.[0]?.courier || "—"}
                             </p>
                           </div>
+                        </div>
+
+                        <div className="bg-gray-50/80 rounded-xl p-2.5 border border-gray-100/50">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                            Verified By
+                          </p>
+                          {o.verification_staff_id ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="font-bold text-xs text-gray-800">{o.verification_staff_name || "Unknown Staff"}</span>
+                              <span className="text-[10px] text-gray-400 font-mono bg-white px-1.5 py-0.5 rounded-md border border-gray-200">ID: {o.verification_staff_id}</span>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-gray-400 font-medium mt-0.5">Not Verified</p>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">

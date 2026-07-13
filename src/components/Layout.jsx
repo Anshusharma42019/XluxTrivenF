@@ -461,7 +461,11 @@ export default function Layout() {
             </button>
 
             {/* Avatar button */}
-            <div className="relative">
+            <div className="relative flex items-center gap-3">
+              <div className="hidden md:flex flex-col items-end">
+                <span className="text-sm font-bold text-gray-700 leading-tight">{user?.name}</span>
+                <span className="text-[10px] font-extrabold text-green-600 uppercase tracking-widest">{user?.employeeId || user?.role}</span>
+              </div>
               <button
                 id="avatar-btn"
                 onClick={() => { setAvatarOpen(p => !p); setAvatarError(''); }}
@@ -503,7 +507,10 @@ export default function Layout() {
                           <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-400 rounded-full border-2 border-white" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-white font-black text-base tracking-tight truncate leading-tight">{user?.name}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-white font-black text-base tracking-tight truncate leading-tight">{user?.name}</p>
+                            {user?.employeeId && <span className="bg-white/20 text-white text-[10px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 rounded border border-white/30">{user.employeeId}</span>}
+                          </div>
                           <p className="text-emerald-300 text-[10px] font-extrabold uppercase tracking-widest mt-0.5">{user?.role}</p>
                           {user?.departments?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
