@@ -118,7 +118,7 @@ export default function Users() {
 
   const openView = async (u) => {
     setViewUser(u); setViewTasks([]); setViewLoading(true); setModal('view');
-    setTodayLists({ cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] });
+    setTodayLists({ cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [], verificationList: [] });
     try {
       const [shipmentsRes, lists] = await Promise.all([
         API.get('/ready-to-shipment/by-user/' + u._id).catch(() => API.get('/tasks', { params: { status: 'ready_to_shipment', assignedTo: u._id } })),
@@ -127,7 +127,7 @@ export default function Users() {
       
       const tasks = Array.isArray(shipmentsRes.data?.data) ? shipmentsRes.data.data : Array.isArray(shipmentsRes.data) ? shipmentsRes.data : [];
       setViewTasks(tasks);
-      setTodayLists(lists || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] });
+      setTodayLists(lists || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [], verificationList: [] });
     } catch (e) {
       console.error('view fetch error:', e);
     } finally {
@@ -501,6 +501,7 @@ export default function Users() {
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Activity Detail Lists</p>
                       <div className="space-y-4">
                         {[
+                          { label: 'Verification List', list: todayLists.verificationList || [], color: 'text-blue-600', bg: 'bg-blue-50' },
                           { label: 'CNP List', list: todayLists.cnpList, color: 'text-red-500', bg: 'bg-red-50' },
                           { label: 'Call Again List', list: todayLists.callAgainList, color: 'text-yellow-600', bg: 'bg-yellow-50' },
                           { label: 'Interested List', list: todayLists.interestedList, color: 'text-green-600', bg: 'bg-green-50' },
