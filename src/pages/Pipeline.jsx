@@ -85,8 +85,8 @@ export default function Pipeline() {
 
   const fetchWaReplies = useCallback(async () => {
     try {
-      const res = await getNotifications({ limit: 50 });
-      const replies = (res.notifications || []).filter(n => n.title === 'New Bulk WhatsApp Reply' || n.title === 'New WhatsApp Reply' || n.title === 'New WhatsApp Lead');
+      const res = await getNotifications({ limit: 50, isWa: true });
+      const replies = res.notifications || [];
       setWaReplies(replies);
     } catch (e) {}
   }, []);
@@ -383,20 +383,23 @@ export default function Pipeline() {
             </select>
           </div>
           <div className="flex items-center justify-between gap-3 relative z-20">
-            {canManage && filter !== 'follow_up' && (
                <div className="flex items-center gap-2">
-                 <button 
-                   onClick={() => setBulkModalOpen(true)}
-                   className="px-4 py-2 bg-green-500 text-white text-xs font-bold rounded-xl hover:bg-green-600 transition shadow-sm flex items-center gap-2"
-                 >
-                   💬 Send Message to All {STAGES.find(s=>s.key===filter)?.label || filter.toUpperCase()} ({filteredItems.length})
-                 </button>
-                 <button 
-                   onClick={() => setLogsModalOpen(true)}
-                   className="px-4 py-2 bg-gray-800 text-white text-xs font-bold rounded-xl hover:bg-gray-900 transition shadow-sm"
-                 >
-                   Bulk Logs
-                 </button>
+                 {canManage && filter !== 'follow_up' && (
+                   <>
+                     <button 
+                       onClick={() => setBulkModalOpen(true)}
+                       className="px-4 py-2 bg-green-500 text-white text-xs font-bold rounded-xl hover:bg-green-600 transition shadow-sm flex items-center gap-2"
+                     >
+                       💬 Send Message to All {STAGES.find(s=>s.key===filter)?.label || filter.toUpperCase()} ({filteredItems.length})
+                     </button>
+                     <button 
+                       onClick={() => setLogsModalOpen(true)}
+                       className="px-4 py-2 bg-gray-800 text-white text-xs font-bold rounded-xl hover:bg-gray-900 transition shadow-sm"
+                     >
+                       Bulk Logs
+                     </button>
+                   </>
+                 )}
                  
                  {/* WhatsApp Replies Dropdown */}
                  <div className="relative">
@@ -416,7 +419,7 @@ export default function Pipeline() {
                    {waRepliesOpen && (
                      <>
                        <div className="fixed inset-0 z-40" onClick={() => setWaRepliesOpen(false)}></div>
-                       <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden flex flex-col max-h-96">
+                       <div className="absolute left-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden flex flex-col max-h-96">
                          <div className="bg-emerald-600 text-white px-4 py-3 shrink-0 flex items-center justify-between">
                            <span className="font-bold text-sm">Bulk Message Replies</span>
                            <div className="flex items-center gap-3">
@@ -457,8 +460,8 @@ export default function Pipeline() {
                                        </div>
                                      </div>
                                      <div className="mt-1 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                                       <p className="text-[11px] text-gray-700 italic line-clamp-2">
-                                         "{n.message.split('replied: ')[1] || n.message}"
+                                       <p className="text-[11px] text-gray-700 italic line-clamp-4 whitespace-pre-wrap">
+                                         "{n.message.includes(' replied: ') ? n.message.split(' replied: ').slice(1).join(' replied: ') : n.message}"
                                        </p>
                                      </div>
                                      <p className="text-[9px] text-gray-400 mt-1.5 text-right">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -472,8 +475,7 @@ export default function Pipeline() {
                      </>
                    )}
                  </div>
-               </div>
-            )}
+                </div>
           </div>
           <div className="relative w-full flex items-center gap-2">
             <div className="relative flex-1">
