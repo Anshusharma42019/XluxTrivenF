@@ -41,3 +41,10 @@ export const sendLeadWhatsApp = (leadId, message, templateName, languageCode, at
 };
 
 export const getInteraktTemplates = () => API.get('/interakt/templates').then(r => r.data.data?.templates || []);
+
+// Bulk Messaging
+export const sendBulkMessage = (status, templateName) => API.post('/leads/bulk-message', { status, templateName }).then(r => r.data.data);
+export const getBulkMessageLogs = () => API.get('/leads/bulk-message/logs').then(r => r.data.data);
+export const getBulkMessageBatchDetails = (batchId) => API.get(`/leads/bulk-message/logs/${batchId}`).then(r => r.data.data);
+export const getBulkMessageBatchStatus = (batchId) => API.get(`/leads/bulk-message/${batchId}/status`).then(r => r.data.data);
+export const retryBulkMessageBatch = (batchId) => API.post(`/leads/bulk-message/${batchId}/retry`).then(r => r.data.data);

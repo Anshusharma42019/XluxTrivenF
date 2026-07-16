@@ -6,6 +6,9 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { createTask, getCnpRecords, deleteCnpRecord, getTaskByLead } from '../services/task.service';
 import API from '../api';
 import Modal from '../components/ui/Modal';
+import BulkMessageModal from '../components/BulkMessageModal';
+import BulkMessageLogsModal from '../components/BulkMessageLogsModal';
+import { getNotifications, markRead, deleteNotification } from '../services/notification.service';
 
 const PIN_COLORS = [
   'bg-blue-500', 'bg-amber-500', 'bg-purple-500',
@@ -68,10 +71,61 @@ export default function Pipeline() {
   const pendingOpenId = searchParams.get('openId');
   
   const canManage = user?.role === 'admin' || user?.role === 'manager';
-  // Follow-up state
   const [note, setNote] = useState('');
   const [nextDate, setNextDate] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+
+  // Bulk Messaging States
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+
+  // WhatsApp Replies Notification States
+  const [waReplies, setWaReplies] = useState([]);
+  const [waRepliesOpen, setWaRepliesOpen] = useState(false);
+
+  const fetchWaReplies = useCallback(async () => {
+    try {
+      const res = await getNotifications({ limit: 50 });
+      const replies = (res.notifications || []).filter(n => n.title === 'New Bulk WhatsApp Reply' || n.title === 'New WhatsApp Reply' || n.title === 'New WhatsApp Lead');
+      setWaReplies(replies);
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    fetchWaReplies();
+    const t = setInterval(fetchWaReplies, 30000);
+    return () => clearInterval(t);
+  }, [fetchWaReplies]);
+
+  const handleReplyClick = async (notif) => {
+    if (!notif.isRead) {
+      await markRead(notif._id).catch(()=>{});
+      setWaReplies(prev => prev.map(n => n._id === notif._id ? { ...n, isRead: true } : n));
+    }
+    if (notif.relatedLead) {
+      const leadId = typeof notif.relatedLead === 'object' ? notif.relatedLead._id : notif.relatedLead;
+      navigate(`/whatsapp?leadId=${leadId}`);
+    }
+  };
+
+  const handleClearReply = async (e, id) => {
+    e.stopPropagation();
+    try {
+      await deleteNotification(id);
+      setWaReplies(prev => prev.filter(n => n._id !== id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleClearAllReplies = async () => {
+    try {
+      await Promise.all(waReplies.map(n => deleteNotification(n._id)));
+      setWaReplies([]);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const load = useCallback(async (silent = false) => {
     if (!silent) {
@@ -298,7 +352,7 @@ export default function Pipeline() {
       <div className={`flex flex-col gap-4 transition-all duration-300 ${selected ? 'w-full lg:w-[55%]' : 'w-full'} h-full overflow-hidden`}>
         
         {/* Header & Filters */}
-        <div className="flex flex-col gap-3 shrink-0 glass px-5 py-3 rounded-3xl border border-white/50 shadow-sm">
+        <div className="flex flex-col gap-3 shrink-0 glass px-5 py-3 rounded-3xl border border-white/50 shadow-sm relative z-50">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {[
@@ -327,6 +381,99 @@ export default function Pipeline() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="flex items-center justify-between gap-3 relative z-20">
+            {canManage && filter !== 'follow_up' && (
+               <div className="flex items-center gap-2">
+                 <button 
+                   onClick={() => setBulkModalOpen(true)}
+                   className="px-4 py-2 bg-green-500 text-white text-xs font-bold rounded-xl hover:bg-green-600 transition shadow-sm flex items-center gap-2"
+                 >
+                   💬 Send Message to All {STAGES.find(s=>s.key===filter)?.label || filter.toUpperCase()} ({filteredItems.length})
+                 </button>
+                 <button 
+                   onClick={() => setLogsModalOpen(true)}
+                   className="px-4 py-2 bg-gray-800 text-white text-xs font-bold rounded-xl hover:bg-gray-900 transition shadow-sm"
+                 >
+                   Bulk Logs
+                 </button>
+                 
+                 {/* WhatsApp Replies Dropdown */}
+                 <div className="relative">
+                   <button 
+                     onClick={() => setWaRepliesOpen(!waRepliesOpen)}
+                     className="px-4 py-2 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl hover:bg-emerald-200 transition shadow-sm flex items-center gap-2"
+                   >
+                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.14 2 11.25c0 2.016.732 3.882 1.996 5.385-.297 1.543-1.077 3.013-1.127 3.107-.107.195-.083.432.062.602.144.168.369.227.57.147 1.77-.698 3.208-1.503 4.103-2.14.93.25 1.916.386 2.946.386 5.523 0 10-4.14 10-9.25S17.523 2 12 2zm0 16c-1.012 0-1.98-.147-2.887-.419-.24-.07-.5-.041-.715.086-.714.42-1.748.977-3.037 1.488.423-.837.76-1.714.982-2.585.067-.26-.008-.535-.195-.733-1.096-1.157-1.758-2.698-1.758-4.387 0-4.225 3.86-7.65 8.61-7.65s8.61 3.425 8.61 7.65-3.86 7.65-8.61 7.65z"/><path d="M8 10.5h8v1.5H8zm0 3h5v1.5H8z"/></svg>
+                     Bulk Replies
+                     {waReplies.filter(n => !n.isRead).length > 0 && (
+                       <span className="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px]">
+                         {waReplies.filter(n => !n.isRead).length}
+                       </span>
+                     )}
+                   </button>
+                   
+                   {waRepliesOpen && (
+                     <>
+                       <div className="fixed inset-0 z-40" onClick={() => setWaRepliesOpen(false)}></div>
+                       <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden flex flex-col max-h-96">
+                         <div className="bg-emerald-600 text-white px-4 py-3 shrink-0 flex items-center justify-between">
+                           <span className="font-bold text-sm">Bulk Message Replies</span>
+                           <div className="flex items-center gap-3">
+                             {waReplies.length > 0 && (
+                               <button onClick={handleClearAllReplies} className="text-[10px] bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-white font-medium transition">
+                                 Clear All
+                               </button>
+                             )}
+                             <button onClick={() => setWaRepliesOpen(false)} className="text-white/80 hover:text-white transition">&times;</button>
+                           </div>
+                         </div>
+                         <div className="overflow-y-auto flex-1 p-2 custom-scrollbar space-y-1">
+                           {waReplies.length === 0 ? (
+                             <p className="text-xs text-center text-gray-400 py-4">No bulk message replies yet</p>
+                           ) : (
+                             waReplies.map(n => (
+                               <div key={n._id} onClick={() => handleReplyClick(n)}
+                                 className={`p-3 rounded-xl border cursor-pointer hover:bg-emerald-50 transition ${!n.isRead ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-gray-100'}`}
+                               >
+                                 <div className="flex items-start gap-2">
+                                   <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.isRead ? 'bg-emerald-500' : 'bg-gray-300'}`}></div>
+                                   <div className="flex-1">
+                                     <div className="flex items-center justify-between gap-2">
+                                       <p className="text-xs font-bold text-gray-800">
+                                         {n.relatedLead ? (n.relatedLead.name || 'Unknown') : 'Customer'}
+                                       </p>
+                                       <div className="flex items-center gap-2">
+                                         <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-mono tracking-wider">
+                                           {n.relatedLead ? n.relatedLead.phone : ''}
+                                         </span>
+                                         <button 
+                                           onClick={(e) => handleClearReply(e, n._id)}
+                                           className="text-gray-400 hover:text-red-500 transition shrink-0"
+                                           title="Delete this reply"
+                                         >
+                                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                         </button>
+                                       </div>
+                                     </div>
+                                     <div className="mt-1 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                       <p className="text-[11px] text-gray-700 italic line-clamp-2">
+                                         "{n.message.split('replied: ')[1] || n.message}"
+                                       </p>
+                                     </div>
+                                     <p className="text-[9px] text-gray-400 mt-1.5 text-right">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                   </div>
+                                 </div>
+                               </div>
+                             ))
+                           )}
+                         </div>
+                       </div>
+                     </>
+                   )}
+                 </div>
+               </div>
+            )}
           </div>
           <div className="relative w-full flex items-center gap-2">
             <div className="relative flex-1">
@@ -468,6 +615,7 @@ export default function Pipeline() {
                         <span className="text-xs text-gray-400">{lead.phone}</span>
                         {item.cnpCount > 0 && <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded-md">{item.cnpCount}/3 CNP</span>}
                         {(lead.department || item.department) && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{lead.department || item.department}</span>}
+                        {lead.hasUnreadReply && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md shadow-sm border border-emerald-200 animate-pulse">💬 New Reply</span>}
                       </div>
                     </div>
 
@@ -839,6 +987,19 @@ export default function Pipeline() {
           </form>
         </Modal>
       )}
+      {/* Modals */}
+      <BulkMessageModal 
+        isOpen={bulkModalOpen} 
+        onClose={() => setBulkModalOpen(false)} 
+        currentFilter={filter} 
+        items={filteredItems} 
+        totalCount={filteredItems.length} 
+      />
+      
+      <BulkMessageLogsModal 
+        isOpen={logsModalOpen} 
+        onClose={() => setLogsModalOpen(false)} 
+      />
     </div>
   );
 }
