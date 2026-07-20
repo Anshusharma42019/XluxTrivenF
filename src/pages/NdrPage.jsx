@@ -574,7 +574,7 @@ export default function NdrPage() {
         </div>
       </div>
 
-      {tab === 'board'  && <OrderStatusBoard title="Undelivered Orders" defaultStatus="UNDELIVERED_1ST_ATTEMPT" />}
+      {tab === 'board'  && <OrderStatusBoard title="Undelivered Orders" defaultStatus="UNDELIVERED_1ST_ATTEMPT" allowedStatuses={['NEW', 'PICKUP_SCHEDULED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'UNDELIVERED_1ST_ATTEMPT', 'UNDELIVERED_2ND_ATTEMPT', 'UNDELIVERED_3RD_ATTEMPT', 'UNDELIVERED', 'RTO_INITIATED', 'RTO_UNDELIVERED', 'RTO_DELIVERED']} />}
       {tab === 'list'   && <NdrList onSelectNdr={() => {}} onUseAwb={handleUseAwb} />}
       {tab === 'action' && <NdrActionPanel prefillAwb={actionAwb} prefillAction={actionType} />}
       {tab === 'notes'  && <NdrNotesPanel />}

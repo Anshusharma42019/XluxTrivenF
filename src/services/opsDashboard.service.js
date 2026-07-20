@@ -43,3 +43,6 @@ export const fetchShipments = (filters) =>
 
 export const fetchAlerts = (filters) =>
   API.get(`${BASE}/alerts`, { params: buildParams(filters) }).then(r => r.data.data);
+
+export const submitRtoVerification = (payload) =>
+  API.post(`${BASE}/rto-verification`, payload).then(r => r.data);

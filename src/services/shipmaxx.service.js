@@ -65,4 +65,6 @@ export const updateFollowupRelief    = (id, body) => api.patch(`${BASE}/orders/$
 export const createManualFollowup    = (body)     => api.post(`${BASE}/orders/manual-followup`, body);
 
 // ── Verification ──────────────────────────────────────────────────────────────
-export const sendToVerification = (id) => api.post(`${BASE}/orders/${id}/send-to-verification`);
+export const sendToVerification = (id, body = {}) => api.post(`${BASE}/orders/${id}/send-to-verification`, body);
+
+export const toggleNotInterested = (id, not_interested) => api.patch(`${BASE}/orders/${id}/not-interested`, { not_interested });

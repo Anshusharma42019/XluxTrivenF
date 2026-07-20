@@ -55,40 +55,41 @@ const DATE_FILTERS = [
 ];
 
 const STATUS_STYLES = {
-  DELIVERED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  RTO_DELIVERED: 'border-blue-200 bg-blue-50 text-blue-700',
-  IN_TRANSIT: 'border-amber-200 bg-amber-50 text-amber-700',
-  SHIPMENT_CANCELLED: 'border-red-200 bg-red-50 text-red-700',
-  SHIPMENT_BOOKED: 'border-sky-200 bg-sky-50 text-sky-700',
-  RTO_INTRANSIT: 'border-violet-200 bg-violet-50 text-violet-700',
-  OUT_FOR_DELIVERY: 'border-cyan-200 bg-cyan-50 text-cyan-700',
-  REACHED_BACK_AT_SELLER_CITY: 'border-lime-200 bg-lime-50 text-lime-700',
-  'UNDELIVERED_1ST_ATTEMPT': 'border-rose-200 bg-rose-50 text-rose-700',
-  PICKUP_EXCEPTION: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
-  'UNDELIVERED_2ND_ATTEMPT': 'border-pink-200 bg-pink-50 text-pink-700',
-  'UNDELIVERED_3RD_ATTEMPT': 'border-purple-200 bg-purple-50 text-purple-700',
-  RTO_INITIATED: 'border-yellow-200 bg-yellow-50 text-yellow-700',
-  REACHED_AT_DESTINATION_HUB: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-  SHIPPED: 'border-green-200 bg-green-50 text-green-700',
-  RTO_OFD: 'border-teal-200 bg-teal-50 text-teal-700',
-  PICKUP_SCHEDULED: 'border-slate-200 bg-slate-50 text-slate-700',
-  UNDELIVERED: 'border-rose-200 bg-rose-50 text-rose-700',
-  UNDELIVERED_ATTEMPT_FAILURE: 'border-rose-200 bg-rose-50 text-rose-700',
-  MISROUTED: 'border-orange-200 bg-orange-50 text-orange-700',
-  INVOICED: 'border-blue-200 bg-blue-50 text-blue-700',
-  RTO_UNDELIVERED: 'border-orange-300 bg-orange-100 text-orange-800',
-  OUT_FOR_PICKUP: 'border-teal-200 bg-teal-50 text-teal-700',
-  PICKUP_DONE: 'border-purple-300 bg-purple-100 text-purple-800',
-  PICKUP_FAILED: 'border-red-200 bg-red-50 text-red-700',
-  PICKUP_CANCELLED: 'border-red-200 bg-red-50 text-red-700',
-  DELIVERY_EXCEPTION: 'border-rose-200 bg-rose-50 text-rose-700',
-  REVERSE_PICKUP_SCHEDULED: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
-  REVERSE_PICKUP_FAILED: 'border-red-200 bg-red-50 text-red-700',
-  REVERSE_PICKED_UP: 'border-fuchsia-300 bg-fuchsia-100 text-fuchsia-800',
-  REVERSE_PICKUP_CANCELLED: 'border-gray-200 bg-gray-100 text-gray-700',
-  DISPOSED_OFF: 'border-gray-300 bg-gray-200 text-gray-800',
-  DAMAGED: 'border-red-300 bg-red-100 text-red-800',
-  LOST: 'border-red-400 bg-red-200 text-red-900',
+  DELIVERED: 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/60 text-emerald-800 shadow-[0_4px_12px_-2px_rgba(16,185,129,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(16,185,129,0.3)] hover:-translate-y-1 hover:border-emerald-300',
+  RTO_DELIVERED: 'border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-800 shadow-[0_4px_12px_-2px_rgba(59,130,246,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(59,130,246,0.3)] hover:-translate-y-1 hover:border-blue-300',
+  IN_TRANSIT: 'border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100/60 text-amber-800 shadow-[0_4px_12px_-2px_rgba(245,158,11,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(245,158,11,0.3)] hover:-translate-y-1 hover:border-amber-300',
+  SHIPMENT_CANCELLED: 'border-red-200 bg-gradient-to-br from-red-50 to-red-100/60 text-red-800 shadow-[0_4px_12px_-2px_rgba(239,68,68,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(239,68,68,0.3)] hover:-translate-y-1 hover:border-red-300',
+  SHIPMENT_BOOKED: 'border-sky-200 bg-gradient-to-br from-sky-50 to-sky-100/60 text-sky-800 shadow-[0_4px_12px_-2px_rgba(14,165,233,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(14,165,233,0.3)] hover:-translate-y-1 hover:border-sky-300',
+  RTO_INTRANSIT: 'border-violet-200 bg-gradient-to-br from-violet-50 to-violet-100/60 text-violet-800 shadow-[0_4px_12px_-2px_rgba(139,92,246,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(139,92,246,0.3)] hover:-translate-y-1 hover:border-violet-300',
+  OUT_FOR_DELIVERY: 'border-cyan-200 bg-gradient-to-br from-cyan-50 to-cyan-100/60 text-cyan-800 shadow-[0_4px_12px_-2px_rgba(6,182,212,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(6,182,212,0.3)] hover:-translate-y-1 hover:border-cyan-300',
+  REACHED_BACK_AT_SELLER_CITY: 'border-lime-200 bg-gradient-to-br from-lime-50 to-lime-100/60 text-lime-800 shadow-[0_4px_12px_-2px_rgba(132,204,22,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(132,204,22,0.3)] hover:-translate-y-1 hover:border-lime-300',
+  'UNDELIVERED_1ST_ATTEMPT': 'border-rose-200 bg-gradient-to-br from-rose-50 to-rose-100/60 text-rose-800 shadow-[0_4px_12px_-2px_rgba(244,63,94,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(244,63,94,0.3)] hover:-translate-y-1 hover:border-rose-300',
+  PICKUP_EXCEPTION: 'border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-fuchsia-100/60 text-fuchsia-800 shadow-[0_4px_12px_-2px_rgba(217,70,239,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(217,70,239,0.3)] hover:-translate-y-1 hover:border-fuchsia-300',
+  'UNDELIVERED_2ND_ATTEMPT': 'border-pink-200 bg-gradient-to-br from-pink-50 to-pink-100/60 text-pink-800 shadow-[0_4px_12px_-2px_rgba(236,72,153,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(236,72,153,0.3)] hover:-translate-y-1 hover:border-pink-300',
+  'UNDELIVERED_3RD_ATTEMPT': 'border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/60 text-purple-800 shadow-[0_4px_12px_-2px_rgba(168,85,247,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(168,85,247,0.3)] hover:-translate-y-1 hover:border-purple-300',
+  RTO_INITIATED: 'border-yellow-200 bg-gradient-to-br from-yellow-50 to-yellow-100/60 text-yellow-800 shadow-[0_4px_12px_-2px_rgba(234,179,8,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(234,179,8,0.3)] hover:-translate-y-1 hover:border-yellow-300',
+  REACHED_AT_DESTINATION_HUB: 'border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100/60 text-indigo-800 shadow-[0_4px_12px_-2px_rgba(99,102,241,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(99,102,241,0.3)] hover:-translate-y-1 hover:border-indigo-300',
+  SHIPPED: 'border-green-200 bg-gradient-to-br from-green-50 to-green-100/60 text-green-800 shadow-[0_4px_12px_-2px_rgba(34,197,94,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(34,197,94,0.3)] hover:-translate-y-1 hover:border-green-300',
+  RTO_OFD: 'border-teal-200 bg-gradient-to-br from-teal-50 to-teal-100/60 text-teal-800 shadow-[0_4px_12px_-2px_rgba(20,184,166,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(20,184,166,0.3)] hover:-translate-y-1 hover:border-teal-300',
+  PICKUP_SCHEDULED: 'border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100/60 text-slate-800 shadow-[0_4px_12px_-2px_rgba(100,116,139,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(100,116,139,0.3)] hover:-translate-y-1 hover:border-slate-300',
+  UNDELIVERED: 'border-rose-200 bg-gradient-to-br from-rose-50 to-rose-100/60 text-rose-800 shadow-[0_4px_12px_-2px_rgba(244,63,94,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(244,63,94,0.3)] hover:-translate-y-1 hover:border-rose-300',
+  UNDELIVERED_ATTEMPT_FAILURE: 'border-rose-200 bg-gradient-to-br from-rose-50 to-rose-100/60 text-rose-800 shadow-[0_4px_12px_-2px_rgba(244,63,94,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(244,63,94,0.3)] hover:-translate-y-1 hover:border-rose-300',
+  MISROUTED: 'border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100/60 text-orange-800 shadow-[0_4px_12px_-2px_rgba(249,115,22,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(249,115,22,0.3)] hover:-translate-y-1 hover:border-orange-300',
+  INVOICED: 'border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-800 shadow-[0_4px_12px_-2px_rgba(59,130,246,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(59,130,246,0.3)] hover:-translate-y-1 hover:border-blue-300',
+  RTO_UNDELIVERED: 'border-orange-300 bg-gradient-to-br from-orange-100 to-orange-200/60 text-orange-900 shadow-[0_4px_12px_-2px_rgba(249,115,22,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(249,115,22,0.3)] hover:-translate-y-1 hover:border-orange-400',
+  OUT_FOR_PICKUP: 'border-teal-200 bg-gradient-to-br from-teal-50 to-teal-100/60 text-teal-800 shadow-[0_4px_12px_-2px_rgba(20,184,166,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(20,184,166,0.3)] hover:-translate-y-1 hover:border-teal-300',
+  PICKUP_DONE: 'border-purple-300 bg-gradient-to-br from-purple-100 to-purple-200/60 text-purple-900 shadow-[0_4px_12px_-2px_rgba(168,85,247,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(168,85,247,0.3)] hover:-translate-y-1 hover:border-purple-400',
+  PICKUP_FAILED: 'border-red-200 bg-gradient-to-br from-red-50 to-red-100/60 text-red-800 shadow-[0_4px_12px_-2px_rgba(239,68,68,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(239,68,68,0.3)] hover:-translate-y-1 hover:border-red-300',
+  PICKUP_CANCELLED: 'border-red-200 bg-gradient-to-br from-red-50 to-red-100/60 text-red-800 shadow-[0_4px_12px_-2px_rgba(239,68,68,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(239,68,68,0.3)] hover:-translate-y-1 hover:border-red-300',
+  DELIVERY_EXCEPTION: 'border-rose-200 bg-gradient-to-br from-rose-50 to-rose-100/60 text-rose-800 shadow-[0_4px_12px_-2px_rgba(244,63,94,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(244,63,94,0.3)] hover:-translate-y-1 hover:border-rose-300',
+  REVERSE_PICKUP_SCHEDULED: 'border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-fuchsia-100/60 text-fuchsia-800 shadow-[0_4px_12px_-2px_rgba(217,70,239,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(217,70,239,0.3)] hover:-translate-y-1 hover:border-fuchsia-300',
+  REVERSE_PICKUP_FAILED: 'border-red-200 bg-gradient-to-br from-red-50 to-red-100/60 text-red-800 shadow-[0_4px_12px_-2px_rgba(239,68,68,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(239,68,68,0.3)] hover:-translate-y-1 hover:border-red-300',
+  REVERSE_PICKED_UP: 'border-fuchsia-300 bg-gradient-to-br from-fuchsia-100 to-fuchsia-200/60 text-fuchsia-900 shadow-[0_4px_12px_-2px_rgba(217,70,239,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(217,70,239,0.3)] hover:-translate-y-1 hover:border-fuchsia-400',
+  REVERSE_PICKUP_CANCELLED: 'border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100/60 text-gray-800 shadow-[0_4px_12px_-2px_rgba(107,114,128,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(107,114,128,0.3)] hover:-translate-y-1 hover:border-gray-300',
+  DISPOSED_OFF: 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200/60 text-gray-800 shadow-[0_4px_12px_-2px_rgba(107,114,128,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(107,114,128,0.3)] hover:-translate-y-1 hover:border-gray-400',
+  DAMAGED: 'border-red-300 bg-gradient-to-br from-red-100 to-red-200/60 text-red-900 shadow-[0_4px_12px_-2px_rgba(239,68,68,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(239,68,68,0.3)] hover:-translate-y-1 hover:border-red-400',
+  LOST: 'border-red-400 bg-gradient-to-br from-red-200 to-red-300/60 text-red-950 shadow-[0_4px_12px_-2px_rgba(239,68,68,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(239,68,68,0.3)] hover:-translate-y-1 hover:border-red-500',
+  NEW: 'border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-800 shadow-[0_4px_12px_-2px_rgba(59,130,246,0.15)] hover:shadow-[0_8px_24px_-4px_rgba(59,130,246,0.3)] hover:-translate-y-1 hover:border-blue-300',
 };
 
 const formatDateInput = (date) => {
@@ -180,6 +181,7 @@ export default function OrderStatusBoard({
   onStatsChange,
   filterParams,
   platform = 'shiprocket',
+  allowedStatuses,
 }) {
   const { t } = useLanguage();
   const svc = platform === 'shipmaxx' ? smxSvc : srSvc;
@@ -340,12 +342,14 @@ export default function OrderStatusBoard({
 
 
   const listedStatuses = new Set(STATUS_LIST.map(normalizeStatus));
-  const statusCards = [
-    ...STATUS_LIST.map(status => ({ status: normalizeStatus(status), count: statusCounts[normalizeStatus(status)] || 0 })),
-    ...deliveredStats.statusBreakdown
-      .filter(item => item._id && !listedStatuses.has(normalizeStatus(item._id)))
-      .map(item => ({ status: normalizeStatus(item._id), count: item.count })),
-  ];
+  const statusCards = allowedStatuses
+    ? allowedStatuses.map(status => ({ status: normalizeStatus(status), count: statusCounts[normalizeStatus(status)] || 0 }))
+    : [
+        ...STATUS_LIST.map(status => ({ status: normalizeStatus(status), count: statusCounts[normalizeStatus(status)] || 0 })),
+        ...deliveredStats.statusBreakdown
+          .filter(item => item._id && !listedStatuses.has(normalizeStatus(item._id)))
+          .map(item => ({ status: normalizeStatus(item._id), count: item.count })),
+      ];
 
   const orderTotal = deliveredStats.statusBreakdown.reduce((sum, item) => sum + item.count, 0);
 
@@ -417,21 +421,33 @@ export default function OrderStatusBoard({
       {statusCards.length === 0 ? (
         <p className="text-sm text-gray-300">No order data yet</p>
       ) : (
-        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
           {statusCards.map(({ status, count }) => {
             const selected = selectedStatus === status;
             return (
               <button key={status} onClick={() => openStatusDetails(status)}
-                className={`order-status-interactive min-h-[70px] sm:min-h-[86px] text-left rounded-2xl border p-3.5 sm:p-4 transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${
-                  selected ? 'ring-2 ring-green-500 border-green-300 bg-green-50' : STATUS_STYLES[normalizeStatus(status)] || 'border-gray-200 bg-gray-50 text-gray-700'
+                className={`group relative overflow-hidden order-status-interactive min-h-[90px] sm:min-h-[110px] text-left rounded-2xl border transition-all duration-300 ease-out active:scale-95 flex flex-col justify-between p-4 sm:p-5 ${
+                  selected ? 'ring-2 ring-green-500 border-green-300 bg-green-50 shadow-lg scale-[1.02] z-10' : (STATUS_STYLES[normalizeStatus(status)] || 'border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100/60 text-gray-700 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-gray-300')
                 }`}>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-[10px] sm:text-[11px] font-black uppercase leading-4 break-words tracking-tight">{t(formatStatusLabel(status))}</span>
-                  <svg className="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
+                {/* Ambient glow in corner */}
+                <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-current opacity-[0.07] rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                {/* Glass reflection */}
+                <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                
+                <div className="relative z-10 flex items-start justify-between gap-3 w-full">
+                  <span className="text-[10px] sm:text-[11px] font-extrabold uppercase leading-tight tracking-wider opacity-80 flex-1">{t(formatStatusLabel(status))}</span>
+                  <div className={`w-6 h-6 shrink-0 rounded-full bg-white/50 backdrop-blur-md shadow-sm border border-white/20 flex items-center justify-center group-hover:scale-110 transition-transform ${selected ? 'text-green-600' : ''}`}>
+                    <div className="w-1.5 h-1.5 rounded-full bg-current shadow-[0_0_8px_currentColor] opacity-80"></div>
+                  </div>
                 </div>
-                <div className="mt-2 sm:mt-3 text-xl sm:text-2xl font-black tracking-tight">{count}</div>
+                
+                <div className="relative z-10 mt-3 sm:mt-4 flex items-baseline gap-1.5">
+                  <span className="text-3xl sm:text-4xl font-black tracking-tighter drop-shadow-sm">{count}</span>
+                  <span className="text-[10px] font-bold opacity-50 uppercase tracking-widest">Orders</span>
+                </div>
+                
+                {/* Accent line at bottom */}
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-current opacity-10 group-hover:opacity-20 transition-opacity"></div>
               </button>
             );
           })}

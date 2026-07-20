@@ -5,6 +5,7 @@ import {
   fetchKPIs, fetchTrend, fetchFunnel, fetchRtoReasons,
   fetchAging, fetchLeaderboard, fetchShipments, fetchAlerts
 } from '../services/opsDashboard.service';
+import RtoVerificationModal from '../components/RtoVerificationModal';
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 const fmtNum = (n) => {
@@ -40,7 +41,7 @@ const STATUS_COLORS = {
 
 /* ─── Sparkline (mini SVG line) ──────────────────────────────────────────── */
 function Sparkline({ data = [], color = '#16a34a', height = 28 }) {
-  if (!data.length) return null;
+  if (data.length <= 1) return null;
   const max = Math.max(...data, 1);
   const w = 80; const h = height;
   const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * h}`).join(' ');
@@ -56,35 +57,56 @@ function KpiCard({ label, value, change, color, formatter = fmtNum, sparkData = 
   return (
     <div
       onClick={onClick}
+      className="group relative overflow-hidden transition-all duration-300 ease-out active:scale-95 flex flex-col justify-between"
       style={{
-        background: '#fff', borderRadius: 16, padding: '20px 22px', cursor: onClick ? 'pointer' : 'default',
-        border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-        transition: 'all .2s', display: 'flex', flexDirection: 'column', gap: 10,
-        position: 'relative', overflow: 'hidden',
+        background: `linear-gradient(135deg, ${color}0A, ${color}14)`,
+        border: `1px solid ${color}25`,
+        borderRadius: 16, padding: '20px', cursor: onClick ? 'pointer' : 'default',
+        boxShadow: `0 4px 12px -2px ${color}15`,
+        minHeight: 110,
       }}
-      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'none'; }}
+      onMouseEnter={e => { 
+        e.currentTarget.style.boxShadow = `0 8px 24px -4px ${color}40`; 
+        e.currentTarget.style.transform = 'translateY(-4px)'; 
+        e.currentTarget.style.borderColor = `${color}40`;
+      }}
+      onMouseLeave={e => { 
+        e.currentTarget.style.boxShadow = `0 4px 12px -2px ${color}15`; 
+        e.currentTarget.style.transform = 'none'; 
+        e.currentTarget.style.borderColor = `${color}25`;
+      }}
     >
-      {/* color bar */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: color, borderRadius: '16px 16px 0 0' }} />
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: .5 }}>{label}</div>
-            {subtext && <div title={subtext} style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', padding: '2px 6px', borderRadius: 4, cursor: 'help' }}>ℹ</div>}
-          </div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: '#0f172a', lineHeight: 1, fontFamily: "'Outfit', sans-serif" }}>
+      {/* Ambient glow in corner */}
+      <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none" style={{ background: color, opacity: 0.1 }}></div>
+      {/* Glass reflection */}
+      <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+      
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', position: 'relative', zIndex: 10, width: '100%', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, textShadow: '0 1px 2px rgba(255,255,255,0.8)' }}>{label}</div>
+          {subtext && <div title={subtext} style={{ fontSize: 10, background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(4px)', color: '#64748b', padding: '2px 6px', borderRadius: 4, cursor: 'help' }}>ℹ</div>}
+        </div>
+        <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }} className="group-hover:scale-110 transition-transform">
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` }}></div>
+        </div>
+      </div>
+      
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', position: 'relative', zIndex: 10, marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <div style={{ fontSize: 36, fontWeight: 900, color: color, lineHeight: 1, letterSpacing: '-0.02em', textShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
             {value !== undefined ? formatter(value) : <span style={{ opacity: .4, fontSize: 20 }}>—</span>}
           </div>
+          <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.5, textTransform: 'uppercase', letterSpacing: 1, color }}>Units</span>
         </div>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>
-          {icon}
+        
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <ChangeChip value={change} />
+          {sparkData && sparkData.length > 0 && <div style={{ width: 60 }}><Sparkline data={sparkData} color={color} /></div>}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <ChangeChip value={change} />
-        <Sparkline data={sparkData} color={color} />
-      </div>
+      
+      {/* Accent line at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 transition-opacity pointer-events-none group-hover:opacity-30" style={{ background: color, opacity: 0.15 }}></div>
     </div>
   );
 }
@@ -102,9 +124,10 @@ function TrendChart({ data = [] }) {
   const [hovered, setHovered] = useState(null);
 
   const getY = (val) => H - (val / maxVal) * H;
-  const getX = (i) => (i / (data.length - 1)) * W;
+  const getX = (i) => data.length <= 1 ? W / 2 : (i / (data.length - 1)) * W;
 
   const buildPath = (key) => {
+    if (data.length <= 1) return "";
     const pts = data.map((d, i) => `${getX(i).toFixed(1)},${getY(d[key] || 0).toFixed(1)}`).join(' L ');
     return `M ${pts}`;
   };
@@ -113,7 +136,14 @@ function TrendChart({ data = [] }) {
     <div>
       <svg viewBox={`0 0 100 100`} style={{ width: '100%', height: 200, overflow: 'visible' }} preserveAspectRatio="none">
         {keys.map((key, ki) => (
-          <path key={key} d={buildPath(key)} fill="none" stroke={colors[ki]} strokeWidth={0.8} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
+          <g key={key}>
+            {data.length > 1 && (
+              <path d={buildPath(key)} fill="none" stroke={colors[ki]} strokeWidth={0.8} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
+            )}
+            {data.length === 1 && (
+              <circle cx={getX(0)} cy={getY(data[0][key] || 0)} r={1.5} fill={colors[ki]} opacity={0.9} />
+            )}
+          </g>
         ))}
         {/* X-axis labels */}
         {data.filter((_, i) => i % Math.max(1, Math.floor(data.length / 6)) === 0).map((d, i, arr) => {
@@ -207,7 +237,7 @@ function DonutChart({ reasons = [] }) {
 }
 
 /* ─── Aging Row ──────────────────────────────────────────────────────────── */
-function AgingTable({ rows = [], title, color, emptyMsg }) {
+function AgingTable({ rows = [], title, color, emptyMsg, onVerifyClick, showVerify }) {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? rows : rows.slice(0, 5);
   if (!rows.length) return (
@@ -222,27 +252,57 @@ function AgingTable({ rows = [], title, color, emptyMsg }) {
               {['AWB', 'Customer', 'City/State', 'Courier', 'Status', 'Updated', 'Attempts', 'Amount'].map(h => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
+              {showVerify && <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>Action</th>}
             </tr>
           </thead>
           <tbody>
-            {shown.map((r, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f8fafc', transition: 'background .15s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={{ padding: '10px 10px', fontFamily: 'monospace', fontSize: 12, color: '#0f172a', fontWeight: 600 }}>{r.awb_code || '—'}</td>
-                <td style={{ padding: '10px 10px', color: '#374151', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.billing_customer_name || '—'}</td>
-                <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{[r.billing_city, r.billing_state].filter(Boolean).join(', ') || '—'}</td>
-                <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{r.courier_name || '—'}</td>
-                <td style={{ padding: '10px 10px' }}>
-                  <span style={{ background: color + '18', color, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{r.status}</span>
-                </td>
-                <td style={{ padding: '10px 10px', color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
-                  {r.status_updated_at ? new Date(r.status_updated_at).toLocaleDateString('en-IN') : '—'}
-                </td>
-                <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 700, color: r.delivery_attempt >= 3 ? '#dc2626' : '#374151' }}>{r.delivery_attempt || 1}</td>
-                <td style={{ padding: '10px 10px', color: '#374151', fontWeight: 600 }}>₹{(r.sub_total || 0).toLocaleString('en-IN')}</td>
-              </tr>
-            ))}
+            {shown.map((r, i) => {
+              const isNoNeed = r.rto_verification_action === 'no_need';
+              const isVerif = r.rto_verification_action === 'send_to_verification';
+              const isCancelled = isNoNeed || isVerif;
+              const textStyle = { 
+                textDecoration: isCancelled ? 'line-through' : 'none', 
+                textDecorationColor: isVerif ? '#16a34a' : (isNoNeed ? '#dc2626' : 'inherit'),
+                textDecorationThickness: isCancelled ? '2px' : 'auto',
+                opacity: isCancelled ? 0.7 : 1 
+              };
+              
+              return (
+                <tr key={i} style={{ borderBottom: '1px solid #f8fafc', transition: 'background .15s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <td style={{ padding: '10px 10px', fontFamily: 'monospace', fontSize: 12, color: '#0f172a', fontWeight: 600, ...textStyle }}>{r.awb_code || '—'}</td>
+                  <td style={{ padding: '10px 10px', color: '#374151', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...textStyle }}>{r.billing_customer_name || '—'}</td>
+                  <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', ...textStyle }}>{[r.billing_city, r.billing_state].filter(Boolean).join(', ') || '—'}</td>
+                  <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', ...textStyle }}>{r.courier_name || '—'}</td>
+                  <td style={{ padding: '10px 10px', ...textStyle }}>
+                    <span style={{ background: color + '18', color, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{r.status}</span>
+                  </td>
+                  <td style={{ padding: '10px 10px', color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap', ...textStyle }}>
+                    {r.status_updated_at ? new Date(r.status_updated_at).toLocaleDateString('en-IN') : '—'}
+                  </td>
+                  <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 700, color: r.delivery_attempt >= 3 ? '#dc2626' : '#374151', ...textStyle }}>{r.delivery_attempt || 1}</td>
+                  <td style={{ padding: '10px 10px', color: '#374151', fontWeight: 600, ...textStyle }}>₹{(r.sub_total || 0).toLocaleString('en-IN')}</td>
+                  {showVerify && (
+                    <td style={{ padding: '10px 10px', textAlign: 'right' }}>
+                      {r.rto_verification_action === 'wants_again' ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
+                      ) : (
+                        <button 
+                          onClick={() => onVerifyClick(r)}
+                          style={{
+                            padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff',
+                            color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                          }}
+                        >
+                          RTO Verification
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -327,15 +387,15 @@ function LeaderboardTable({ rows = [], sortKey, sortDir, onSort }) {
 }
 
 /* ─── Shipments Table ────────────────────────────────────────────────────── */
-function ShipmentsTable({ data, filters, onFilterChange, onExportCsv }) {
+function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick }) {
   const { shipments = [], total = 0, pages = 1, page = 1 } = data || {};
   const statusChip = (status) => {
     const cat = (() => {
       const s = (status || '').toLowerCase();
-      if (/^delivered/.test(s)) return 'delivered';
-      if (/out.?for.?delivery|^ofd/.test(s)) return 'ofd';
-      if (/^undelivered|^ndr/.test(s)) return 'undelivered';
-      if (/rto.?in.?transit/.test(s)) return 'rtoIntersite';
+      if (/^delivered|^del$/.test(s)) return 'delivered';
+      if (/out.?for.?delivery|^ofd$/.test(s)) return 'ofd';
+      if (/^und|^ndr|^dex|^pcn|undelivered/.test(s)) return 'undelivered';
+      if (/rto.*in.*transit|rra|rto_ofd/.test(s)) return 'rtoIntersite';
       if (/^rto/.test(s)) return 'rto';
       return 'other';
     })();
@@ -387,37 +447,66 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv }) {
               {[(filters.status === 'verified' ? 'Phone' : 'AWB'), 'Customer', 'City/State', 'Courier', 'Status', 'Platform', 'Order Date', 'Status Date', 'Attempts', '₹ Amount'].map(h => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
+              <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>Action</th>
             </tr>
           </thead>
           <tbody>
-            {shipments.map((s, i) => (
+            {shipments.map((s, i) => {
+              const isNoNeed = s.rto_verification_action === 'no_need';
+              const isVerif = s.rto_verification_action === 'send_to_verification';
+              const isCancelled = isNoNeed || isVerif;
+              const textStyle = { 
+                textDecoration: isCancelled ? 'line-through' : 'none', 
+                textDecorationColor: isVerif ? '#16a34a' : (isNoNeed ? '#dc2626' : 'inherit'),
+                textDecorationThickness: isCancelled ? '2px' : 'auto',
+                opacity: isCancelled ? 0.7 : 1 
+              };
+              
+              return (
               <tr key={i} style={{ borderBottom: '1px solid #f8fafc', transition: 'background .15s' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={{ padding: '10px 10px', fontFamily: 'monospace', fontSize: 11, color: '#0f172a', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '10px 10px', fontFamily: 'monospace', fontSize: 11, color: '#0f172a', fontWeight: 600, whiteSpace: 'nowrap', ...textStyle }}>
                   {s.platform === 'verification' ? (s.billing_phone || '—') : (s.awb_code || '—')}
                 </td>
-                <td style={{ padding: '10px 10px', color: '#374151', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '10px 10px', color: '#374151', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...textStyle }}>
                   {s.billing_customer_name || '—'}
                 </td>
-                <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12 }}>{[s.billing_city, s.billing_state].filter(Boolean).join(', ') || '—'}</td>
-                <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12 }}>{s.courier_name || '—'}</td>
-                <td style={{ padding: '10px 10px' }}>{statusChip(s.status)}</td>
-                <td style={{ padding: '10px 10px' }}>
+                <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12, ...textStyle }}>{[s.billing_city, s.billing_state].filter(Boolean).join(', ') || '—'}</td>
+                <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12, ...textStyle }}>{s.courier_name || '—'}</td>
+                <td style={{ padding: '10px 10px', ...textStyle }}>{statusChip(s.status)}</td>
+                <td style={{ padding: '10px 10px', ...textStyle }}>
                   <span style={{ background: s.platform === 'shiprocket' ? '#eff6ff' : '#f0fdf4', color: s.platform === 'shiprocket' ? '#2563eb' : '#16a34a', padding: '2px 7px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
                     {s.platform === 'shiprocket' ? 'SR' : 'SM'}
                   </span>
                 </td>
-                <td style={{ padding: '10px 10px', color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '10px 10px', color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap', ...textStyle }}>
                   {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN') : '—'}
                 </td>
-                <td style={{ padding: '10px 10px', color: '#0f172a', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600 }}>
+                <td style={{ padding: '10px 10px', color: '#0f172a', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600, ...textStyle }}>
                   {(s.delivered_at || s.status_updated_at) ? new Date(s.delivered_at || s.status_updated_at).toLocaleDateString('en-IN') : '—'}
                 </td>
-                <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 700, color: s.delivery_attempt >= 3 ? '#dc2626' : '#374151' }}>{s.delivery_attempt || 1}</td>
-                <td style={{ padding: '10px 10px', color: '#374151', fontWeight: 600, whiteSpace: 'nowrap' }}>₹{(s.sub_total || 0).toLocaleString('en-IN')}</td>
+                <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 700, color: s.delivery_attempt >= 3 ? '#dc2626' : '#374151', ...textStyle }}>{s.delivery_attempt || 1}</td>
+                <td style={{ padding: '10px 10px', color: '#374151', fontWeight: 600, whiteSpace: 'nowrap', ...textStyle }}>₹{(s.sub_total || 0).toLocaleString('en-IN')}</td>
+                <td style={{ padding: '10px 10px', textAlign: 'right' }}>
+                  {(s.status.toLowerCase().includes('rto') && !s.status.toLowerCase().includes('delivered')) && (
+                    s.rto_verification_action === 'wants_again' ? (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
+                    ) : (
+                      <button 
+                        onClick={() => onVerifyClick(s)}
+                        style={{
+                          padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff',
+                          color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                        }}
+                      >
+                        RTO Verification
+                      </button>
+                    )
+                  )}
+                </td>
               </tr>
-            ))}
+            )})}
             {!shipments.length && <tr><td colSpan={9} style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No shipments found</td></tr>}
           </tbody>
         </table>
@@ -461,9 +550,11 @@ function AlertBanner({ alerts = [] }) {
 /* ─── Global Filters Bar ─────────────────────────────────────────────────── */
 const PRESETS = [
   { label: 'Today', value: 'today' },
-  { label: 'This Week', value: 'weekly' },
-  { label: 'MTD', value: 'mtd' },
-  { label: 'QTD', value: 'qtd' },
+  { label: 'Yesterday', value: 'yesterday' },
+  { label: 'Last 7 Days', value: 'last7' },
+  { label: 'This Month', value: 'month' },
+  { label: 'Last Month', value: 'last_month' },
+  { label: 'All Time', value: 'all' },
   { label: 'Custom', value: 'custom' },
 ];
 
@@ -583,8 +674,8 @@ export default function OpsDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
-  const [filters, setFilters] = useState({ preset: 'mtd' });
-  const [shipmentFilters, setShipmentFilters] = useState({ preset: 'mtd', page: 1, limit: 50 });
+  const [filters, setFilters] = useState({ preset: 'today' });
+  const [shipmentFilters, setShipmentFilters] = useState({ page: 1, limit: 50 });
   const [kpis, setKpis] = useState(null);
   const [trend, setTrend] = useState([]);
   const [funnel, setFunnel] = useState(null);
@@ -597,9 +688,28 @@ export default function OpsDashboard() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lbSort, setLbSort] = useState({ key: 'deliveryRate', dir: 'desc' });
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+  const [verificationShipment, setVerificationShipment] = useState(null);
   const autoRefreshTimer = useRef(null);
 
   const setLoad = (key, val) => setLoading(l => ({ ...l, [key]: val }));
+
+  const handleVerifySuccess = (orderId, action) => {
+    // Update aging locally
+    if (aging) {
+      setAging(prev => ({
+        ...prev,
+        rto_intersite_stuck: prev.rto_intersite_stuck.map(s => s.order_id === orderId ? { ...s, rto_verification_action: action } : s)
+      }));
+    }
+    // Update shipments locally
+    if (shipments?.shipments) {
+      setShipments(prev => ({
+        ...prev,
+        shipments: prev.shipments.map(s => s.order_id === orderId ? { ...s, rto_verification_action: action } : s)
+      }));
+    }
+  };
 
   const loadOverview = useCallback(async (f) => {
     setLoad('kpis', true); setLoad('trend', true); setLoad('funnel', true); setLoad('alerts', true);
@@ -710,20 +820,18 @@ export default function OpsDashboard() {
 
   // KPI cards config
   const kpiCards = kpis ? [
-    { key: 'totalShipments', label: 'Total Shipments', color: STATUS_COLORS.totalShipments, formatter: fmtNum, subtext: 'Orders dispatched this month' },
     { key: 'verified', label: 'Verified', color: STATUS_COLORS.verified, formatter: fmtNum },
+    { key: 'totalShipments', label: 'Total Shipments', color: STATUS_COLORS.totalShipments, formatter: fmtNum, subtext: 'Orders dispatched this month' },
+    { key: 'totalSales', label: 'Sales Shipments', color: STATUS_COLORS.totalShipments, formatter: fmtNum },
+    { key: 'totalSupport', label: 'Support Shipments', color: STATUS_COLORS.totalShipments, formatter: fmtNum },
     { key: 'inTransit', label: 'In Transit', color: STATUS_COLORS.inTransit, formatter: fmtNum },
     { key: 'ofd', label: 'Out for Delivery', color: STATUS_COLORS.ofd, formatter: fmtNum },
     { key: 'delivered', label: 'Delivered', color: STATUS_COLORS.delivered, formatter: fmtNum },
+    { key: 'salesDelivered', label: 'Sales Delivered', color: STATUS_COLORS.delivered, formatter: fmtNum },
+    { key: 'supportDelivered', label: 'Support Delivered', color: STATUS_COLORS.delivered, formatter: fmtNum },
     { key: 'undelivered', label: 'Undelivered', color: STATUS_COLORS.undelivered, formatter: fmtNum },
     { key: 'rto', label: 'RTO', color: STATUS_COLORS.rto, formatter: fmtNum },
     { key: 'rtoIntersite', label: 'RTO Intersite', color: STATUS_COLORS.rtoIntersite, formatter: fmtNum },
-    ...( ['admin', 'manager', 'support', 'logistics'].includes(user?.role?.toLowerCase()) ? [
-      { key: 'blDelivered', label: 'Old Delivered', color: STATUS_COLORS.oldDelivered, formatter: fmtNum, subtext: 'Previous month orders delivered this month' },
-      { key: 'blUndelivered', label: 'Old Undelivered', color: STATUS_COLORS.undelivered, formatter: fmtNum },
-      { key: 'blRto', label: 'Old RTO', color: STATUS_COLORS.rto, formatter: fmtNum },
-      { key: 'blRtoIntersite', label: 'Old RTO Intersite', color: STATUS_COLORS.rtoIntersite, formatter: fmtNum }
-    ] : [] ),
     { key: 'ndrRate', label: 'NDR Rate', color: '#f59e0b', formatter: fmtPct },
     { key: 'fadr', label: 'First Attempt Delivery', color: '#10b981', formatter: fmtPct },
     { key: 'avgTat', label: 'Avg TAT', color: '#6366f1', formatter: fmtDays },
@@ -741,10 +849,6 @@ export default function OpsDashboard() {
           .no-print { display: none !important; }
           body { background: white !important; }
           .print-break { page-break-after: always; }
-        }
-        @media (max-width: 768px) {
-          .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .filter-bar { flex-direction: column !important; }
         }
       `}</style>
 
@@ -772,6 +876,23 @@ export default function OpsDashboard() {
                 : `Showing only your verified shipments — ${user?.name || user?.role}`}
             </p>
           </div>
+          
+          {kpis && !loading.kpis && (
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <div style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', padding: '8px 16px', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(22,163,74,0.1)' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.5 }}>Delivered Rate</span>
+                <span style={{ fontSize: 22, fontWeight: 900, color: '#15803d', lineHeight: 1.1 }}>
+                  {kpis.kpis?.deliveredRate?.value || 0}%
+                </span>
+              </div>
+              <div style={{ background: 'linear-gradient(135deg, #fef2f2, #fee2e2)', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(220,38,38,0.1)' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5 }}>RTO Rate</span>
+                <span style={{ fontSize: 22, fontWeight: 900, color: '#b91c1c', lineHeight: 1.1 }}>
+                  {kpis.kpis?.rtoRate?.value || 0}%
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Alert banners */}
@@ -801,7 +922,7 @@ export default function OpsDashboard() {
         {activeTab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* KPI Grid */}
-            <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
               {loading.kpis
                 ? Array.from({ length: ['admin', 'manager', 'support'].includes(user?.role?.toLowerCase()) ? 12 : 11 }).map((_, i) => <Skeleton key={i} h={130} />)
                 : kpiCards.map(card => (
@@ -825,8 +946,8 @@ export default function OpsDashboard() {
               <SectionCard title="Shipment Trend" subtitle="Daily breakdown over the selected period">
                 {loading.trend ? <Skeleton h={200} /> : <TrendChart data={trend} />}
               </SectionCard>
-              <SectionCard title="Delivery Funnel" subtitle="Verified → OFD → Outcome">
-                {loading.funnel ? <Skeleton h={200} /> : <FunnelChart data={funnel} />}
+              <SectionCard title="Delivery Funnel" subtitle="Verified ➔ OFD ➔ Outcome">
+                {loading.funnel ? <Skeleton h={200} /> : <FunnelChart data={{ ...funnel, delivered: kpis?.kpis?.delivered?.value ?? funnel?.delivered }} />}
               </SectionCard>
             </div>
           </div>
@@ -864,7 +985,7 @@ export default function OpsDashboard() {
               {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.undelivered_3plus || []} title="3+ Attempts" color={STATUS_COLORS.undelivered} emptyMsg="No high-attempt shipments 🎉" />}
             </SectionCard>
             <SectionCard title="🚚 RTO Intersite > 5 Days" subtitle="Return-in-transit shipments stuck for over 5 days">
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.rto_intersite_stuck || []} title="RTO Intersite Stuck" color={STATUS_COLORS.rtoIntersite} emptyMsg="No stuck RTO intersite shipments 🎉" />}
+              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.rto_intersite_stuck || []} title="RTO Intersite Stuck" color={STATUS_COLORS.rtoIntersite} emptyMsg="No stuck RTO intersite shipments 🎉" showVerify={true} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />}
             </SectionCard>
           </div>
         )}
@@ -880,11 +1001,18 @@ export default function OpsDashboard() {
         {activeTab === 'shipments' && (
           <SectionCard title="📋 Shipment Detail" subtitle="All shipments with full filtering and export">
             {loading.ships ? <Skeleton h={400} /> : (
-              <ShipmentsTable data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} />
+              <ShipmentsTable data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />
             )}
           </SectionCard>
         )}
       </div>
+
+      <RtoVerificationModal
+        isOpen={verificationModalOpen}
+        onClose={() => { setVerificationModalOpen(false); setVerificationShipment(null); }}
+        shipment={verificationShipment}
+        onSuccess={handleVerifySuccess}
+      />
     </div>
   );
 }

@@ -1050,32 +1050,38 @@ export default function ShipmaxxNdr() {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="font-bold text-gray-800 text-base">ShipMaxx NDR Management</h2>
-          <p className="text-xs text-gray-400 mt-0.5 font-medium">
-            Manage non-delivery reports · Single & bulk actions · GET /ndr · POST /ndr/&#123;id&#125;/action · POST /ndr/bulk-action
-          </p>
+    <div style={{ minHeight: '100vh', background: '#f0f4f0', fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 20px' }}>
+        {/* Header */}
+        <div className="no-print" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: '#0f172a', fontFamily: "'Outfit', sans-serif", letterSpacing: -0.5 }}>
+                📦 ShipMaxx NDR Dashboard
+              </h1>
+            </div>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
+              Manage non-delivery reports • Single & bulk actions
+            </p>
+          </div>
         </div>
-        {/* Tab bar */}
-        <div className="inline-flex gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm overflow-x-auto pb-1 scrollbar-hide whitespace-nowrap">
+
+        {/* Tabs */}
+        <div className="no-print" style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#fff', borderRadius: 12, padding: 4, border: '1px solid rgba(0,0,0,0.06)', width: 'fit-content' }}>
           {TABS.map(t => {
             const active = tab === t.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`h-9 rounded-lg px-3 text-xs font-semibold transition-all inline-flex items-center gap-2 ${active ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
-                  }`}>
-                <span className={`grid h-5 w-5 place-items-center rounded-md ${active ? 'bg-white/20 text-white' : 'bg-orange-50 text-orange-500'}`}>
-                  {t.icon}
-                </span>
-                {t.label}
+              <button key={t.id} onClick={() => setTab(t.id)} style={{
+                padding: '8px 18px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                background: active ? '#f97316' : 'transparent',
+                color: active ? '#fff' : '#64748b',
+                transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <span>{t.icon}</span> {t.label}
               </button>
             );
           })}
         </div>
-      </div>
 
       <div style={{ display: tab === 'board' ? 'block' : 'none' }}>
         <OrderStatusBoard
@@ -1084,6 +1090,7 @@ export default function ShipmaxxNdr() {
           defaultPreset="today"
           defaultStatus="UNDELIVERED"
           platform="shipmaxx"
+          allowedStatuses={['NEW', 'PICKUP_SCHEDULED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'UNDELIVERED_1ST_ATTEMPT', 'UNDELIVERED_2ND_ATTEMPT', 'UNDELIVERED_3RD_ATTEMPT', 'UNDELIVERED', 'RTO_INITIATED', 'RTO_UNDELIVERED', 'RTO_DELIVERED']}
         />
       </div>
       <div style={{ display: tab === 'list' ? 'block' : 'none' }}>
@@ -1094,6 +1101,7 @@ export default function ShipmaxxNdr() {
       </div>
       <div style={{ display: tab === 'notes' ? 'block' : 'none' }}>
         <NdrNotesPanel onUseAwb={(awb) => { setActionItem({ awb, id: '' }); setTab('action'); }} />
+      </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as svc from '../services/attendance.service';
 import { fetchAllStaffCommissions, saveCommissionOverride as dashboardSaveOverride, fetchUnassignedOrders, assignOrder } from '../services/dashboard.service';
@@ -41,6 +41,67 @@ const STATUS_THEMES = {
   },
 };
 
+const ROLE_COLORS = {
+  sales: 'bg-blue-500 text-white',
+  support: 'bg-emerald-500 text-white',
+  verification: 'bg-purple-500 text-white',
+  management: 'bg-amber-500 text-white',
+  admin: 'bg-rose-500 text-white'
+};
+
+/* ─── Glass Card Component ─── */
+function GlassCard({ label, value, color, icon, subtext }) {
+  return (
+    <div
+      className="group relative overflow-hidden transition-all duration-300 ease-out active:scale-95 flex flex-col justify-between"
+      style={{
+        background: `linear-gradient(135deg, ${color}0A, ${color}14)`,
+        border: `1px solid ${color}25`,
+        borderRadius: 16, padding: '20px',
+        boxShadow: `0 4px 12px -2px ${color}15`,
+        minHeight: 110,
+      }}
+      onMouseEnter={e => { 
+        e.currentTarget.style.boxShadow = `0 8px 24px -4px ${color}40`; 
+        e.currentTarget.style.transform = 'translateY(-4px)'; 
+        e.currentTarget.style.borderColor = `${color}40`;
+      }}
+      onMouseLeave={e => { 
+        e.currentTarget.style.boxShadow = `0 4px 12px -2px ${color}15`; 
+        e.currentTarget.style.transform = 'none'; 
+        e.currentTarget.style.borderColor = `${color}25`;
+      }}
+    >
+      <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none" style={{ background: color, opacity: 0.1 }}></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+      
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', position: 'relative', zIndex: 10, width: '100%', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, textShadow: '0 1px 2px rgba(255,255,255,0.8)' }}>{label}</div>
+        </div>
+        <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }} className="group-hover:scale-110 transition-transform text-white">
+          <svg className="w-4 h-4" fill="none" stroke={color} strokeWidth={2.5} viewBox="0 0 24 24"><path d={icon}/></svg>
+        </div>
+      </div>
+      
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', position: 'relative', zIndex: 10, marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <div style={{ fontSize: 32, fontWeight: 900, color: color, lineHeight: 1, letterSpacing: '-0.02em', textShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+            {value}
+          </div>
+        </div>
+        {subtext && (
+          <div className="text-[10px] px-2 py-0.5 rounded font-bold uppercase" style={{ background: `${color}1A`, color: color }}>
+            {subtext}
+          </div>
+        )}
+      </div>
+      
+      <div className="absolute bottom-0 left-0 right-0 h-1 transition-opacity pointer-events-none group-hover:opacity-30" style={{ background: color, opacity: 0.15 }}></div>
+    </div>
+  );
+}
+
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function formatTime(d) {
@@ -74,65 +135,65 @@ function AttendanceCalendar({ records, year, month, onChangeMonth }) {
   records.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
 
   return (
-    <div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 transition-all hover:shadow-2xl max-w-2xl mx-auto">
+    <div className="bg-white rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-gray-100 max-w-2xl mx-auto">
       {/* Month nav */}
-      <div className="relative flex items-center justify-between px-5 py-4 bg-gray-900 text-white">
-        <div className="flex flex-col">
-          <span className="text-[9px] font-black text-green-400 uppercase tracking-[0.2em] mb-0.5">Attendance History</span>
-          <h3 className="text-base font-black tracking-tight">{MONTHS[month]} {year}</h3>
+      <div className="relative flex items-center justify-between px-8 py-6 bg-gradient-to-r from-gray-900 to-gray-800 text-white overflow-hidden">
+        <div className="absolute right-0 top-0 w-48 h-48 bg-emerald-500/20 blur-[60px] rounded-full" />
+        <div className="relative z-10 flex flex-col">
+          <span className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-1">Attendance History</span>
+          <h3 className="text-2xl font-black tracking-tighter">{MONTHS[month]} {year}</h3>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button onClick={() => onChangeMonth(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
+        <div className="relative z-10 flex items-center gap-2">
+          <button onClick={() => onChangeMonth(-1)} className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 text-white backdrop-blur-sm transition-all active:scale-95">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
           </button>
-          <button onClick={() => onChangeMonth(1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+          <button onClick={() => onChangeMonth(1)} className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 text-white backdrop-blur-sm transition-all active:scale-95">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
           </button>
         </div>
       </div>
  
       {/* Summary Chips */}
-      <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50/50 border-b border-gray-100">
+      <div className="flex flex-wrap gap-2 px-8 py-5 bg-gray-50/50 border-b border-gray-100">
         {Object.entries(STATUS_THEMES).map(([key, theme]) => (
-          <div key={key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${theme.bg} ${theme.border} transition-all`}>
+          <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border ${theme.bg} ${theme.border} transition-all shadow-sm`}>
             <span className={`${theme.text} scale-75`}>{theme.icon}</span>
-            <span className={`text-[10px] font-black uppercase tracking-wider ${theme.text}`}>{counts[key]}</span>
-            <span className="text-[8px] text-gray-400 font-bold uppercase">{theme.label}</span>
+            <span className={`text-[11px] font-black uppercase tracking-wider ${theme.text}`}>{counts[key]}</span>
+            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{theme.label}</span>
           </div>
         ))}
       </div>
   
-      <div className="p-3">
+      <div className="p-8">
         {/* Day headers */}
-        <div className="grid grid-cols-7 mb-1">
+        <div className="grid grid-cols-7 mb-4">
           {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, idx) => (
-            <div key={d} className={`text-center text-[9px] font-black uppercase tracking-widest pb-2 ${idx === 0 || idx === 6 ? 'text-red-300' : 'text-gray-400'}`}>{d}</div>
+            <div key={d} className={`text-center text-[10px] font-black uppercase tracking-[0.2em] ${idx === 0 || idx === 6 ? 'text-rose-400' : 'text-gray-400'}`}>{d}</div>
           ))}
         </div>
   
         {/* Days Grid */}
-        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+        <div className="grid grid-cols-7 gap-y-4 gap-x-2">
           {days.map((day, i) => {
-            if (!day) return <div key={`e${i}`} className="h-8 sm:h-10 opacity-20" />;
+            if (!day) return <div key={`e${i}`} className="h-10 sm:h-12 opacity-0" />;
             const key = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
             const rec = map[key];
             const isToday = key === todayKey;
             const theme = rec ? STATUS_THEMES[rec.status] : null;
             
             return (
-              <div key={i} className={`group relative h-8 sm:h-10 flex flex-col items-center justify-center rounded-lg sm:rounded-xl transition-all duration-300 ${isToday ? 'ring-2 ring-green-500 ring-offset-1' : ''} ${theme ? `shadow-sm ${theme.bg} ${theme.border} border` : 'bg-gray-50/50 hover:bg-gray-100 border border-transparent'}`}>
-                <span className={`text-[10px] sm:text-xs font-black ${theme ? theme.text : isToday ? 'text-green-600' : 'text-gray-400'}`}>
-                  {day}
-                </span>
-                {theme && (
-                   <div className={`mt-0.5 w-1 h-1 rounded-full ${theme.dot} opacity-60 transition-transform`} />
-                )}
-                
-                {theme && (
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center bg-white/90 rounded-xl z-10">
-                    <span className={`text-[8px] font-black uppercase tracking-tighter ${theme.text}`}>{theme.label}</span>
-                  </div>
-                )}
+              <div key={i} className="flex justify-center">
+                <div className={`group relative w-10 h-10 sm:w-12 sm:h-12 flex flex-col items-center justify-center rounded-full transition-all duration-300 cursor-pointer ${isToday ? 'ring-2 ring-gray-900 ring-offset-2' : ''} ${theme ? `shadow-md ${theme.bg.replace('/50','')} ${theme.border} border` : 'bg-gray-50/80 hover:bg-gray-100 border border-transparent hover:scale-110'}`}>
+                  <span className={`text-[13px] font-black ${theme ? theme.text : isToday ? 'text-gray-900' : 'text-gray-400'}`}>
+                    {day}
+                  </span>
+                  
+                  {theme && (
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center bg-white/95 rounded-full z-10 backdrop-blur-sm shadow-xl scale-125">
+                      <span className={`text-[8px] font-black uppercase tracking-tighter ${theme.text}`}>{theme.label}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -454,74 +515,63 @@ function AdminAttendance() {
 
   return (
     <div className="space-y-8 pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tighter">Attendance</h2>
-          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">Management Hub</p>
+      <div className="relative overflow-hidden flex items-center justify-between p-8 bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl shadow-xl text-white">
+        <div className="absolute right-0 top-0 w-64 h-64 bg-emerald-500/20 blur-[80px] rounded-full pointer-events-none" />
+        <div className="absolute left-0 bottom-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none" />
+        <div className="relative z-10 flex flex-col">
+          <h2 className="text-3xl font-black tracking-tight text-white/90">Attendance</h2>
+          <p className="text-emerald-400 font-medium tracking-wide mt-1 uppercase text-xs">Track attendance and performance</p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-50 border border-gray-100">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs font-black text-gray-600 uppercase tracking-widest">
-            {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
+        <div className="relative z-10 flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-md shadow-lg border border-white/20">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-sm font-bold tracking-widest uppercase">
+            {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
           </span>
         </div>
       </div>
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Staff', val: users.length, color: '#3b82f6', bg: 'bg-blue-50', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' },
-          { label: 'Clocked In', val: records.filter(r => r.checkIn).length, color: '#16a34a', bg: 'bg-green-50', icon: 'M22 11.08V12a10 10 0 1 1-5.93-9.14' },
-          { label: 'Shift Over', val: records.filter(r => r.checkOut).length, color: '#ea580c', bg: 'bg-orange-50', icon: 'M9 11l3 3L22 4' },
-          { label: 'Absent', val: users.length - records.filter(r => r.checkIn).length, color: '#dc2626', bg: 'bg-red-50', icon: 'M18 6L6 18M6 6l12 12' },
-        ].map(s => (
-          <div key={s.label} className="group relative overflow-hidden rounded-3xl p-5 bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all hover:-translate-y-1">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${s.bg}`} style={{ color: s.color }}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d={s.icon}/></svg>
-              </div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] leading-tight">{s.label}</p>
-            </div>
-            <p className="text-3xl font-black text-gray-900 tracking-tight">{s.val}</p>
-            <div className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full opacity-[0.03] group-hover:scale-110 transition-transform" style={{ background: s.color }} />
-          </div>
-        ))}
+        <GlassCard label="Total staff" value={users.length} color="#3b82f6" icon="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <GlassCard label="Clocked in" value={records.filter(r => r.checkIn).length} color="#10b981" icon="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+        <GlassCard label="Shift over" value={records.filter(r => r.checkOut).length} color="#f59e0b" icon="M9 11l3 3L22 4" />
+        <GlassCard label="Absent" value={users.length - records.filter(r => r.checkIn).length} color="#ef4444" icon="M18 6L6 18M6 6l12 12" />
       </div>
 
       {/* Salary Sheet */}
-      <div className="bg-white rounded-[2.5rem] shadow-xl overflow-hidden border border-gray-100">
-        <button className="w-full flex items-center justify-between px-8 py-6 hover:bg-gray-50/50 transition-colors" onClick={() => setShowCommission(!showCommission)}>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <button className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors" onClick={() => setShowCommission(!showCommission)}>
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-emerald-50 text-emerald-600">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-gray-100 text-gray-700">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </div>
             <div className="text-left">
-              <h3 className="text-xl font-black text-gray-900 tracking-tight">Salary Hub</h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Attendance-based Base Pay + Performance Commission</p>
+              <h3 className="text-[18px] font-medium text-gray-900 leading-tight">Salary Hub</h3>
+              <p className="text-sm text-gray-500 mt-0.5">Attendance-based Base Pay + Performance Commission</p>
             </div>
           </div>
-          <div className={`w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 transition-transform ${showCommission ? 'rotate-180' : ''}`}>
-             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 transition-transform ${showCommission ? 'rotate-180' : ''}`}>
+             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
           </div>
         </button>
 
         {showCommission && (
-          <div className="px-8 pb-8">
-            <div className="flex items-center justify-center gap-4 mb-8">
+          <div className="px-5 pb-5">
+            <div className="flex items-center justify-between mb-6">
               <button onClick={() => setCommMonth(p => {
                 const m = p.month - 1;
                 return m < 0 ? { month: 11, year: p.year - 1 } : { month: m, year: p.year };
-              })} className="w-12 h-12 rounded-2xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition active:scale-90">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+              })} className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
               </button>
-              <div className="bg-gray-900 text-white px-6 py-3 rounded-2xl text-sm font-black tracking-tight min-w-[160px] text-center shadow-lg">
+              <div className="text-base font-medium text-gray-900">
                 {new Date(commMonth.year, commMonth.month).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
               </div>
               <button onClick={() => setCommMonth(p => {
                 const m = p.month + 1;
                 return m > 11 ? { month: 0, year: p.year + 1 } : { month: m, year: p.year };
-              })} className="w-12 h-12 rounded-2xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition active:scale-90">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+              })} className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
 
@@ -532,227 +582,238 @@ function AdminAttendance() {
             ) : commData ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                  {[
-                    { label: 'Deliveries', val: commData.grandTotalDeliveries, text: 'text-blue-600', bg: 'bg-blue-50/50', sub: commData.unassignedDeliveries > 0 ? `${commData.unassignedDeliveries} U` : null },
-                    { label: 'Revenue', val: `₹${(commData.grandTotalRevenue || 0).toLocaleString('en-IN')}`, text: 'text-green-600', bg: 'bg-green-50/50' },
-                    { label: 'Commission', val: `₹${(commData.grandTotalCommission || 0).toLocaleString('en-IN')}`, text: 'text-amber-600', bg: 'bg-amber-50/50' },
-                    { label: 'Total Payout', val: `₹${(commData.grandTotalPay || 0).toLocaleString('en-IN')}`, text: 'text-emerald-400', bg: 'bg-gray-900', dark: true },
-                  ].map(x => (
-                    <div key={x.label} className={`group relative overflow-hidden rounded-[2rem] p-5 ${x.bg} border border-black/5 transition-all hover:shadow-xl hover:-translate-y-1`}>
-                      <div className="relative z-10">
-                        <div className="flex items-start justify-between mb-1">
-                          <p className={`text-2xl font-black ${x.text} tracking-tight`}>{x.val}</p>
-                          {x.sub && (
-                            <span className="text-[7px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded-md shadow-lg shadow-blue-500/20 uppercase tracking-widest">
-                              {x.sub}
-                            </span>
-                          )}
-                        </div>
-                        <p className={`text-[10px] font-black uppercase tracking-[0.15em] ${x.dark ? 'text-white/40' : 'text-gray-400'}`}>{x.label}</p>
-                      </div>
-                      <div className={`absolute -right-6 -bottom-6 w-20 h-20 rounded-full opacity-[0.05] group-hover:scale-125 transition-transform ${x.dark ? 'bg-white' : 'bg-current'}`} style={{ color: x.text.includes('blue') ? '#3b82f6' : x.text.includes('green') ? '#22c55e' : x.text.includes('amber') ? '#f59e0b' : '#10b981' }} />
-                    </div>
-                  ))}
+                  <GlassCard label="Deliveries" value={commData.grandTotalDeliveries} color="#3b82f6" icon="M5 13l4 4L19 7" subtext={commData.unassignedDeliveries > 0 ? `${commData.unassignedDeliveries} Unassigned` : null} />
+                  <GlassCard label="Revenue" value={`₹${(commData.grandTotalRevenue || 0).toLocaleString('en-IN')}`} color="#10b981" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <GlassCard label="Avg. commission" value={`₹${commData.staff.length ? Math.round((commData.grandTotalCommission || 0) / commData.staff.length).toLocaleString('en-IN') : 0}`} color="#f59e0b" icon="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <GlassCard label="Total payout" value={`₹${(commData.grandTotalPay || 0).toLocaleString('en-IN')}`} color="#6366f1" icon="M12 8v4l3 2" />
                 </div>
 
-                <div className="overflow-hidden rounded-[2rem] border border-gray-100 shadow-sm bg-gray-50/30">
+                <div className="mt-12">
                   {/* Desktop Table View */}
-                  <div className="hidden lg:block overflow-x-auto">
-                    <table className="w-full text-xs">
+                  <div className="hidden lg:block overflow-x-auto pb-8 px-2">
+                    <table className="w-full text-left border-separate" style={{ borderSpacing: '0 20px' }}>
                       <thead>
-                        <tr className="bg-white text-gray-400 text-left">
-                          <th className="py-5 px-6 font-black uppercase tracking-widest">Member</th>
-                          <th className="text-center py-5 px-4 font-black uppercase tracking-widest">Joined</th>
-                          <th className="text-center py-5 px-4 font-black uppercase tracking-widest">History</th>
-                          <th className="text-center py-5 px-4 font-black uppercase tracking-widest">Activity</th>
-                          <th className="text-right py-5 px-4 font-black uppercase tracking-widest">Base</th>
-                          <th className="text-right py-5 px-4 font-black uppercase tracking-widest text-amber-600">Commission</th>
-                          <th className="text-right py-5 px-6 font-black uppercase tracking-widest text-emerald-600">Final</th>
+                        <tr className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em]">
+                          <th className="px-8 pb-2">Member</th>
+                          <th className="px-4 pb-2">Joined</th>
+                          <th className="px-4 pb-2">History</th>
+                          <th className="px-4 pb-2 text-right">Deliveries</th>
+                          <th className="px-4 pb-2 text-right">Base</th>
+                          <th className="px-4 pb-2 text-right">Commission</th>
+                          <th className="px-8 pb-2 text-right">Final</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {commData.staff.map(s => (
-                          <tr key={s.user._id} className="hover:bg-white transition-colors group">
-                            <td className="py-5 px-6">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${ROLE_GRADIENT[s.user.role] || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white text-sm font-black uppercase shadow-lg group-hover:scale-110 transition-transform`}>
-                                  {s.user.name?.charAt(0)}
-                                </div>
-                                <div>
-                                  <p className="font-black text-gray-900 text-sm">{s.user.name}</p>
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{s.user.role}</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="text-center py-5 px-4">
-                              {(() => {
-                                const jd = s.user.joiningDate || s.user.createdAt;
-                                return jd ? (
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-[11px] font-black text-indigo-600">
-                                      {new Date(jd).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">joined</span>
-                                  </div>
-                                ) : <span className="text-gray-300">—</span>;
-                              })()}
-                            </td>
-                            <td className="text-center py-5 px-4">
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-[10px] font-black">
-                                <span className="text-green-600">{s.attendance.present + s.attendance.late}P</span>
-                                <span className="w-1 h-1 rounded-full bg-gray-300" />
-                                <span className="text-amber-500">{s.attendance.half_day}H</span>
-                              </div>
-                            </td>
-                            <td className="text-center py-5 px-4">
-                              <div className="flex flex-col">
-                                 <span className="font-black text-blue-600 text-sm">{s.totalDeliveries || 0}</span>
-                                 <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">delivered</span>
-                              </div>
-                            </td>
-                            <td className="text-right py-5 px-4 text-gray-400 font-bold text-[10px]">
-                              {editingComm?.userId === s.user._id && editingComm?.field === 'base' ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <input type="number" className="w-16 px-2 py-1 bg-white border border-gray-200 rounded text-right text-[10px] focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                    value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleSaveOverride()} />
-                                  <button onClick={handleSaveOverride} className="text-emerald-500">✓</button>
-                                  <button onClick={() => setEditingComm(null)} className="text-red-400">×</button>
-                                </div>
-                              ) : (
-                                <div className="cursor-pointer hover:text-gray-900 group/cell" onClick={() => {
-                                  setEditingComm({ userId: s.user._id, field: 'base' });
-                                  setEditVal(s.basePay);
-                                }}>
-                                  ₹{s.basePay?.toLocaleString()}
-                                  <div className="text-[8px] opacity-0 group-hover/cell:opacity-60 font-black">EDIT BASE</div>
-                                  <div className="text-[8px] opacity-60 font-black group-hover/cell:hidden">BASE</div>
-                                </div>
+                      <tbody>
+                        {commData.staff.map((s, idx) => {
+                          const isNewRole = idx === 0 || commData.staff[idx - 1].user.role !== s.user.role;
+                          const roleColor = ROLE_COLORS[s.user.role?.toLowerCase()] || 'bg-gray-500 text-white';
+                          const roleColorHex = s.user.role === 'sales' ? '#3b82f6' : s.user.role === 'support' ? '#10b981' : s.user.role === 'verification' ? '#a855f7' : s.user.role === 'management' ? '#f59e0b' : '#ef4444';
+                          
+                          return (
+                            <React.Fragment key={s.user._id}>
+                              {isNewRole && (
+                                <tr>
+                                  <td colSpan={7} className="pt-4 pb-0 px-6">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-1.5 w-1.5 rounded-full" style={{ background: roleColorHex }} />
+                                      <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: roleColorHex }}>
+                                        {s.user.role || 'Other'} Department
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
                               )}
-                            </td>
-                            <td className="text-right py-5 px-4">
-                              <div className="flex flex-col items-end">
-                                {editingComm?.userId === s.user._id && editingComm?.field === 'commission' ? (
-                                  <div className="flex items-center justify-end gap-1">
-                                    <input type="number" className="w-20 px-2 py-1 bg-white border border-gray-200 rounded text-right text-xs font-black focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                      value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleSaveOverride()} />
-                                    <button onClick={handleSaveOverride} className="text-emerald-500">✓</button>
-                                    <button onClick={() => setEditingComm(null)} className="text-red-400">×</button>
-                                  </div>
-                                ) : (
-                                  <div className="cursor-pointer hover:bg-amber-50 rounded-lg p-1 transition-colors group/comm" onClick={() => {
-                                    setEditingComm({ userId: s.user._id, field: 'commission' });
-                                    setEditVal(s.totalCommission);
-                                  }}>
-                                    <span className="font-black text-amber-600 text-sm">₹{(s.totalCommission || 0).toLocaleString()}</span>
-                                    <div className="text-[9px] text-amber-400 font-bold uppercase tracking-tighter">
-                                      {s.isManualCommission ? 'MANUAL' : (s.user.role === 'support' ? '@₹50/order' : `@${s.user.commissionRate || 5}%`)} <span className="opacity-0 group-hover/comm:opacity-100">· EDIT</span>
+                              <tr className="group bg-white shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300 cursor-default">
+                                <td className="py-5 px-8 rounded-l-[2.5rem] border-y border-l border-gray-100/50 relative overflow-hidden">
+                                  <div className="absolute inset-y-0 left-0 w-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: roleColorHex }} />
+                                  <div className="flex items-center gap-4">
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black shadow-sm ${s.user.avatar ? 'bg-gray-100' : roleColor} group-hover:scale-110 transition-transform overflow-hidden`}>
+                                      {s.user.avatar ? (
+                                        <img src={s.user.avatar} alt={s.user.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        s.user.name?.charAt(0)
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <p className="font-black text-gray-900 text-[15px] tracking-tight">{s.user.name}</p>
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{s.user.role}</p>
                                     </div>
                                   </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="text-right py-5 px-6">
-                              <span className="text-base font-black text-gray-900 tracking-tight">₹{s.totalPay?.toLocaleString()}</span>
-                            </td>
-                          </tr>
-                        ))}
+                                </td>
+                                <td className="py-5 px-4 border-y border-gray-100/50">
+                                  {(() => {
+                                    const jd = s.user.joiningDate || s.user.createdAt;
+                                    return jd ? (
+                                      <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                        {new Date(jd).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                      </span>
+                                    ) : <span className="text-gray-300">—</span>;
+                                  })()}
+                                </td>
+                                <td className="py-5 px-4 border-y border-gray-100/50">
+                                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+                                    <span className="text-[11px] font-black text-emerald-600 tracking-wider">{s.attendance.present + s.attendance.late}P</span>
+                                    <span className="w-1.5 h-1.5 bg-gray-300 rounded-full" />
+                                    <span className="text-[11px] font-black text-amber-500 tracking-wider">{s.attendance.half_day}H</span>
+                                  </div>
+                                </td>
+                                <td className="py-5 px-4 border-y border-gray-100/50 text-right">
+                                  <span className="text-base font-black text-gray-900">{s.totalDeliveries || 0}</span>
+                                </td>
+                                <td className="text-right py-5 px-4 border-y border-gray-100/50">
+                                  {editingComm?.userId === s.user._id && editingComm?.field === 'base' ? (
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <input type="number" className="w-16 px-2 py-1 bg-gray-50 border border-indigo-200 rounded-lg text-right text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleSaveOverride()} />
+                                      <button onClick={handleSaveOverride} className="w-7 h-7 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold">✓</button>
+                                      <button onClick={() => setEditingComm(null)} className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 font-bold">×</button>
+                                    </div>
+                                  ) : (
+                                    <div className="cursor-pointer group/cell flex items-center justify-end gap-2" onClick={() => {
+                                      setEditingComm({ userId: s.user._id, field: 'base' });
+                                      setEditVal(s.basePay);
+                                    }}>
+                                      <span className="text-sm font-black text-gray-700 group-hover/cell:text-indigo-600 transition-colors">₹{s.basePay?.toLocaleString()}</span>
+                                      <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest opacity-0 group-hover/cell:opacity-100 transition-opacity">edit</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="text-right py-5 px-4 border-y border-gray-100/50">
+                                  <div className="flex flex-col items-end">
+                                    {editingComm?.userId === s.user._id && editingComm?.field === 'commission' ? (
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <input type="number" className="w-20 px-2 py-1 bg-gray-50 border border-indigo-200 rounded-lg text-right text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                          value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleSaveOverride()} />
+                                        <button onClick={handleSaveOverride} className="w-7 h-7 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold">✓</button>
+                                        <button onClick={() => setEditingComm(null)} className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 font-bold">×</button>
+                                      </div>
+                                    ) : (
+                                      <div className="cursor-pointer group/comm flex flex-col items-end" onClick={() => {
+                                        setEditingComm({ userId: s.user._id, field: 'commission' });
+                                        setEditVal(s.totalCommission);
+                                      }}>
+                                        <span className="text-sm font-black text-gray-700 group-hover/comm:text-indigo-600 transition-colors">₹{(s.totalCommission || 0).toLocaleString()}</span>
+                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                                          {s.isManualCommission ? 'manual' : (s.user.role === 'support' ? '@₹50/order' : `@${s.user.commissionRate || 5}%`)} 
+                                          <span className="text-indigo-400 opacity-0 group-hover/comm:opacity-100 transition-opacity ml-1">· edit</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-5 px-8 rounded-r-[2.5rem] border-y border-r border-gray-100/50 text-right">
+                                  <span className="text-xl font-black text-indigo-600">₹{s.totalPay?.toLocaleString()}</span>
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
-                  </div>
-
-                  {/* Mobile Card View */}
-                  <div className="lg:hidden divide-y divide-gray-100">
-                    {commData.staff.map(s => (
-                      <div key={s.user._id} className="p-5 bg-white space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${ROLE_GRADIENT[s.user.role] || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white text-sm font-black uppercase shadow-lg`}>
-                              {s.user.name?.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="font-black text-gray-900 text-sm">{s.user.name}</p>
-                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{s.user.role}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                             <p className="text-sm font-black text-emerald-600 tracking-tight">₹{s.totalPay?.toLocaleString()}</p>
-                             <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Total Payout</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
-                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Attendance</p>
-                             <div className="flex items-center gap-2">
-                               <span className="text-[11px] font-black text-green-600">{s.attendance.present + s.attendance.late}P</span>
-                               <span className="text-[11px] font-black text-amber-500">{s.attendance.half_day}H</span>
-                             </div>
-                          </div>
-                          <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
-                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Performance</p>
-                             <p className="text-[11px] font-black text-blue-600">{s.totalDeliveries || 0} Delivered</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="p-1">
-                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Base Pay</p>
-                             <p className="text-xs font-black text-gray-800">₹{s.basePay?.toLocaleString()}</p>
-                          </div>
-                          <div className="p-1 text-right">
-                             <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Commission</p>
-                             <p className="text-xs font-black text-amber-600">₹{(s.totalCommission || 0).toLocaleString()}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {commData.unassignedDeliveries > 0 && (
-                    <div className="bg-gray-50/50 italic border-t-2 border-dashed border-gray-200 p-5 lg:p-0">
-                      {/* Desktop unassigned */}
-                      <table className="hidden lg:table w-full text-xs opacity-60">
+                    
+                    {/* Desktop unassigned */}
+                    {commData.unassignedDeliveries > 0 && (
+                      <table className="w-full text-left border-separate mt-6" style={{ borderSpacing: '0' }}>
                         <tbody>
-                           <tr className="group border-t border-dashed border-gray-200 transition-colors cursor-pointer hover:bg-gray-50" onClick={openUnassigned}>
-                             <td colSpan="3" className="py-5 px-6">
-                               <div className="flex items-center gap-4 opacity-60 group-hover:opacity-100 transition-opacity">
-                                  <div className="w-10 h-10 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-400 font-black tracking-tighter">U</div>
+                           <tr className="bg-gray-50 hover:bg-gray-100 transition-colors rounded-[2.5rem] cursor-pointer group" onClick={openUnassigned}>
+                             <td className="py-5 px-8 rounded-l-[2.5rem] border-y border-l border-gray-200 w-1/3">
+                               <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-500 font-black text-xl group-hover:scale-110 transition-transform">U</div>
                                   <div className="flex flex-col">
-                                    <span className="text-[13px] font-black text-gray-400 italic">Unassigned Orders</span>
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-0.5">NO STAFF ASSIGNED</span>
+                                    <span className="font-black text-gray-900 text-[15px]">Unassigned Orders</span>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">No staff assigned</span>
                                   </div>
                                </div>
                              </td>
-                             <td className="text-right py-5 px-4 w-[15%]">
-                               <div className="flex flex-col items-center justify-center w-[60px] h-[34px] rounded-full border-2 border-dashed border-gray-300 ml-auto opacity-60 group-hover:opacity-100 transition-opacity">
-                                  <span className="font-black text-gray-400 text-sm">{commData.unassignedDeliveries}</span>
-                                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">delivered</span>
-                               </div>
+                             <td className="py-5 px-4 border-y border-gray-200 text-right">
+                                <span className="text-base font-black text-gray-900">{commData.unassignedDeliveries}</span>
                              </td>
-                             <td className="text-right py-5 px-4 w-[12%]">
-                               <div className="flex flex-col items-end opacity-40 group-hover:opacity-100 transition-opacity">
-                                  <span className="font-black text-gray-500 text-[10px]">₹{commData.unassignedRevenue?.toLocaleString()}</span>
-                                  <span className="text-[8px] font-black uppercase tracking-tighter">revenue</span>
-                                </div>
-                             </td>
-                             <td className="text-right py-5 px-4 w-[12%]">—</td>
-                             <td className="text-right py-5 px-6 w-[20%]">—</td>
+                             <td className="py-5 px-4 border-y border-gray-200 text-right text-gray-400">—</td>
+                             <td className="py-5 px-4 border-y border-gray-200 text-right text-gray-400">—</td>
+                             <td className="py-5 px-8 rounded-r-[2.5rem] border-y border-r border-gray-200 text-right text-gray-400">—</td>
                            </tr>
                         </tbody>
                       </table>
-                      {/* Mobile unassigned */}
-                      <div className="lg:hidden flex items-center justify-between opacity-60 cursor-pointer hover:opacity-100" onClick={openUnassigned}>
-                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-gray-200 flex items-center justify-center text-gray-400 text-xs font-black">U</div>
-                            <div>
-                              <p className="font-black text-gray-500 text-[10px]">Unassigned Orders</p>
-                              <p className="text-[8px] text-gray-400 font-bold uppercase">{commData.unassignedDeliveries} Delivered</p>
+                    )}
+                  </div>
+                  
+                  {/* Mobile Card View */}
+                  <div className="lg:hidden flex flex-col gap-6">
+                    {commData.staff.map((s, idx) => {
+                      const isNewRole = idx === 0 || commData.staff[idx - 1].user.role !== s.user.role;
+                      const roleColorHex = s.user.role === 'sales' ? '#3b82f6' : s.user.role === 'support' ? '#10b981' : s.user.role === 'verification' ? '#a855f7' : s.user.role === 'management' ? '#f59e0b' : '#ef4444';
+                      const roleColor = ROLE_COLORS[s.user.role?.toLowerCase()] || 'bg-gray-500 text-white';
+                      return (
+                        <React.Fragment key={s.user._id}>
+                          {isNewRole && (
+                            <div className="pt-2 pb-0 px-2 flex items-center gap-2">
+                              <div className="h-1.5 w-1.5 rounded-full" style={{ background: roleColorHex }} />
+                              <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: roleColorHex }}>
+                                {s.user.role || 'Other'} Department
+                              </span>
                             </div>
-                         </div>
-                         <p className="text-[10px] font-black text-gray-500">₹{commData.unassignedRevenue?.toLocaleString()}</p>
+                          )}
+                          <div className="p-6 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.04)] rounded-[2rem] border border-gray-100 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1.5" style={{ background: roleColorHex }}></div>
+                            <div className="flex items-center justify-between mb-6 mt-2">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black shadow-sm ${s.user.avatar ? 'bg-gray-100' : roleColor} overflow-hidden`}>
+                                  {s.user.avatar ? (
+                                    <img src={s.user.avatar} alt={s.user.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    s.user.name?.charAt(0)
+                                  )}
+                                </div>
+                                <div className="flex flex-col">
+                                  <p className="font-black text-gray-900 text-base">{s.user.name}</p>
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{s.user.role}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                 <p className="text-2xl font-black text-indigo-600 leading-none">₹{s.totalPay?.toLocaleString()}</p>
+                                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1.5">Total payout</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-y-5 gap-x-4">
+                              <div className="flex flex-col border-b border-dashed border-gray-200 pb-4">
+                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Attendance</p>
+                                 <div className="flex items-center gap-2">
+                                   <span className="text-sm font-black text-emerald-600">{s.attendance.present + s.attendance.late}P</span>
+                                   <span className="text-sm font-black text-amber-500">{s.attendance.half_day}H</span>
+                                 </div>
+                              </div>
+                              <div className="flex flex-col border-b border-dashed border-gray-200 pb-4">
+                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Performance</p>
+                                 <p className="text-sm font-black text-gray-900">{s.totalDeliveries || 0} Delivered</p>
+                              </div>
+                              <div className="flex flex-col">
+                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Base pay</p>
+                                 <p className="text-sm font-black text-gray-900">₹{s.basePay?.toLocaleString()}</p>
+                              </div>
+                              <div className="flex flex-col text-right">
+                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Commission</p>
+                                 <p className="text-sm font-black text-gray-900">₹{(s.totalCommission || 0).toLocaleString()}</p>
+                               </div>
+                            </div>
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
+                    {commData.unassignedDeliveries > 0 && (
+                      <div className="mt-2">
+                        {/* Mobile unassigned */}
+                        <div className="p-6 bg-gray-50 shadow-sm rounded-[2rem] border border-gray-200 flex items-center justify-between cursor-pointer hover:bg-gray-100" onClick={openUnassigned}>
+                           <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-500 font-black text-xl">U</div>
+                              <div className="flex flex-col">
+                                <p className="font-black text-gray-900 text-base">Unassigned Orders</p>
+                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">{commData.unassignedDeliveries} Delivered</p>
+                              </div>
+                           </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </>
             ) : (
@@ -763,44 +824,69 @@ function AdminAttendance() {
       </div>
 
       {/* Staff Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {users.map(u => {
           const att = getAttendanceForUser(u._id);
           const status = att?.checkIn
             ? att.checkOut
-              ? { label: 'SHIFT OVER', bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-100', icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> }
-              : { label: 'WORKING', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-100', icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg> }
-            : { label: 'ABSENT', bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-100', icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg> };
+              ? { label: 'Shift over', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> }
+              : { label: 'Working', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg> }
+            : { label: 'Absent', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg> };
           
+          const rc = ROLE_COLORS[u.role?.toLowerCase()] || 'bg-gray-500 text-white';
+          const colorHex = u.role === 'sales' ? '#3b82f6' : u.role === 'support' ? '#10b981' : u.role === 'verification' ? '#a855f7' : u.role === 'management' ? '#f59e0b' : '#ef4444';
+
           return (
-            <div key={u._id} className="group relative bg-white rounded-[2rem] p-6 shadow-sm hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer border border-gray-100"
-              onClick={() => openUser(u)}>
-              <div className="flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${ROLE_GRADIENT[u.role] || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white text-lg font-black uppercase shadow-lg shadow-black/10 group-hover:scale-110 transition-transform`}>
-                  {u.name?.charAt(0)}
+            <div key={u._id} className="group relative overflow-hidden transition-all duration-300 ease-out active:scale-95 flex flex-col justify-between cursor-pointer"
+              style={{
+                background: `linear-gradient(135deg, ${colorHex}0A, ${colorHex}14)`,
+                border: `1px solid ${colorHex}25`,
+                borderRadius: 24, padding: '24px',
+                boxShadow: `0 4px 12px -2px ${colorHex}15`,
+              }}
+              onClick={() => openUser(u)}
+              onMouseEnter={e => { 
+                e.currentTarget.style.boxShadow = `0 8px 24px -4px ${colorHex}40`; 
+                e.currentTarget.style.transform = 'translateY(-4px)'; 
+                e.currentTarget.style.borderColor = `${colorHex}40`;
+              }}
+              onMouseLeave={e => { 
+                e.currentTarget.style.boxShadow = `0 4px 12px -2px ${colorHex}15`; 
+                e.currentTarget.style.transform = 'none'; 
+                e.currentTarget.style.borderColor = `${colorHex}25`;
+              }}
+            >
+              {/* Giant Background Initial */}
+              <div className="absolute -right-4 -bottom-8 text-[160px] leading-none font-black italic select-none pointer-events-none transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12" style={{ color: colorHex, opacity: 0.05 }}>
+                {u.name?.charAt(0)}
+              </div>
+              
+              <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none" style={{ background: colorHex, opacity: 0.1 }}></div>
+              <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+
+              <div className="flex items-start justify-between relative z-10">
+                <div className="flex flex-col">
+                  <p className="text-xl font-black text-gray-900 truncate tracking-tight">{u.name}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] mt-1" style={{ color: colorHex }}>{u.role}</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-lg font-black text-gray-900 truncate tracking-tight">{u.name}</p>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{u.role}</p>
-                  {(u.joiningDate || u.createdAt) && (
-                    <p className="text-[9px] text-indigo-400 font-bold mt-0.5">
-                      Joined: {new Date(u.joiningDate || u.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </p>
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: u.avatar ? 'transparent' : 'rgba(255,255,255,0.7)', backdropFilter: u.avatar ? 'none' : 'blur(8px)', border: u.avatar ? 'none' : '1px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', overflow: 'hidden' }} className={`group-hover:scale-110 transition-transform text-lg font-black ${u.avatar ? '' : rc}`}>
+                  {u.avatar ? (
+                    <img src={u.avatar} alt={u.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    u.name?.charAt(0)
                   )}
                 </div>
               </div>
               
-              <div className="mt-6 flex items-center justify-between">
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${status.bg} ${status.text} ${status.border}`}>
+              <div className="mt-10 flex items-center justify-between relative z-10">
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${status.bg} ${status.text} ${status.border} shadow-sm backdrop-blur-md bg-white/50`}>
                   {status.icon}
                   <span className="text-[10px] font-black tracking-widest uppercase">{status.label}</span>
                 </div>
                 {att?.checkIn && (
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">In Time</p>
-                      <p className="text-xs font-black text-gray-900">{formatTime(att.checkIn)}</p>
-                    </div>
+                  <div className="text-right">
+                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">In Time</p>
+                    <p className="text-sm font-black text-gray-900 leading-none mt-1">{formatTime(att.checkIn)}</p>
                   </div>
                 )}
               </div>

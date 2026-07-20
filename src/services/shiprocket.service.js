@@ -51,6 +51,7 @@ export const getOrder = (id) => api.get(`${BASE}/orders/show/${id}`);
 export const getFollowupCommissionSettings = () => api.get('/commission/settings');
 export const updateFollowupCommissionSettings = (body) => api.put('/commission/settings', body);
 export const getOrderActivity = (id) => api.get(`${BASE}/orders/${id}/notes`);
+export const sendToVerification = (id, body = {}) => api.post(`${BASE}/orders/${id}/send-to-verification`, body);
 export const getStaffCommissions = (params) => api.get('/commission/reorder', { params });
 
 // ── Courier ───────────────────────────────────────────────────────────────────
@@ -99,3 +100,5 @@ export const deleteNdrNote = (id) => api.delete(`${BASE}/ndr/notes/${id}`);
 // ── Next order ID ─────────────────────────────────────────────────────────────
 export const getNextOrderId = () => api.get(`${BASE}/next-order-id`);
 export const saveOrderNote = (id, text, type = 'general', section = '') => api.patch(`${BASE}/orders/${id}/notes`, { text, type, section });
+
+export const toggleNotInterested = (id, not_interested) => api.patch(`${BASE}/orders/${id}/not-interested`, { not_interested });

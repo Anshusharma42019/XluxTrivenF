@@ -817,7 +817,7 @@ export default function Verification() {
                     </button>
                   )}
                 </div>
-                <DetailRow label="Added By" value={selected.lead?.createdBy?.name || '—'} />
+                <DetailRow label="Added By" value={selected.task?.createdBy?.name || selected.lead?.createdBy?.name || '-'} />
                 <DetailRow label="Description" value={selected.description} />
 
                 <SectionHead label="Health Info" />
