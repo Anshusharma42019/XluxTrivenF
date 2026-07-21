@@ -52,6 +52,35 @@ const ATTEMPT_OPTIONS = [
 ];
 
 /* ── Live Tracking Detail Panel ────────────────────────────────────────────── */
+const parseRobustDate = (item) => {
+  let dateRaw = null;
+  const pref = ['ndr_date', 'last_attempt_date', 'created_at', 'updated_at', 'assigned_date', 'createdAt', 'date', 'updatedAt', 'timestamp', 'time', 'datetime', 'added_date', 'status_updated_at'];
+  for (let k of pref) { if (item[k]) { dateRaw = item[k]; break; } }
+  if (!dateRaw) {
+    for (let k in item) {
+      if ((typeof item[k] === 'string' || typeof item[k] === 'number') && (k.toLowerCase().includes('date') || k.toLowerCase().includes('time') || k.toLowerCase().includes('created'))) {
+        if (!k.toLowerCase().includes('expected') && !k.toLowerCase().includes('estimated')) { dateRaw = item[k]; break; }
+      }
+    }
+  }
+  if (dateRaw === null || dateRaw === undefined) return null;
+  if (typeof dateRaw === 'number') {
+    const parsed = dateRaw < 10000000000 ? new Date(dateRaw * 1000) : new Date(dateRaw);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const s = String(dateRaw).trim();
+  const parts = s.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (parts) {
+    let m = parts[2], day = parts[1], y = parts[3], h = parts[4], min = parts[5], sec = parts[6];
+    if (Number(parts[1]) <= 12 && Number(parts[2]) > 12) { m = parts[1]; day = parts[2]; }
+    else if (Number(parts[1]) > 12 && Number(parts[2]) <= 12) { day = parts[1]; m = parts[2]; }
+    const p = new Date(`${y}-${m}-${day}T${h || '00'}:${min || '00'}:${sec || '00'}+05:30`);
+    return isNaN(p.getTime()) ? null : p;
+  }
+  const obj = new Date(dateRaw);
+  return isNaN(obj.getTime()) ? null : obj;
+};
+
 function NdrDetailPanel({ item, onClose, onUseNdr }) {
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -92,9 +121,9 @@ function NdrDetailPanel({ item, onClose, onUseNdr }) {
   }
   if (item.attempt_number !== undefined) fields.push(['Attempt #', item.attempt_number]);
   if (item.reason) fields.push(['NDR Reason', item.reason]);
-  if (item.ndr_date) fields.push(['NDR Date', new Date(item.ndr_date).toLocaleString('en-IN')]);
-  if (item.createdAt) fields.push(['Created At', new Date(item.createdAt).toLocaleString('en-IN')]);
+  const parsedDate = parseRobustDate(item);
 
+  if (parsedDate) fields.push(['NDR Date', parsedDate.toLocaleString('en-IN')]);
   return (
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden space-y-5" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
       <div className="h-1 bg-orange-500" />
@@ -338,6 +367,12 @@ function NdrList({ onActionItem }) {
       );
     }
     return true;
+  }).sort((a, b) => {
+    const dateA = parseRobustDate(a);
+    const dateB = parseRobustDate(b);
+    const timeA = dateA ? dateA.getTime() : 0;
+    const timeB = dateB ? dateB.getTime() : 0;
+    return timeB - timeA;
   });
 
   const toggleSelect = (id) => {
@@ -493,7 +528,7 @@ function NdrList({ onActionItem }) {
                     const status = n.status || '—';
                     const attempt = n.attempt_number ?? n.delivery_attempt ?? 1;
                     const reason = n.reason || n.ndr_reason || '—';
-                    const date = n.ndr_date || n.createdAt;
+                    const dateObj = parseRobustDate(n);
                     const isSelected = selected.has(ndrId);
                     return (
                       <tr key={ndrId} className={`transition-colors ${isSelected ? 'bg-orange-50/50' : 'hover:bg-orange-50/20'}`}>
@@ -515,7 +550,7 @@ function NdrList({ onActionItem }) {
                         </td>
                         <td className="px-4 py-3 text-[11px] text-gray-500 max-w-[160px] truncate" title={reason}>{reason}</td>
                         <td className="px-4 py-3 text-[11px] text-gray-400 whitespace-nowrap">
-                          {date ? new Date(date).toLocaleDateString('en-IN') : '—'}
+                          {dateObj ? dateObj.toLocaleDateString('en-IN') : '—'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1.5">

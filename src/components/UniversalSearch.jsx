@@ -154,9 +154,9 @@ export default function UniversalSearch() {
                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 capitalize border border-green-200 dark:border-green-800/50">
                                {customerGroup.latestStatus.status.replace(/_/g, ' ')}
                              </span>
-                             {kitNum > 1 && customerGroup.latestStatus.status?.toUpperCase() === 'DELIVERED' && (
+                             {kitNum >= 1 && ['order', 'shipmaxx'].includes(customerGroup.latestStatus.type) && customerGroup.latestStatus.status?.toUpperCase() === 'DELIVERED' && (
                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50 uppercase tracking-wide">
-                                 {`Kit ${kitNum}`}
+                                 Kit {kitNum} {customerGroup.latestStatus.courier_name && `- ${customerGroup.latestStatus.courier_name}`}
                                </span>
                              )}
                            </div>
@@ -248,6 +248,13 @@ export default function UniversalSearch() {
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 flex-1 ml-2">
                               <span className="font-medium text-gray-700 dark:text-gray-300 capitalize text-xs">{hist.status.replace(/_/g, ' ')}</span>
                               <span className="text-[10px] font-semibold text-gray-500 bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700">{hist.module}</span>
+                              {['order', 'shipmaxx'].includes(hist.type) && hist.kit_number >= 1 && hist.status?.toUpperCase() === 'DELIVERED' ? (
+                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800/50 uppercase tracking-wide">
+                                  Kit {hist.kit_number} {hist.courier_name && `- ${hist.courier_name}`}
+                                </span>
+                              ) : hist.courier_name ? (
+                                <span className="text-[10px] text-gray-400 font-medium">({hist.courier_name})</span>
+                              ) : null}
                             </div>
                             <div className="text-[11px] text-gray-500 whitespace-nowrap">
                               {formatDate(hist.updatedAt)}
