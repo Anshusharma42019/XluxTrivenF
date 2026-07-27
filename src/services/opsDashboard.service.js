@@ -46,3 +46,10 @@ export const fetchAlerts = (filters) =>
 
 export const submitRtoVerification = (payload) =>
   API.post(`${BASE}/rto-verification`, payload).then(r => r.data);
+
+export const fetchInteraktTemplates = () =>
+  API.get('/interakt/templates').then(r => r.data.data?.templates || []);
+
+export const sendInteraktMessages = (payload, filters = {}) =>
+  API.post(`${BASE}/send-interakt-messages`, payload, { params: buildParams(filters) }).then(r => r.data);
+

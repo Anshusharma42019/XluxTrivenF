@@ -6,6 +6,7 @@ import {
   fetchAging, fetchLeaderboard, fetchShipments, fetchAlerts
 } from '../services/opsDashboard.service';
 import RtoVerificationModal from '../components/RtoVerificationModal';
+import OpsInteraktModal from '../components/OpsInteraktModal';
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 const fmtNum = (n) => {
@@ -16,6 +17,7 @@ const fmtNum = (n) => {
 };
 const fmtPct = (n) => (n === null || n === undefined ? '—' : `${n}%`);
 const fmtDays = (n) => (n === null || n === undefined ? '—' : `${n}d`);
+const fmtCurr = (n) => (n === null || n === undefined ? '—' : `₹${fmtNum(n)}`);
 
 function ChangeChip({ value }) {
   if (value === undefined || value === null) return null;
@@ -37,7 +39,10 @@ const STATUS_COLORS = {
   inTransit: '#8b5cf6',
   delivered: '#16a34a', oldDelivered: '#059669', ofd: '#2563eb', undelivered: '#d97706',
   rto: '#dc2626', rtoIntersite: '#7c3aed', verified: '#0891b2',
+  revenue: '#10b981', blOfd: '#3b82f6', blUndelivered: '#f59e0b', blRto: '#ef4444', blRtoIntersite: '#9333ea',
+  interaktReplies: '#16a34a', replyReattempt: '#2563eb', replyDawa: '#059669',
 };
+
 
 /* ─── Sparkline (mini SVG line) ──────────────────────────────────────────── */
 function Sparkline({ data = [], color = '#16a34a', height = 28 }) {
@@ -53,7 +58,14 @@ function Sparkline({ data = [], color = '#16a34a', height = 28 }) {
 }
 
 /* ─── KPI Card ────────────────────────────────────────────────────────────── */
-function KpiCard({ label, value, change, color, formatter = fmtNum, sparkData = [], onClick, icon, subtext }) {
+function KpiCard({ label, value, change, color, formatter = fmtNum, sparkData = [], onClick, icon, subtext, unit }) {
+  // Derive unit label from formatter type when not provided
+  const unitLabel = unit !== undefined ? unit
+    : formatter === fmtPct ? 'Rate'
+    : formatter === fmtDays ? 'Days'
+    : formatter === fmtCurr ? 'Revenue'
+    : 'Orders';
+
   return (
     <div
       onClick={onClick}
@@ -96,7 +108,7 @@ function KpiCard({ label, value, change, color, formatter = fmtNum, sparkData = 
           <div style={{ fontSize: 36, fontWeight: 900, color: color, lineHeight: 1, letterSpacing: '-0.02em', textShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
             {value !== undefined ? formatter(value) : <span style={{ opacity: .4, fontSize: 20 }}>—</span>}
           </div>
-          <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.5, textTransform: 'uppercase', letterSpacing: 1, color }}>Units</span>
+          <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.5, textTransform: 'uppercase', letterSpacing: 1, color }}>{unitLabel}</span>
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
@@ -237,7 +249,7 @@ function DonutChart({ reasons = [] }) {
 }
 
 /* ─── Aging Row ──────────────────────────────────────────────────────────── */
-function AgingTable({ rows = [], title, color, emptyMsg, onVerifyClick, showVerify }) {
+function AgingTable({ rows = [], title, color, emptyMsg, onVerifyClick, showVerify, showInterakt, onSendInterakt }) {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? rows : rows.slice(0, 5);
   if (!rows.length) return (
@@ -252,7 +264,7 @@ function AgingTable({ rows = [], title, color, emptyMsg, onVerifyClick, showVeri
               {['AWB', 'Customer', 'City/State', 'Courier', 'Status', 'Updated', 'Attempts', 'Amount'].map(h => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
-              {showVerify && <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>Action</th>}
+              {(showVerify || showInterakt) && <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>Action</th>}
             </tr>
           </thead>
           <tbody>
@@ -283,20 +295,33 @@ function AgingTable({ rows = [], title, color, emptyMsg, onVerifyClick, showVeri
                   </td>
                   <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 700, color: r.delivery_attempt >= 3 ? '#dc2626' : '#374151', ...textStyle }}>{r.delivery_attempt || 1}</td>
                   <td style={{ padding: '10px 10px', color: '#374151', fontWeight: 600, ...textStyle }}>₹{(r.sub_total || 0).toLocaleString('en-IN')}</td>
-                  {showVerify && (
-                    <td style={{ padding: '10px 10px', textAlign: 'right' }}>
-                      {r.rto_verification_action === 'wants_again' ? (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
-                      ) : (
-                        <button 
-                          onClick={() => onVerifyClick(r)}
+                  {(showVerify || showInterakt) && (
+                    <td style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {showInterakt && (
+                        <button
+                          onClick={() => onSendInterakt(r)}
                           style={{
-                            padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff',
-                            color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                            padding: '4px 8px', borderRadius: 6, border: '1px solid #bbf7d0', background: '#f0fdf4',
+                            color: '#16a34a', fontSize: 11, fontWeight: 700, cursor: 'pointer', marginRight: 6
                           }}
                         >
-                          RTO Verification
+                          💬 WhatsApp
                         </button>
+                      )}
+                      {showVerify && (
+                        r.rto_verification_action === 'wants_again' ? (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
+                        ) : (
+                          <button 
+                            onClick={() => onVerifyClick(r)}
+                            style={{
+                              padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff',
+                              color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                            }}
+                          >
+                            RTO Verification
+                          </button>
+                        )
                       )}
                     </td>
                   )}
@@ -387,7 +412,7 @@ function LeaderboardTable({ rows = [], sortKey, sortDir, onSort }) {
 }
 
 /* ─── Shipments Table ────────────────────────────────────────────────────── */
-function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick }) {
+function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick, onSendInterakt }) {
   const { shipments = [], total = 0, pages = 1, page = 1 } = data || {};
   const statusChip = (status) => {
     const cat = (() => {
@@ -405,21 +430,43 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
 
   return (
     <div>
+      {/* Quick Switch Filter Pills for WhatsApp Replies */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginRight: 6 }}>⚡ WhatsApp Quick Filters:</span>
+        <button onClick={() => onFilterChange('status', filters.status === 'interaktReplies' ? '' : 'interaktReplies')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #16a34a', background: filters.status === 'interaktReplies' ? '#16a34a' : '#f0fdf4', color: filters.status === 'interaktReplies' ? '#fff' : '#15803d', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
+          <span>💬</span> All WhatsApp Replies
+        </button>
+        <button onClick={() => onFilterChange('status', filters.status === 'reply_reattempt' ? '' : 'reply_reattempt')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #2563eb', background: filters.status === 'reply_reattempt' ? '#2563eb' : '#eff6ff', color: filters.status === 'reply_reattempt' ? '#fff' : '#1d4ed8', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
+          <span>🔄</span> Reattempt kar dijiye
+        </button>
+        <button onClick={() => onFilterChange('status', filters.status === 'reply_dawa' ? '' : 'reply_dawa')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #059669', background: filters.status === 'reply_dawa' ? '#059669' : '#ecfdf5', color: filters.status === 'reply_dawa' ? '#fff' : '#047857', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
+          <span>💊</span> Mujhe apni dawa chahiye
+        </button>
+      </div>
+
       {/* Filters row */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
         <select value={filters.status || ''} onChange={e => onFilterChange('status', e.target.value)}
           style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#374151', background: '#fff' }}>
           <option value="">All Statuses</option>
+          <option value="interaktReplies">💬 All WhatsApp Replies</option>
+          <option value="reply_reattempt">🔄 Reattempt kar dijiye (Replies)</option>
+          <option value="reply_dawa">💊 Mujhe apni dawa chahiye (Replies)</option>
           <option value="verified">Verified</option>
+          <option value="totalSales">Sales Orders</option>
+          <option value="totalSupport">Support Orders</option>
+          <option value="inTransit">In Transit</option>
           <option value="delivered">Delivered</option>
-          <option value="blDelivered">Old Delivered</option>
+          <option value="salesDelivered">Sales Delivered</option>
+          <option value="supportDelivered">Support Delivered</option>
           <option value="ofd">OFD</option>
           <option value="undelivered">Undelivered</option>
-          <option value="blUndelivered">Old Undelivered</option>
           <option value="rto">RTO</option>
-          <option value="blRto">Old RTO</option>
           <option value="rtoIntersite">RTO Intersite</option>
-          <option value="blRtoIntersite">Old RTO Intersite</option>
+          <option value="blOfd">Old OFD (Backlog)</option>
+          <option value="blUndelivered">Old Undelivered (Backlog)</option>
+          <option value="blRto">Old RTO (Backlog)</option>
+          <option value="blRtoIntersite">Old RTO Intersite (Backlog)</option>
         </select>
         <select value={filters.platform || ''} onChange={e => onFilterChange('platform', e.target.value)}
           style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#374151', background: '#fff' }}>
@@ -429,7 +476,14 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
         </select>
         <input value={filters.awb || ''} onChange={e => onFilterChange('awb', e.target.value)}
           placeholder="Search AWB..." style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, minWidth: 180 }} />
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => onSendInterakt && onSendInterakt(null)} style={{
+            padding: '7px 16px', borderRadius: 8, border: '1px solid #16a34a', background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
+            color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+            boxShadow: '0 2px 6px rgba(22, 163, 74, 0.2)'
+          }}>
+            💬 Send Interakt ({filters.status?.toLowerCase().includes('undelivered') ? 'Undelivered Data-Wise' : 'Filtered Data-Wise'})
+          </button>
           <button onClick={onExportCsv} style={{
             padding: '7px 16px', borderRadius: 8, border: '1px solid #16a34a', background: '#fff',
             color: '#16a34a', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
@@ -469,8 +523,19 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                 <td style={{ padding: '10px 10px', fontFamily: 'monospace', fontSize: 11, color: '#0f172a', fontWeight: 600, whiteSpace: 'nowrap', ...textStyle }}>
                   {s.platform === 'verification' ? (s.billing_phone || '—') : (s.awb_code || '—')}
                 </td>
-                <td style={{ padding: '10px 10px', color: '#374151', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...textStyle }}>
-                  {s.billing_customer_name || '—'}
+                <td style={{ padding: '10px 10px', color: '#374151', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...textStyle }}>
+                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.billing_customer_name || '—'}</div>
+                  {s.interakt_reply_text && (
+                    <div title={`Reply received: ${s.interakt_reply_text}`} style={{ 
+                      display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '4px', 
+                      padding: '2px 7px', background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac', 
+                      borderRadius: '6px', fontSize: '10px', fontWeight: 800, whiteSpace: 'normal', lineHeight: '1.25',
+                      boxShadow: '0 1px 2px rgba(22, 163, 74, 0.1)' 
+                    }}>
+                      <span>💬</span>
+                      <span>{s.interakt_reply_text}</span>
+                    </div>
+                  )}
                 </td>
                 <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12, ...textStyle }}>{[s.billing_city, s.billing_state].filter(Boolean).join(', ') || '—'}</td>
                 <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12, ...textStyle }}>{s.courier_name || '—'}</td>
@@ -488,7 +553,19 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                 </td>
                 <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 700, color: s.delivery_attempt >= 3 ? '#dc2626' : '#374151', ...textStyle }}>{s.delivery_attempt || 1}</td>
                 <td style={{ padding: '10px 10px', color: '#374151', fontWeight: 600, whiteSpace: 'nowrap', ...textStyle }}>₹{(s.sub_total || 0).toLocaleString('en-IN')}</td>
-                <td style={{ padding: '10px 10px', textAlign: 'right' }}>
+                <td style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {onSendInterakt && (
+                    <button
+                      onClick={() => onSendInterakt(s)}
+                      title="Send Interakt WhatsApp Template Message Data-Wise"
+                      style={{
+                        padding: '4px 8px', borderRadius: 6, border: '1px solid #bbf7d0', background: '#f0fdf4',
+                        color: '#16a34a', fontSize: 11, fontWeight: 700, cursor: 'pointer', marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4
+                      }}
+                    >
+                      💬 WhatsApp
+                    </button>
+                  )}
                   {(s.status.toLowerCase().includes('rto') && !s.status.toLowerCase().includes('delivered')) && (
                     s.rto_verification_action === 'wants_again' ? (
                       <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
@@ -643,20 +720,30 @@ function Skeleton({ h = 80, w = '100%' }) {
 /* ─── KPI Icons ──────────────────────────────────────────────────────────── */
 const kpiIcons = {
   totalShipments: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16v-2"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+  totalSales: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  totalSupport: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
   verified: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
   ofd: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   delivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+  salesDelivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/><circle cx="12" cy="12" r="10" strokeOpacity={0.4}/></svg>,
+  supportDelivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/><rect x="2" y="2" width="20" height="20" rx="4" strokeOpacity={0.4}/></svg>,
   undelivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
   rto: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
   rtoIntersite: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>,
+  revenue: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  deliveredRate: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+  rtoRate: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>,
   ndrRate: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>,
   fadr: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
   avgTat: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
   inTransit: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
-  oldDelivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/><circle cx="18" cy="18" r="4"/><polyline points="18 16 18 18 19 19"/></svg>,
-  blDelivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/><circle cx="18" cy="18" r="4"/><polyline points="18 16 18 18 19 19"/></svg>,
+  blOfd: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/><circle cx="12" cy="12" r="3" fill="currentColor" fillOpacity={0.2}/></svg>,
   blUndelivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/><circle cx="18" cy="18" r="4"/><polyline points="18 16 18 18 19 19"/></svg>,
   blRto: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/><circle cx="18" cy="18" r="4"/><polyline points="18 16 18 18 19 19"/></svg>,
+  blRtoIntersite: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/><circle cx="19" cy="19" r="3" stroke="currentColor"/></svg>,
+  interaktReplies: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
+  replyReattempt: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+  replyDawa: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>,
 };
 
 
@@ -667,6 +754,7 @@ const TABS = [
   { id: 'aging', label: 'Aging', icon: '⏱' },
   { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
   { id: 'shipments', label: 'Shipments', icon: '📦' },
+  { id: 'interakt_replies', label: 'WhatsApp Replies', icon: '💬' },
 ];
 
 /* ─── Main Component ─────────────────────────────────────────────────────── */
@@ -690,7 +778,14 @@ export default function OpsDashboard() {
   const [lbSort, setLbSort] = useState({ key: 'deliveryRate', dir: 'desc' });
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [verificationShipment, setVerificationShipment] = useState(null);
+  const [interaktModalOpen, setInteraktModalOpen] = useState(false);
+  const [interaktTargetShipment, setInteraktTargetShipment] = useState(null);
   const autoRefreshTimer = useRef(null);
+
+  const handleOpenInteraktModal = (shipment = null) => {
+    setInteraktTargetShipment(shipment);
+    setInteraktModalOpen(true);
+  };
 
   const setLoad = (key, val) => setLoading(l => ({ ...l, [key]: val }));
 
@@ -818,23 +913,35 @@ export default function OpsDashboard() {
     a.click(); URL.revokeObjectURL(url);
   };
 
-  // KPI cards config
+  // KPI cards config — role-based visibility
+  const isAdminOrManager = ['admin', 'manager'].includes(user?.role?.toLowerCase());
   const kpiCards = kpis ? [
-    { key: 'verified', label: 'Verified', color: STATUS_COLORS.verified, formatter: fmtNum },
-    { key: 'totalShipments', label: 'Total Shipments', color: STATUS_COLORS.totalShipments, formatter: fmtNum, subtext: 'Orders dispatched this month' },
-    { key: 'totalSales', label: 'Sales Shipments', color: STATUS_COLORS.totalShipments, formatter: fmtNum },
-    { key: 'totalSupport', label: 'Support Shipments', color: STATUS_COLORS.totalShipments, formatter: fmtNum },
-    { key: 'inTransit', label: 'In Transit', color: STATUS_COLORS.inTransit, formatter: fmtNum },
-    { key: 'ofd', label: 'Out for Delivery', color: STATUS_COLORS.ofd, formatter: fmtNum },
-    { key: 'delivered', label: 'Delivered', color: STATUS_COLORS.delivered, formatter: fmtNum },
-    { key: 'salesDelivered', label: 'Sales Delivered', color: STATUS_COLORS.delivered, formatter: fmtNum },
-    { key: 'supportDelivered', label: 'Support Delivered', color: STATUS_COLORS.delivered, formatter: fmtNum },
-    { key: 'undelivered', label: 'Undelivered', color: STATUS_COLORS.undelivered, formatter: fmtNum },
-    { key: 'rto', label: 'RTO', color: STATUS_COLORS.rto, formatter: fmtNum },
-    { key: 'rtoIntersite', label: 'RTO Intersite', color: STATUS_COLORS.rtoIntersite, formatter: fmtNum },
-    { key: 'ndrRate', label: 'NDR Rate', color: '#f59e0b', formatter: fmtPct },
-    { key: 'fadr', label: 'First Attempt Delivery', color: '#10b981', formatter: fmtPct },
-    { key: 'avgTat', label: 'Avg TAT', color: '#6366f1', formatter: fmtDays },
+    { key: 'verified',     label: 'Verified',           color: STATUS_COLORS.verified,      formatter: fmtNum },
+    { key: 'totalShipments', label: 'Total Shipments',  color: STATUS_COLORS.totalShipments,formatter: fmtNum, subtext: 'Orders created this period — all other cards are subsets of this number' },
+    ...(isAdminOrManager ? [
+      { key: 'totalSales',    label: 'Sales Orders',    color: '#7c3aed',                   formatter: fmtNum, subtext: 'Orders created by Sales team' },
+      { key: 'totalSupport',  label: 'Support Orders',  color: '#0891b2',                   formatter: fmtNum, subtext: 'Orders created by Support team' },
+    ] : []),
+    { key: 'inTransit',    label: 'In Transit',         color: STATUS_COLORS.inTransit,     formatter: fmtNum },
+    { key: 'ofd',          label: 'Out for Delivery',   color: STATUS_COLORS.ofd,           formatter: fmtNum },
+    { key: 'delivered',    label: 'Delivered',          color: STATUS_COLORS.delivered,     formatter: fmtNum, subtext: 'Orders created this period now delivered. Delivered + OFD + Undelivered + RTO + In Transit = Total Shipments' },
+    ...(isAdminOrManager ? [
+      { key: 'salesDelivered',   label: 'Sales Delivered',   color: '#059669', formatter: fmtNum, subtext: 'Sales team delivered orders' },
+      { key: 'supportDelivered', label: 'Support Delivered', color: '#0d9488', formatter: fmtNum, subtext: 'Support team delivered orders' },
+      { key: 'revenue',          label: 'Delivered Revenue', color: STATUS_COLORS.revenue,       formatter: fmtCurr, subtext: 'Total collected revenue from delivered shipments this period' },
+    ] : []),
+    { key: 'undelivered',  label: 'Undelivered',        color: STATUS_COLORS.undelivered,   formatter: fmtNum },
+    { key: 'rto',          label: 'RTO',                color: STATUS_COLORS.rto,           formatter: fmtNum },
+    { key: 'rtoIntersite', label: 'RTO Intersite',      color: STATUS_COLORS.rtoIntersite,  formatter: fmtNum },
+    { key: 'blOfd',        label: 'Old OFD',            color: STATUS_COLORS.blOfd,         formatter: fmtNum, subtext: 'Backlog orders from prior periods currently out for delivery' },
+    { key: 'blUndelivered',label: 'Old Undelivered',    color: STATUS_COLORS.blUndelivered, formatter: fmtNum, subtext: 'Backlog orders from prior periods currently undelivered / NDR' },
+    { key: 'blRto',        label: 'Old RTO',            color: STATUS_COLORS.blRto,         formatter: fmtNum, subtext: 'Backlog orders from prior periods marked RTO' },
+    { key: 'blRtoIntersite',label: 'Old RTO Intersite', color: STATUS_COLORS.blRtoIntersite,formatter: fmtNum, subtext: 'Backlog orders from prior periods returning in transit' },
+    { key: 'deliveredRate',label: 'Delivery Rate',      color: '#16a34a',                   formatter: fmtPct, subtext: 'Delivered ÷ Total Shipments — both from the same cohort' },
+    { key: 'rtoRate',      label: 'RTO Rate',           color: '#dc2626',                   formatter: fmtPct },
+    { key: 'ndrRate',      label: 'NDR Rate',           color: '#f59e0b',                   formatter: fmtPct },
+    { key: 'fadr',         label: '1st Attempt Delivery', color: '#10b981',                formatter: fmtPct, subtext: 'Percentage of delivered orders succeeding on 1st attempt' },
+    { key: 'avgTat',       label: 'Avg TAT',            color: '#6366f1',                   formatter: fmtDays, subtext: 'Average turnaround time to delivery' },
   ] : [];
 
   // Spark data from trend
@@ -905,17 +1012,33 @@ export default function OpsDashboard() {
         </div>
 
         {/* Tabs */}
-        <div className="no-print" style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#fff', borderRadius: 12, padding: 4, border: '1px solid rgba(0,0,0,0.06)', width: 'fit-content' }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              padding: '8px 18px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              background: activeTab === t.id ? '#16a34a' : 'transparent',
-              color: activeTab === t.id ? '#fff' : '#64748b',
-              transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              <span>{t.icon}</span> {t.label}
-            </button>
-          ))}
+        <div className="no-print" style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#fff', borderRadius: 12, padding: 4, border: '1px solid rgba(0,0,0,0.06)', width: 'fit-content', flexWrap: 'wrap' }}>
+          {TABS.map(t => {
+            const isReplyStatus = ['interaktReplies', 'reply_reattempt', 'reply_dawa'].includes(shipmentFilters.status);
+            const isSelected = (activeTab === t.id && t.id !== 'shipments') || 
+                               (t.id === 'interakt_replies' && activeTab === 'shipments' && isReplyStatus) ||
+                               (t.id === 'shipments' && activeTab === 'shipments' && !isReplyStatus);
+            return (
+              <button key={t.id} onClick={() => {
+                if (t.id === 'interakt_replies') {
+                  setActiveTab('shipments');
+                  setShipmentFilters(f => ({ ...f, status: 'interaktReplies', page: 1 }));
+                } else {
+                  setActiveTab(t.id);
+                  if (t.id === 'shipments' && isReplyStatus) {
+                    setShipmentFilters(f => ({ ...f, status: '' }));
+                  }
+                }
+              }} style={{
+                padding: '8px 18px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                background: isSelected ? '#16a34a' : 'transparent',
+                color: isSelected ? '#fff' : '#64748b',
+                transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <span>{t.icon}</span> {t.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* ── Overview Tab ── */}
@@ -924,7 +1047,7 @@ export default function OpsDashboard() {
             {/* KPI Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
               {loading.kpis
-                ? Array.from({ length: ['admin', 'manager', 'support'].includes(user?.role?.toLowerCase()) ? 12 : 11 }).map((_, i) => <Skeleton key={i} h={130} />)
+                ? Array.from({ length: kpiCards.length || (isAdminOrManager ? 22 : 18) }).map((_, i) => <Skeleton key={i} h={130} />)
                 : kpiCards.map(card => (
                   <KpiCard key={card.key} label={card.label} color={card.color} formatter={card.formatter}
                     value={kpis?.kpis?.[card.key]?.value}
@@ -932,9 +1055,9 @@ export default function OpsDashboard() {
                     sparkData={sparkFor(card.key)}
                     icon={kpiIcons[card.key]}
                     subtext={card.subtext}
-                    onClick={['ndrRate', 'fadr', 'avgTat'].includes(card.key) ? undefined : () => {
-                      setActiveTab('shipments'); 
-                      handleShipmentFilterChange('status', card.key === 'totalShipments' ? '' : card.key); 
+                    onClick={['ndrRate', 'fadr', 'avgTat', 'deliveredRate', 'rtoRate', 'revenue'].includes(card.key) ? undefined : () => {
+                      setActiveTab('shipments');
+                      handleShipmentFilterChange('status', card.key === 'totalShipments' ? '' : card.key);
                     }}
                   />
                 ))
@@ -981,8 +1104,18 @@ export default function OpsDashboard() {
             <SectionCard title="🕐 OFD > 2 Days" subtitle="Shipments stuck out-for-delivery for over 48 hours">
               {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.ofd_stuck || []} title="OFD Stuck" color={STATUS_COLORS.ofd} emptyMsg="No OFD-stuck shipments 🎉" />}
             </SectionCard>
-            <SectionCard title="🔄 Undelivered — 3+ Attempts" subtitle="Shipments that have failed delivery 3 or more times">
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.undelivered_3plus || []} title="3+ Attempts" color={STATUS_COLORS.undelivered} emptyMsg="No high-attempt shipments 🎉" />}
+            <SectionCard title="🔄 Undelivered — 3+ Attempts" subtitle="Shipments that have failed delivery 3 or more times"
+              action={
+                <button onClick={() => handleOpenInteraktModal(null)} style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
+                  color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                  boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
+                }}>
+                  💬 Interakt Template Send (Undelivered Data-Wise)
+                </button>
+              }
+            >
+              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.undelivered_3plus || []} title="3+ Attempts" color={STATUS_COLORS.undelivered} emptyMsg="No high-attempt shipments 🎉" showInterakt={true} onSendInterakt={handleOpenInteraktModal} />}
             </SectionCard>
             <SectionCard title="🚚 RTO Intersite > 5 Days" subtitle="Return-in-transit shipments stuck for over 5 days">
               {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.rto_intersite_stuck || []} title="RTO Intersite Stuck" color={STATUS_COLORS.rtoIntersite} emptyMsg="No stuck RTO intersite shipments 🎉" showVerify={true} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />}
@@ -999,9 +1132,17 @@ export default function OpsDashboard() {
 
         {/* ── Shipments Tab ── */}
         {activeTab === 'shipments' && (
-          <SectionCard title="📋 Shipment Detail" subtitle="All shipments with full filtering and export">
+          <SectionCard title="📋 Shipment Detail" subtitle="All shipments with full filtering and export"
+            action={
+              shipmentFilters.status?.toLowerCase().includes('undelivered') ? (
+                <div style={{ background: '#dcfce7', color: '#15803d', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, border: '1px solid #86efac' }}>
+                  ⚡ Undelivered Data-Wise Messaging Active
+                </div>
+              ) : undefined
+            }
+          >
             {loading.ships ? <Skeleton h={400} /> : (
-              <ShipmentsTable data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />
+              <ShipmentsTable data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} onSendInterakt={handleOpenInteraktModal} />
             )}
           </SectionCard>
         )}
@@ -1012,6 +1153,13 @@ export default function OpsDashboard() {
         onClose={() => { setVerificationModalOpen(false); setVerificationShipment(null); }}
         shipment={verificationShipment}
         onSuccess={handleVerifySuccess}
+      />
+      <OpsInteraktModal
+        isOpen={interaktModalOpen}
+        onClose={() => { setInteraktModalOpen(false); setInteraktTargetShipment(null); }}
+        targetShipment={interaktTargetShipment}
+        filters={activeTab === 'shipments' ? shipmentFilters : { ...filters, status: 'undelivered' }}
+        totalCount={interaktTargetShipment ? 1 : (activeTab === 'aging' ? aging?.undelivered_3plus?.length : shipments?.total)}
       />
     </div>
   );
