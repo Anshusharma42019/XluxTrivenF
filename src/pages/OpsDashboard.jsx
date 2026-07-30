@@ -414,6 +414,8 @@ function LeaderboardTable({ rows = [], sortKey, sortDir, onSort }) {
 /* ─── Shipments Table ────────────────────────────────────────────────────── */
 function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick, onSendInterakt }) {
   const { shipments = [], total = 0, pages = 1, page = 1 } = data || {};
+  const isUndeliveredView = ['undelivered', 'blUndelivered', 'interaktReplies', 'reply_reattempt', 'reply_dawa'].includes(filters.status);
+  const showActionColumn = isUndeliveredView || ['rto', 'rtoIntersite', 'blRto', 'blRtoIntersite', ''].includes(filters.status || '');
   const statusChip = (status) => {
     const cat = (() => {
       const s = (status || '').toLowerCase();
@@ -431,18 +433,20 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
   return (
     <div>
       {/* Quick Switch Filter Pills for WhatsApp Replies */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
-        <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginRight: 6 }}>⚡ WhatsApp Quick Filters:</span>
-        <button onClick={() => onFilterChange('status', filters.status === 'interaktReplies' ? '' : 'interaktReplies')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #16a34a', background: filters.status === 'interaktReplies' ? '#16a34a' : '#f0fdf4', color: filters.status === 'interaktReplies' ? '#fff' : '#15803d', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
-          <span>💬</span> All WhatsApp Replies
-        </button>
-        <button onClick={() => onFilterChange('status', filters.status === 'reply_reattempt' ? '' : 'reply_reattempt')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #2563eb', background: filters.status === 'reply_reattempt' ? '#2563eb' : '#eff6ff', color: filters.status === 'reply_reattempt' ? '#fff' : '#1d4ed8', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
-          <span>🔄</span> Reattempt kar dijiye
-        </button>
-        <button onClick={() => onFilterChange('status', filters.status === 'reply_dawa' ? '' : 'reply_dawa')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #059669', background: filters.status === 'reply_dawa' ? '#059669' : '#ecfdf5', color: filters.status === 'reply_dawa' ? '#fff' : '#047857', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
-          <span>💊</span> Mujhe apni dawa chahiye
-        </button>
-      </div>
+      {isUndeliveredView && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginRight: 6 }}>⚡ WhatsApp Quick Filters:</span>
+          <button onClick={() => onFilterChange('status', filters.status === 'interaktReplies' ? '' : 'interaktReplies')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #16a34a', background: filters.status === 'interaktReplies' ? '#16a34a' : '#f0fdf4', color: filters.status === 'interaktReplies' ? '#fff' : '#15803d', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
+            <span>💬</span> All WhatsApp Replies
+          </button>
+          <button onClick={() => onFilterChange('status', filters.status === 'reply_reattempt' ? '' : 'reply_reattempt')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #2563eb', background: filters.status === 'reply_reattempt' ? '#2563eb' : '#eff6ff', color: filters.status === 'reply_reattempt' ? '#fff' : '#1d4ed8', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
+            <span>🔄</span> Reattempt kar dijiye
+          </button>
+          <button onClick={() => onFilterChange('status', filters.status === 'reply_dawa' ? '' : 'reply_dawa')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #059669', background: filters.status === 'reply_dawa' ? '#059669' : '#ecfdf5', color: filters.status === 'reply_dawa' ? '#fff' : '#047857', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
+            <span>💊</span> Mujhe apni dawa chahiye
+          </button>
+        </div>
+      )}
 
       {/* Filters row */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
@@ -477,13 +481,15 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
         <input value={filters.awb || ''} onChange={e => onFilterChange('awb', e.target.value)}
           placeholder="Search AWB..." style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, minWidth: 180 }} />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => onSendInterakt && onSendInterakt(null)} style={{
-            padding: '7px 16px', borderRadius: 8, border: '1px solid #16a34a', background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
-            color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-            boxShadow: '0 2px 6px rgba(22, 163, 74, 0.2)'
-          }}>
-            💬 Send Interakt ({filters.status?.toLowerCase().includes('undelivered') ? 'Undelivered Data-Wise' : 'Filtered Data-Wise'})
-          </button>
+          {isUndeliveredView && (
+            <button onClick={() => onSendInterakt && onSendInterakt(null)} style={{
+              padding: '7px 16px', borderRadius: 8, border: '1px solid #16a34a', background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
+              color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+              boxShadow: '0 2px 6px rgba(22, 163, 74, 0.2)'
+            }}>
+              💬 Send Interakt ({filters.status?.toLowerCase().includes('undelivered') ? 'Undelivered Data-Wise' : 'Filtered Data-Wise'})
+            </button>
+          )}
           <button onClick={onExportCsv} style={{
             padding: '7px 16px', borderRadius: 8, border: '1px solid #16a34a', background: '#fff',
             color: '#16a34a', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
@@ -501,7 +507,7 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
               {[(filters.status === 'verified' ? 'Phone' : 'AWB'), 'Customer', 'City/State', 'Courier', 'Status', 'Platform', 'Order Date', 'Status Date', 'Attempts', '₹ Amount'].map(h => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
-              <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>Action</th>
+              {showActionColumn && <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>Action</th>}
             </tr>
           </thead>
           <tbody>
@@ -553,35 +559,37 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                 </td>
                 <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 700, color: s.delivery_attempt >= 3 ? '#dc2626' : '#374151', ...textStyle }}>{s.delivery_attempt || 1}</td>
                 <td style={{ padding: '10px 10px', color: '#374151', fontWeight: 600, whiteSpace: 'nowrap', ...textStyle }}>₹{(s.sub_total || 0).toLocaleString('en-IN')}</td>
-                <td style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {onSendInterakt && (
-                    <button
-                      onClick={() => onSendInterakt(s)}
-                      title="Send Interakt WhatsApp Template Message Data-Wise"
-                      style={{
-                        padding: '4px 8px', borderRadius: 6, border: '1px solid #bbf7d0', background: '#f0fdf4',
-                        color: '#16a34a', fontSize: 11, fontWeight: 700, cursor: 'pointer', marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4
-                      }}
-                    >
-                      💬 WhatsApp
-                    </button>
-                  )}
-                  {(s.status.toLowerCase().includes('rto') && !s.status.toLowerCase().includes('delivered')) && (
-                    s.rto_verification_action === 'wants_again' ? (
-                      <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
-                    ) : (
-                      <button 
-                        onClick={() => onVerifyClick(s)}
+                {showActionColumn && (
+                  <td style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {onSendInterakt && isUndeliveredView && (
+                      <button
+                        onClick={() => onSendInterakt(s)}
+                        title="Send Interakt WhatsApp Template Message Data-Wise"
                         style={{
-                          padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff',
-                          color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                          padding: '4px 8px', borderRadius: 6, border: '1px solid #bbf7d0', background: '#f0fdf4',
+                          color: '#16a34a', fontSize: 11, fontWeight: 700, cursor: 'pointer', marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4
                         }}
                       >
-                        RTO Verification
+                        💬 WhatsApp
                       </button>
-                    )
-                  )}
-                </td>
+                    )}
+                    {(s.status.toLowerCase().includes('rto') && !s.status.toLowerCase().includes('delivered')) && (
+                      s.rto_verification_action === 'wants_again' ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
+                      ) : (
+                        <button 
+                          onClick={() => onVerifyClick(s)}
+                          style={{
+                            padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff',
+                            color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                          }}
+                        >
+                          RTO Verification
+                        </button>
+                      )
+                    )}
+                  </td>
+                )}
               </tr>
             )})}
             {!shipments.length && <tr><td colSpan={9} style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No shipments found</td></tr>}
