@@ -40,7 +40,6 @@ const STATUSES = [
   { value: 'interested', label: 'Interested', color: 'bg-green-600 border-green-600' },
   { value: 'cancel_call', label: 'Not Interested', color: 'bg-red-500 border-red-500' },
   { value: 'cnp', label: 'CNP', color: 'bg-orange-500 border-orange-500' },
-  { value: 'cancelled', label: 'On Hold', color: 'bg-gray-500 border-gray-500' },
   { value: 'verification', label: 'Verification', color: 'bg-blue-600 border-blue-600' },
 ];
 

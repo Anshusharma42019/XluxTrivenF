@@ -44,7 +44,6 @@ const inputCls = "w-full border border-gray-200 rounded-xl px-4 py-2 text-sm bg-
 const STAGES = [
   { key: 'interested',     label: 'Interested',     bar: 'bg-purple-500' },
   { key: 'closed_lost',    label: 'Not Interested', bar: 'bg-red-400' },
-  { key: 'on_hold',        label: 'Pending (On Hold)', bar: 'bg-gray-400' },
 ];
 
 export default function Pipeline() {
@@ -160,7 +159,7 @@ export default function Pipeline() {
       if (!silent) setLoading(false);
 
       // Load remaining tabs in background
-      const otherFilters = ['interested', 'on_hold', 'closed_lost', 'cnp', 'call_again'].filter(f => f !== filter);
+      const otherFilters = ['interested', 'closed_lost', 'cnp', 'call_again'].filter(f => f !== filter);
       const otherResults = await Promise.all(otherFilters.map(f => fetchByFilter(f).catch(() => null)));
       otherFilters.forEach((f, i) => { if (otherResults[i]) setByFilter(f, otherResults[i]); });
 
@@ -815,31 +814,26 @@ export default function Pipeline() {
                   {!isOrder && (
                     <>
                       <div className="grid grid-cols-2 gap-2">
-                        <button disabled={updating} onClick={() => handleMove(lead, 'interested')}
-                          className="py-3 rounded-2xl text-xs font-bold text-white bg-purple-500 hover:bg-purple-600 shadow-md shadow-purple-100 transition-all">
-                          Interested
+                        {filter !== 'interested' && (
+                          <button disabled={updating} onClick={() => handleMove(lead, 'interested')}
+                            className="py-3 rounded-2xl text-xs font-bold text-white bg-purple-500 hover:bg-purple-600 shadow-md shadow-purple-100 transition-all">
+                            Interested
+                          </button>
+                        )}
+                        <button onClick={async () => {
+                          if (filter === 'closed_lost') await updateLead(lead._id, { status: 'on_hold' }).catch(() => {});
+                          openTaskModal(lead);
+                        }}
+                          className="py-3 rounded-2xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 transition-all">
+                          Task
                         </button>
-                        <button disabled={updating} onClick={() => handleMove(lead, 'on_hold')}
-                          className="py-3 rounded-2xl text-xs font-bold text-white bg-gray-500 hover:bg-gray-600 shadow-md shadow-gray-100 transition-all">
-                          On Hold
-                        </button>
-                      </div>
-                      {/* Verification button removed as requested */}
-                      <div className="grid grid-cols-2 gap-2">
-                         <button onClick={async () => {
-                           if (filter === 'closed_lost') await updateLead(lead._id, { status: 'on_hold' }).catch(() => {});
-                           openTaskModal(lead);
-                         }}
-                           className="py-3 rounded-2xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 transition-all">
-                           Task
-                         </button>
-                         <button disabled={updating} onClick={() => handleMove(lead, 'closed_lost')}
-                           className="py-3 rounded-2xl text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all">
-                           Mark Lost
-                         </button>
-                      </div>
-                      {filter !== 'closed_lost' && (
-                        <div className="grid grid-cols-2 gap-2">
+                        {filter !== 'closed_lost' && (
+                          <button disabled={updating} onClick={() => handleMove(lead, 'closed_lost')}
+                            className="py-3 rounded-2xl text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all">
+                            Mark Lost
+                          </button>
+                        )}
+                        {filter !== 'closed_lost' && filter !== 'cnp' && (
                           <button disabled={updating} onClick={async () => {
                             setUpdating(lead._id);
                             try {
@@ -850,6 +844,8 @@ export default function Pipeline() {
                               await load(); setSelected(null);
                             } catch { } finally { setUpdating(null); }
                           }} className="py-3 rounded-2xl text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 transition-all">CNP</button>
+                        )}
+                        {filter !== 'closed_lost' && filter !== 'call_again' && (
                           <button disabled={updating} onClick={async () => {
                             setUpdating(lead._id);
                             try {
@@ -860,8 +856,8 @@ export default function Pipeline() {
                               await load(); setSelected(null);
                             } catch { } finally { setUpdating(null); }
                           }} className="py-3 rounded-2xl text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-all">Call Again</button>
-                        </div>
-                      )}
+                        )}
+                      </div>
 
                       <button disabled={updating} onClick={() => handleDelete(lead._id)}
                         className="w-full py-3 mt-4 rounded-2xl text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 transition-all hover:bg-rose-100 active:scale-[0.98] flex items-center justify-center gap-2">
@@ -914,22 +910,28 @@ export default function Pipeline() {
               );})()}
               
               <div className="grid grid-cols-2 gap-3 pt-6">
-                <button disabled={updating} onClick={() => handleMove(selected.lead || selected, 'interested')}
-                  className="py-4 rounded-2xl text-xs font-bold text-white bg-purple-500 active:scale-95 transition shadow-lg shadow-purple-100">Interested</button>
-                <button disabled={updating} onClick={() => handleMove(selected.lead || selected, 'on_hold')}
-                  className="py-4 rounded-2xl text-xs font-bold text-white bg-gray-500 active:scale-95 transition shadow-lg shadow-gray-100">On Hold</button>
+                {filter !== 'interested' && (
+                  <button disabled={updating} onClick={() => handleMove(selected.lead || selected, 'interested')}
+                    className="py-4 rounded-2xl text-xs font-bold text-white bg-purple-500 active:scale-95 transition shadow-lg shadow-purple-100">Interested</button>
+                )}
                 <button onClick={async () => { const l = selected.lead || selected; if (filter === 'closed_lost') await updateLead(l._id, { status: 'on_hold' }).catch(() => {}); openTaskModal(l); }}
                   className="py-4 rounded-2xl text-xs font-bold text-white bg-blue-600 active:scale-95 transition shadow-lg shadow-blue-100">Task</button>
-                <button disabled={updating} onClick={() => handleMove(selected.lead || selected, 'closed_lost')}
-                  className="py-4 rounded-2xl text-xs font-bold text-gray-500 bg-gray-100 active:scale-95 transition">Mark Lost</button>
-                <button disabled={updating} onClick={async () => {
-                  setUpdating(selected._id);
-                  try { await markCNP(selected._id); await load(); setSelected(null); } catch { } finally { setUpdating(null); }
-                }} className="py-4 rounded-2xl text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100">CNP</button>
-                <button disabled={updating} onClick={async () => {
-                  setUpdating(selected._id);
-                  try { await createCallAgain(selected.lead?._id || selected._id); await load(); setSelected(null); } catch { } finally { setUpdating(null); }
-                }} className="py-4 rounded-2xl text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100">Call Again</button>
+                {filter !== 'closed_lost' && (
+                  <button disabled={updating} onClick={() => handleMove(selected.lead || selected, 'closed_lost')}
+                    className="py-4 rounded-2xl text-xs font-bold text-gray-500 bg-gray-100 active:scale-95 transition">Mark Lost</button>
+                )}
+                {filter !== 'closed_lost' && filter !== 'cnp' && (
+                  <button disabled={updating} onClick={async () => {
+                    setUpdating(selected._id);
+                    try { await markCNP(selected._id); await load(); setSelected(null); } catch { } finally { setUpdating(null); }
+                  }} className="py-4 rounded-2xl text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100">CNP</button>
+                )}
+                {filter !== 'closed_lost' && filter !== 'call_again' && (
+                  <button disabled={updating} onClick={async () => {
+                    setUpdating(selected._id);
+                    try { await createCallAgain(selected.lead?._id || selected._id); await load(); setSelected(null); } catch { } finally { setUpdating(null); }
+                  }} className="py-4 rounded-2xl text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100">Call Again</button>
+                )}
               </div>
             </div>
           </Modal>
