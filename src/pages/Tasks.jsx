@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { getTasks, getDailyTasks, createTask, updateTask, deleteTask, addTaskNote, getTask } from '../services/task.service';
+import { getTasks, getDailyTasks, createTask, updateTask, deleteTask, addTaskNote, getTask, deleteCnpRecord } from '../services/task.service';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { getUsers } from '../services/user.service';
 import { updateLead, createCallAgain } from '../services/lead.service';
@@ -34,7 +34,6 @@ const SectionHead = ({ label, color = "emerald" }) => (
   </div>
 );
 
-const TYPES = ['call', 'follow_up', 'meeting', 'email', 'task'];
 const DEPARTMENTS = ['migraine', 'piles'];
 const STATUSES = [
   { value: 'interested', label: 'Interested', color: 'bg-green-600 border-green-600' },
@@ -44,19 +43,11 @@ const STATUSES = [
 ];
 
 const HIDDEN_TASK_STATUSES = new Set(['cnp', 'verification', 'interested', 'cancel_call', 'cancelled', 'on_hold', 'closed_lost']);
-const HIDDEN_TASK_LEAD_STATUSES = new Set(['closed_lost', 'on_hold', 'follow_up']);
+const HIDDEN_TASK_LEAD_STATUSES = new Set(['closed_lost', 'on_hold']);
 
-const EMPTY = { title: '', description: '', problem: '', type: 'task', lead: '', assignedTo: '', dueDate: '', priority: 'medium', reminderAt: '', cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', status: 'pending', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', phone: '', department: '' };
+const EMPTY = { title: '', description: '', problem: '', lead: '', assignedTo: '', dueDate: '', reminderAt: '', cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', status: 'pending', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', phone: '', department: '' };
 
 const inputCls = "w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition";
-
-const TYPE_SVG = {
-  call:      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
-  follow_up: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>,
-  meeting:   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
-  email:     <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
-  task:      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
-};
 
 export default function Tasks() {
   const { user } = useAuth();
@@ -65,7 +56,7 @@ export default function Tasks() {
   const [yesterdayTasks, setYesterdayTasks] = useState([]);
   const [salesUsers, setSalesUsers] = useState([]);
   const [tab, setTab] = useState('daily');
-  const [filters, setFilters] = useState({ status: '', type: '', department: '' });
+  const [filters, setFilters] = useState({ status: '', department: '' });
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -105,7 +96,6 @@ export default function Tasks() {
     try {
       const params = {};
       if (filters.status) params.status = filters.status;
-      if (filters.type) params.type = filters.type;
       if (filters.department) params.department = filters.department;
       
       const yestDate = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -188,9 +178,9 @@ export default function Tasks() {
       const match = description.match(/^Phone:\s*([^|]+)(?:\|(.*))?$/);
       if (match) { phone = match[1].trim(); description = (match[2] || '').trim(); }
     }
-    setForm({ title: task.title, description, problem: task.problem || '', type: task.type,
+    setForm({ title: task.title, description, problem: task.problem || '',
       lead: task.lead?._id || '', assignedTo: task.assignedTo?._id || '',
-      dueDate: task.dueDate?.slice(0, 16) || '', priority: task.priority,
+      dueDate: task.dueDate?.slice(0, 16) || '',
       reminderAt: task.reminderAt?.slice(0, 16) || '',
       cityVillageType: task.cityVillageType || 'city', cityVillage: task.cityVillage || '', houseNo: task.houseNo || '',
       postOffice: task.postOffice || '', district: task.district || '',
@@ -263,6 +253,15 @@ export default function Tasks() {
         }
       }
 
+      // If the new status is hidden (verification, cnp, interested, etc.), remove task from list immediately
+      if (modal === 'edit' && selected?._id && HIDDEN_TASK_STATUSES.has(payload.status)) {
+        const removeFromList = (prev) => prev.filter(t => t._id !== selected._id);
+        setDaily(removeFromList);
+        setTasks(removeFromList);
+        setYesterdayTasks(removeFromList);
+        setSelected(null);
+      }
+
       setModal(null);
       if (location.state?.leadId) { navigate('/pipeline'); return; }
       load();
@@ -292,27 +291,32 @@ export default function Tasks() {
     
     setLoading(true);
     const leadId = selected.lead?._id || selected.lead;
+    const taskId = selected._id;
     try {
       let finalNotes = selected.notes || [];
       if (noteText.trim()) {
         try {
-          const updated = await addTaskNote(selected._id, noteText.trim());
+          const updated = await addTaskNote(taskId, noteText.trim());
           finalNotes = updated.notes;
           setNoteText('');
         } catch { /* ignore */ }
       }
 
+      // Optimistically remove from list immediately so the task disappears at once
+      const removeFromList = (prev) => prev.filter(t => t._id !== taskId);
+      setDaily(removeFromList);
+      setTasks(removeFromList);
+      setYesterdayTasks(removeFromList);
+      setSelected(null);
+
       const promises = [];
       if (action === 'cnp') {
-        promises.push(updateTask(selected._id, { status: 'cnp' }).catch(() => {}));
-        setSelected(prev => ({ ...prev, status: 'cnp', notes: finalNotes }));
+        promises.push(updateTask(taskId, { status: 'cnp' }).catch(() => {}));
       } else if (action === 'mark_loss') {
-        promises.push(updateTask(selected._id, { status: 'cancel_call' }).catch(() => {}));
+        promises.push(updateTask(taskId, { status: 'cancel_call' }).catch(() => {}));
         if (leadId) promises.push(updateLead(leadId, { status: 'closed_lost' }).catch(() => {}));
-        setSelected(prev => ({ ...prev, status: 'cancel_call', notes: finalNotes }));
       } else if (action === 'callagain') {
         if (leadId) promises.push(createCallAgain(leadId, finalNotes).catch(() => {}));
-        setSelected(prev => ({ ...prev, status: 'cancel_call', notes: finalNotes }));
       }
       
       await Promise.all(promises);
@@ -324,10 +328,12 @@ export default function Tasks() {
     }
   };
 
+
   const filteredItems = useMemo(() => {
     let items = (tab === 'daily' ? daily : tab === 'yesterday' ? yesterdayTasks : tasks).filter(t =>
       !HIDDEN_TASK_STATUSES.has(t.status) &&
-      !HIDDEN_TASK_LEAD_STATUSES.has(t.lead?.status)
+      !HIDDEN_TASK_LEAD_STATUSES.has(t.lead?.status) &&
+      t.status !== 'cnp'
     );
     
     // Sort items so newest are at the top (by createdAt, fallback to ObjectId timestamp)
@@ -411,13 +417,7 @@ export default function Tasks() {
                     {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
                   </select>
                 )}
-                {tab === 'all' && (
-                  <select value={filters.type} onChange={(e) => setFilters(f => ({ ...f, type: e.target.value }))}
-                    className="border border-gray-100 rounded-xl px-4 py-2 text-xs bg-white font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm min-w-[120px]">
-                    <option value="">All Types</option>
-                    {TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                  </select>
-                )}
+
               </div>
             </div>
         </div>
@@ -462,15 +462,13 @@ export default function Tasks() {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className={`text-sm font-bold text-gray-800 truncate ${isCompleted ? 'line-through text-gray-400' : ''}`}>{task.title}</p>
+                          <p className={`text-sm font-bold text-gray-800 truncate ${isCompleted ? 'line-through text-gray-400' : ''}`}>{task.lead?.name || task.title}</p>
                           {isCompleted && (
                             <span className="bg-emerald-100 text-emerald-600 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase">Done</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-gray-400 font-medium">{task.lead?.name || 'No Lead'}</span>
-                          <span className="text-xs text-gray-300">•</span>
-                          <span className="text-[10px] text-gray-400 font-bold uppercase">{task.type?.replace(/_/g, ' ')}</span>
                           {task.department && (
                             <>
                               <span className="text-xs text-gray-300">•</span>
@@ -596,8 +594,8 @@ export default function Tasks() {
                 {initials(selected.lead?.name || selected.title)}
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-800 leading-tight truncate max-w-[200px]">{selected.title}</p>
-                <p className="text-xs text-gray-400 font-medium">{selected.lead?.name || 'No lead linked'}</p>
+                <p className="text-sm font-bold text-gray-800 leading-tight truncate max-w-[200px]">{selected.lead?.name || selected.title}</p>
+                <p className="text-xs text-gray-400 font-medium">{selected.title}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -612,8 +610,6 @@ export default function Tasks() {
             <SectionHead label="Task Information" />
             <div className="grid grid-cols-1 gap-1">
               <DetailRow label="Due Date" value={new Date(selected.dueDate).toLocaleString()} />
-              <DetailRow label="Type" value={selected.type?.replace(/_/g, ' ')} />
-              <DetailRow label="Priority" value={selected.priority} color={selected.priority === 'high' ? 'red' : 'gray'} />
               <DetailRow label="Status" value={selected.status} color={selected.status === 'completed' ? 'green' : 'amber'} />
             </div>
 
@@ -748,7 +744,6 @@ export default function Tasks() {
               <div className="flex-1 overflow-y-auto px-1 space-y-0 custom-scrollbar">
                  <SectionHead label="Task Information" />
                  <DetailRow label="Due Date" value={new Date(selected.dueDate).toLocaleString()} />
-                 <DetailRow label="Type" value={selected.type?.replace(/_/g, ' ')} />
                  <DetailRow label="Status" value={selected.status} color={selected.status === 'completed' ? 'green' : 'amber'} />
                  
                  <SectionHead label="Lead & Phone" />
@@ -843,16 +838,7 @@ export default function Tasks() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type</label>
-                <select className={`${inputCls} mt-1`} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                  {TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                </select></div>
-              <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Priority</label>
-                <select className={`${inputCls} mt-1`} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                  {['low', 'medium', 'high'].map(p => <option key={p} value={p}>{p}</option>)}
-                </select></div>
-            </div>
+
 
             {canManage && (
               <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department</label>

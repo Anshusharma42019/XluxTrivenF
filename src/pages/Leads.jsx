@@ -484,20 +484,20 @@ export default function Leads() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                   Save
                 </button>
-                <button type="button" disabled={loading} onClick={async () => {
-                  setLoading(true);
-                  try { await markCNP(selected._id); load(); setSelected(null); setChatNotes([]); }
-                  catch (err) { setError(err.response?.data?.message || 'Failed'); }
-                  finally { setLoading(false); }
+                <button type="button" disabled={loading} onClick={() => {
+                  const targetId = selected._id;
+                  setData(d => ({ ...d, leads: (d.leads || []).filter(l => l._id !== targetId) }));
+                  setSelected(null); setChatNotes([]);
+                  markCNP(targetId).then(() => load(true)).catch(() => load(true));
                 }} className="col-span-1 py-3 rounded-2xl text-[12px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 transition-all border border-rose-100 hover:border-rose-200 hover:-translate-y-0.5 flex items-center justify-center gap-1.5 shadow-sm">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
                   CNP
                 </button>
-                <button type="button" disabled={loading} onClick={async () => {
-                  setLoading(true);
-                  try { await createCallAgain(selected._id); load(); setSelected(null); setChatNotes([]); }
-                  catch (err) { setError(err.response?.data?.message || 'Failed'); }
-                  finally { setLoading(false); }
+                <button type="button" disabled={loading} onClick={() => {
+                  const targetId = selected._id;
+                  setData(d => ({ ...d, leads: (d.leads || []).filter(l => l._id !== targetId) }));
+                  setSelected(null); setChatNotes([]);
+                  createCallAgain(targetId).then(() => load(true)).catch(() => load(true));
                 }} className="col-span-1 py-3 rounded-2xl text-[12px] font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 transition-all border border-amber-100 hover:border-amber-200 hover:-translate-y-0.5 flex items-center justify-center gap-1.5 shadow-sm">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                   Call

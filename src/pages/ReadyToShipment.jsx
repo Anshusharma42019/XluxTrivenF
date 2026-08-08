@@ -24,11 +24,11 @@ const PIN_COLORS = [
 const initials = (name = '') =>
   name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
 
-const DetailRow = ({ label, value }) =>
+const DetailRow = ({ label, value, color }) =>
   value ? (
-    <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+    <div className="flex items-start gap-2 py-2 border-b border-gray-50 last:border-0">
       <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0 mt-0.5">{label}</span>
-      <span className="text-sm text-gray-800 font-medium capitalize flex-1">{value}</span>
+      <span className={`text-sm capitalize flex-1 ${color ? color : 'text-gray-800 font-medium'}`}>{value}</span>
     </div>
   ) : null;
 
@@ -318,6 +318,9 @@ export default function ReadyToShipment() {
                               {dept}
                             </span>
                           )}
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                            Ready To Ship
+                          </span>
                           {r.price && (
                             <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg">
                               ₹{r.price}
@@ -467,6 +470,7 @@ export default function ReadyToShipment() {
           <div className="px-5 py-3 overflow-y-auto flex-1 custom-scrollbar">
             <SectionHead label="Customer" />
             <DetailRow label="Task" value={selected.title} />
+            <DetailRow label="Status" value="Ready to Shipment" color="text-emerald-600 font-bold" />
             <DetailRow label="Assigned To" value={selected.assignedTo?.name} />
             <DetailRow label="Department" value={selected.department || selected.lead?.department || selected.task?.department} />
             <DetailRow label="Description" value={selected.description} />
@@ -543,6 +547,7 @@ export default function ReadyToShipment() {
             <div className="space-y-0 px-2 pb-2">
               <SectionHead label="Customer Info" />
               <DetailRow label="Task" value={selected.title} />
+              <DetailRow label="Status" value="Ready to Shipment" color="text-emerald-600 font-bold" />
               <DetailRow label="Assigned To" value={selected.assignedTo?.name} />
               <DetailRow label="Department" value={selected.department || selected.lead?.department || selected.task?.department} />
               <DetailRow label="Description" value={selected.description} />

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
 import { getNotifications } from '../services/notification.service';
-import { getLead } from '../services/lead.service';
+import { getLead, globalSearch } from '../services/lead.service';
 import UniversalSearch from './UniversalSearch';
 import * as attendanceSvc from '../services/attendance.service';
 import API from '../api';
@@ -26,6 +26,7 @@ const PAGE_TITLES = {
   '/shiprocket/ndr/detail': 'NDR Details',
   '/notifications': 'Notifications',
   '/users': 'Staff',
+  '/staff-activity': 'Staff Activity & Delivery Hub',
   '/commission-settings': 'Commission Settings',
   '/shipmaxx': 'ShipMaxx',
   '/shipmaxx/ndr': 'ShipMaxx NDR Management',

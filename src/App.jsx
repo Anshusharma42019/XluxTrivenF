@@ -32,6 +32,7 @@ const ShipmaxxNdr = lazy(() => import('./pages/ShipmaxxNdr'));
 const ShipmaxxFollowup = lazy(() => import('./pages/ShipmaxxFollowup'));
 const Whatsapp = lazy(() => import('./pages/Whatsapp'));
 const OpsDashboard = lazy(() => import('./pages/OpsDashboard'));
+const StaffActivity = lazy(() => import('./pages/StaffActivity'));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-full min-h-[300px]">
@@ -132,6 +133,11 @@ function AppRoutes() {
         <Route path="users" element={
           <ProtectedRoute roles={['admin', 'manager']}>
             <Users />
+          </ProtectedRoute>
+        } />
+        <Route path="staff-activity" element={
+          <ProtectedRoute roles={['admin', 'manager', 'sales', 'support', 'logistics']}>
+            <StaffActivity />
           </ProtectedRoute>
         } />
       </Route>

@@ -194,11 +194,13 @@ export default function AppointmentBook() {
   const [loadError, setLoadError] = useState('');
   const [rightPanel, setRightPanel] = useState(null); // { mode: 'view'|'edit', appt }
   const selected = rightPanel?.mode === 'edit' ? rightPanel.appt : null;
+  const setSelected = (val) => setRightPanel(val ? { mode: 'view', appt: val } : null);
   const [form, setForm] = useState(EMPTY);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState('');
+  const [salesUsers, setSalesUsers] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [bookedDoctors, setBookedDoctors] = useState([]);
   const [waConfirm, setWaConfirm] = useState(null);

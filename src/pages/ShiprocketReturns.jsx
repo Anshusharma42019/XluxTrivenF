@@ -694,7 +694,7 @@ export default function ShiprocketReturns({ initialTab = 'returns' }) {
                 </div>
               </div>
             </div>
-            {false && selectedNdr && (
+            {selectedNdr && (
               <div className="px-5 py-4 border-b border-gray-50 bg-gray-50/70">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
                   <div>

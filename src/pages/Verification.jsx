@@ -312,7 +312,7 @@ export default function Verification() {
       const flattened = flattenRecord({ ...selected, ...verificationFields });
       setSelected({ ...flattened, lead: { ...(flattened.lead || selected.lead || {}), name, phone } });
       setEditMode(false);
-    } catch { }
+    } catch (e) { /* ignore */ }
     finally { setSaving(false); }
   };
 
@@ -380,7 +380,7 @@ export default function Verification() {
       setRecords(prev => prev.filter(r => r._id !== selected._id));
       setSelected(null);
       navigate('/ready-to-shipment');
-    } catch { }
+    } catch (e) { /* ignore */ }
   };
 
   const handleSelect = async (r) => {
@@ -402,7 +402,7 @@ export default function Verification() {
         const office = result.PostOffice?.[0];
         if (office) setEditForm(f => ({ ...f, district: office.District, state: office.State }));
       }
-    } catch { }
+    } catch (e) { /* ignore */ }
   };
 
   // Avatar color helper — works for both pending and on-hold records

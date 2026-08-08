@@ -36,7 +36,7 @@ const SectionHead = ({ label, color = "green" }) => (
 );
 
 const todayISO = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); };
-const TASK_EMPTY = { title: '', phone: '', problem: '', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', reminderAt: '', dueDate: '', cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', type: 'task', priority: 'medium', lead: '', assignedTo: '' };
+const TASK_EMPTY = { title: '', phone: '', problem: '', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', reminderAt: '', dueDate: '', cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', lead: '', assignedTo: '' };
 const inputCls = "w-full border border-gray-200 rounded-xl px-4 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition";
 
 
@@ -224,46 +224,46 @@ export default function Pipeline() {
     return filteredItems.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredItems, currentPage]);
 
+  const optimisticRemove = (targetId) => {
+    const filterOut = items => items.filter(i => (i._id !== targetId && i.lead?._id !== targetId && i._id !== selected?._id && i.lead?._id !== selected?._id && i.lead?._id !== selected?.lead?._id));
+    setInterestedLeads(filterOut);
+    setOnHoldLeads(filterOut);
+    setClosedLostLeads(filterOut);
+    setCnpLeads(filterOut);
+    setCallAgainLeads(filterOut);
+    setSelected(null);
+  };
+
   const handleMove = async (lead, newStage) => {
+    optimisticRemove(lead._id || selected?._id);
     setUpdating(lead._id);
-    try {
-      await updateLead(lead._id, { status: newStage === 'verification' ? 'new' : newStage, cnp: false, forceVerification: newStage === 'verification' });
-      if (filter === 'cnp' && selected?._id) {
-        try { await deleteCnpRecord(selected._id); } catch { }
-      }
-      if (filter === 'call_again' && selected?._id && selected._id !== lead._id) {
-        try { await updateCallAgain(selected._id, { status: 'done' }); } catch { }
-      }
-      setSelected(null);
-      await load();
-    } catch (e) { 
-      setError(e.response?.data?.message || e.message || 'Update failed');
-    }
-    finally { setUpdating(null); }
+    updateLead(lead._id, { status: newStage === 'verification' ? 'new' : newStage, cnp: false, forceVerification: newStage === 'verification' })
+      .then(() => {
+        if (filter === 'cnp' && selected?._id) deleteCnpRecord(selected._id).catch(() => {});
+        if (filter === 'call_again' && selected?._id) updateCallAgain(selected._id, { status: 'done' }).catch(() => {});
+        load();
+      })
+      .catch(() => load())
+      .finally(() => setUpdating(null));
   };
 
   const handleStatusChange = async (leadId, status, taskId = null) => {
+    optimisticRemove(leadId);
     setUpdating(leadId);
-    try {
-      await updateLead(leadId, { status });
-      if (taskId) await deleteCnpRecord(taskId);
-      load();
-      setSelected(null);
-    } catch { /* ignore */ } finally { setUpdating(null); }
+    updateLead(leadId, { status })
+      .then(() => {
+        if (taskId) deleteCnpRecord(taskId).catch(() => {});
+        load();
+      })
+      .catch(() => load())
+      .finally(() => setUpdating(null));
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this lead?')) return;
+    optimisticRemove(id);
     setUpdating(id);
-    try {
-      await deleteLead(id);
-      await load();
-      setSelected(null);
-    } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Delete failed');
-    } finally {
-      setUpdating(null);
-    }
+    deleteLead(id).then(() => load()).catch(err => alert(err?.response?.data?.message || 'Delete failed')).finally(() => setUpdating(null));
   };
 
   const handleFollowUpNote = async () => {
@@ -308,7 +308,7 @@ export default function Pipeline() {
         await updateLead(taskForm.lead, { cnp: false }).catch(() => {});
       }
       // Mark call-again as done if task created from Call Again list
-      if (filter === 'call_again' && selected?._id && selected._id !== taskForm.lead) {
+      if (filter === 'call_again' && selected?._id) {
         await updateCallAgain(selected._id, { status: 'done' }).catch(() => {});
       }
       setTaskModal(false);
@@ -546,7 +546,7 @@ export default function Pipeline() {
               </div>
             ) : (
               paginatedItems.map((item, i) => {
-                const lead = item.lead || item;
+                const lead = (item.lead && typeof item.lead === 'object') ? item.lead : item;
                 const isActive = selected?._id === item._id;
                 const color = PIN_COLORS[i % PIN_COLORS.length];
                 const stage = STAGES.find(s => s.key === lead.status);
@@ -820,13 +820,12 @@ export default function Pipeline() {
                             Interested
                           </button>
                         )}
-                        <button onClick={async () => {
-                          if (filter === 'closed_lost') await updateLead(lead._id, { status: 'on_hold' }).catch(() => {});
-                          openTaskModal(lead);
-                        }}
-                          className="py-3 rounded-2xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 transition-all">
-                          Task
-                        </button>
+                        {filter !== 'closed_lost' && (
+                          <button onClick={() => openTaskModal(lead)}
+                            className="py-3 rounded-2xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 transition-all">
+                            Task
+                          </button>
+                        )}
                         {filter !== 'closed_lost' && (
                           <button disabled={updating} onClick={() => handleMove(lead, 'closed_lost')}
                             className="py-3 rounded-2xl text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all">
@@ -835,26 +834,36 @@ export default function Pipeline() {
                         )}
                         {filter !== 'closed_lost' && filter !== 'cnp' && (
                           <button disabled={updating} onClick={async () => {
-                            setUpdating(lead._id);
+                            const targetId = lead._id || selected?._id;
+                            optimisticRemove(targetId);
+                            setUpdating(targetId);
                             try {
                               await markCNP(lead._id);
-                              if (filter === 'call_again' && selected?._id && selected._id !== lead._id) {
-                                await updateCallAgain(selected._id, { status: 'interested' }).catch(() => {});
+                              if (filter === 'call_again' && selected?._id) {
+                                await updateCallAgain(selected._id, { status: 'done' }).catch(() => {});
                               }
-                              await load(); setSelected(null);
-                            } catch { } finally { setUpdating(null); }
+                              await load();
+                            } catch (err) { 
+                              alert('Failed to mark CNP: ' + (err.response?.data?.message || err.message));
+                              load(); 
+                            } finally { setUpdating(null); setSelected(null); }
                           }} className="py-3 rounded-2xl text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 transition-all">CNP</button>
                         )}
                         {filter !== 'closed_lost' && filter !== 'call_again' && (
                           <button disabled={updating} onClick={async () => {
-                            setUpdating(lead._id);
+                            const targetId = lead._id || selected?._id;
+                            optimisticRemove(targetId);
+                            setUpdating(targetId);
                             try {
                               await createCallAgain(lead._id);
                               if (filter === 'cnp' && selected?._id) {
                                 await deleteCnpRecord(selected._id).catch(() => {});
                               }
-                              await load(); setSelected(null);
-                            } catch { } finally { setUpdating(null); }
+                              await load();
+                            } catch (err) { 
+                              alert('Failed to move to Call Again: ' + (err.response?.data?.message || err.message));
+                              load(); 
+                            } finally { setUpdating(null); setSelected(null); }
                           }} className="py-3 rounded-2xl text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-all">Call Again</button>
                         )}
                       </div>
@@ -911,25 +920,34 @@ export default function Pipeline() {
               
               <div className="grid grid-cols-2 gap-3 pt-6">
                 {filter !== 'interested' && (
-                  <button disabled={updating} onClick={() => handleMove(selected.lead || selected, 'interested')}
+                  <button disabled={updating} onClick={() => handleMove((selected.lead && typeof selected.lead === 'object') ? selected.lead : selected, 'interested')}
                     className="py-4 rounded-2xl text-xs font-bold text-white bg-purple-500 active:scale-95 transition shadow-lg shadow-purple-100">Interested</button>
                 )}
-                <button onClick={async () => { const l = selected.lead || selected; if (filter === 'closed_lost') await updateLead(l._id, { status: 'on_hold' }).catch(() => {}); openTaskModal(l); }}
+                <button onClick={async () => { const l = (selected.lead && typeof selected.lead === 'object') ? selected.lead : selected; if (filter === 'closed_lost') await updateLead(l._id, { status: 'on_hold' }).catch(() => {}); openTaskModal(l); }}
                   className="py-4 rounded-2xl text-xs font-bold text-white bg-blue-600 active:scale-95 transition shadow-lg shadow-blue-100">Task</button>
                 {filter !== 'closed_lost' && (
-                  <button disabled={updating} onClick={() => handleMove(selected.lead || selected, 'closed_lost')}
+                  <button disabled={updating} onClick={() => handleMove((selected.lead && typeof selected.lead === 'object') ? selected.lead : selected, 'closed_lost')}
                     className="py-4 rounded-2xl text-xs font-bold text-gray-500 bg-gray-100 active:scale-95 transition">Mark Lost</button>
                 )}
                 {filter !== 'closed_lost' && filter !== 'cnp' && (
-                  <button disabled={updating} onClick={async () => {
+                  <button disabled={updating} onClick={() => {
+                    const targetId = selected.lead?._id || selected._id;
+                    optimisticRemove(targetId);
                     setUpdating(selected._id);
-                    try { await markCNP(selected._id); await load(); setSelected(null); } catch { } finally { setUpdating(null); }
+                    markCNP(targetId).then(async () => {
+                      if (filter === 'call_again' && selected?._id) {
+                        await updateCallAgain(selected._id, { status: 'done' }).catch(() => {});
+                      }
+                      return load();
+                    }).catch(() => load()).finally(() => setUpdating(null));
                   }} className="py-4 rounded-2xl text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100">CNP</button>
                 )}
                 {filter !== 'closed_lost' && filter !== 'call_again' && (
-                  <button disabled={updating} onClick={async () => {
+                  <button disabled={updating} onClick={() => {
+                    const targetId = selected.lead?._id || selected._id;
+                    optimisticRemove(targetId);
                     setUpdating(selected._id);
-                    try { await createCallAgain(selected.lead?._id || selected._id); await load(); setSelected(null); } catch { } finally { setUpdating(null); }
+                    createCallAgain(targetId).then(() => load()).catch(() => load()).finally(() => setUpdating(null));
                   }} className="py-4 rounded-2xl text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100">Call Again</button>
                 )}
               </div>

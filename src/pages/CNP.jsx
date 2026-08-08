@@ -118,12 +118,19 @@ export default function CNP() {
     try {
       const { cnpRecordId, isCallAgain, ...payload } = taskForm;
       if (!payload.assignedTo) delete payload.assignedTo;
+      if (payload.reminderAt) {
+        payload.dueDate = new Date(payload.reminderAt).toISOString();
+      }
       await createTask(payload);
       if (cnpRecordId) {
         if (isCallAgain) await updateCallAgain(cnpRecordId, { status: 'done' }).catch(() => {});
         else await deleteCnpRecord(cnpRecordId).catch(() => {});
       }
-      if (payload.lead) await updateLead(payload.lead, { cnp: false, status: 'contacted' }).catch(() => {});
+      if (payload.lead) await updateLead(payload.lead, { cnp: false, status: 'in_progress' }).catch(() => {});
+      // Optimistically remove from list so item leaves current page list immediately
+      setCnpTasks(prev => prev.filter(t => t._id !== cnpRecordId && t.lead?._id !== payload.lead));
+      setCallAgainLeads(prev => prev.filter(r => r._id !== cnpRecordId && r.lead?._id !== payload.lead));
+
       setTaskModal(false);
       setSelected(null);
       load(dateFilter, callAgainDateFilter, department);
@@ -638,12 +645,8 @@ export default function CNP() {
           <div className="px-5 py-4 border-t border-gray-50 bg-white shrink-0">
             <div className="grid grid-cols-2 gap-2 mb-2">
               <button disabled={updating} onClick={() => handleStatusChange(selected.lead?._id, 'interested', tab === 'tasks' ? selected._id : null)}
-                className="py-2.5 rounded-xl text-xs font-bold text-white bg-green-500 hover:bg-green-600 transition shadow-md shadow-green-100 disabled:opacity-50">
+                className="col-span-2 py-2.5 rounded-xl text-xs font-bold text-white bg-green-500 hover:bg-green-600 transition shadow-md shadow-green-100 disabled:opacity-50">
                 Interested
-              </button>
-              <button disabled={updating} onClick={() => handleStatusChange(selected.lead?._id, 'on_hold', tab === 'tasks' ? selected._id : null)}
-                className="py-2.5 rounded-xl text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 transition shadow-md shadow-amber-100 disabled:opacity-50">
-                On Hold
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -729,9 +732,7 @@ export default function CNP() {
 
               <div className="grid grid-cols-2 gap-3 pt-4">
                 <button disabled={updating} onClick={() => handleStatusChange(selected.lead?._id, 'interested', tab === 'tasks' ? selected._id : null)}
-                  className="py-4 rounded-xl text-xs font-bold text-white bg-green-500 active:scale-95 transition shadow-lg shadow-green-100">Interested</button>
-                <button disabled={updating} onClick={() => handleStatusChange(selected.lead?._id, 'on_hold', tab === 'tasks' ? selected._id : null)}
-                  className="py-4 rounded-xl text-xs font-bold text-white bg-amber-500 active:scale-95 transition shadow-lg shadow-amber-100">On Hold</button>
+                  className="col-span-2 py-4 rounded-xl text-xs font-bold text-white bg-green-500 active:scale-95 transition shadow-lg shadow-green-100">Interested</button>
                 <button disabled={updating} onClick={() => handleStatusChange(selected.lead?._id, 'closed_lost', tab === 'tasks' ? selected._id : null)}
                   className="py-4 rounded-xl text-xs font-bold text-gray-500 bg-gray-100 active:scale-95 transition">Mark Lost</button>
                 {tab === 'tasks' ? (

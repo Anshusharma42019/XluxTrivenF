@@ -125,6 +125,8 @@ function KpiCard({ label, value, change, color, formatter = fmtNum, sparkData = 
 
 /* ─── Trend Chart (SVG area) ─────────────────────────────────────────────── */
 function TrendChart({ data = [] }) {
+  const [hovered, setHovered] = useState(null);
+
   if (!data.length) return <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>No trend data</div>;
 
   const keys = ['delivered', 'ofd', 'undelivered', 'rto', 'rtoIntersite'];
@@ -133,7 +135,6 @@ function TrendChart({ data = [] }) {
 
   const maxVal = Math.max(...data.map(d => keys.reduce((s, k) => s + (d[k] || 0), 0)), 1);
   const W = 100, H = 100;
-  const [hovered, setHovered] = useState(null);
 
   const getY = (val) => H - (val / maxVal) * H;
   const getX = (i) => data.length <= 1 ? W / 2 : (i / (data.length - 1)) * W;
@@ -211,21 +212,21 @@ const RTO_REASON_COLORS = ['#dc2626', '#d97706', '#7c3aed', '#2563eb', '#94a3b8'
 
 function DonutChart({ reasons = [] }) {
   const total = reasons.reduce((s, r) => s + r.count, 0) || 1;
-  let cumulative = 0;
   const R = 40, CX = 50, CY = 50;
-
-  const segments = reasons.slice(0, 5).map((r, i) => {
+  const segments = [];
+  reasons.slice(0, 5).reduce((cumulative, r, i) => {
     const pct = r.count / total;
     const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
-    cumulative += pct;
-    const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+    const newCumulative = cumulative + pct;
+    const endAngle = newCumulative * 2 * Math.PI - Math.PI / 2;
     const x1 = CX + R * Math.cos(startAngle);
     const y1 = CY + R * Math.sin(startAngle);
     const x2 = CX + R * Math.cos(endAngle);
     const y2 = CY + R * Math.sin(endAngle);
     const largeArc = pct > 0.5 ? 1 : 0;
-    return { d: `M ${CX} ${CY} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`, color: RTO_REASON_COLORS[i], pct, reason: r.reason, count: r.count };
-  });
+    segments.push({ d: `M ${CX} ${CY} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`, color: RTO_REASON_COLORS[i], pct, reason: r.reason, count: r.count });
+    return newCumulative;
+  }, 0);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -573,7 +574,7 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                         💬 WhatsApp
                       </button>
                     )}
-                    {(s.status.toLowerCase().includes('rto') && !s.status.toLowerCase().includes('delivered')) && (
+                    {(s.status.toLowerCase().includes('rto')) && (
                       s.rto_verification_action === 'wants_again' ? (
                         <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
                       ) : (
@@ -644,6 +645,17 @@ const PRESETS = [
 ];
 
 function FilterBar({ filters, onChange, lastUpdated, onRefresh, autoRefresh, onToggleAutoRefresh }) {
+  // Local state for text inputs — prevents API call on every keystroke.
+  // Commits to parent filter only on blur or Enter.
+  const [stateInput, setStateInput] = useState(filters.state || '');
+  const [courierInput, setCourierInput] = useState(filters.courier || '');
+  const [awbInput, setAwbInput] = useState(filters.awb || '');
+
+  // Sync if parent clears the filter (e.g. preset change resets state)
+  useEffect(() => { setStateInput(filters.state || ''); }, [filters.state]);
+  useEffect(() => { setCourierInput(filters.courier || ''); }, [filters.courier]);
+  useEffect(() => { setAwbInput(filters.awb || ''); }, [filters.awb]);
+
   return (
     <div style={{
       background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14,
@@ -672,14 +684,26 @@ function FilterBar({ filters, onChange, lastUpdated, onRefresh, autoRefresh, onT
             style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
         </>
       )}
-      {/* Hub/State */}
-      <input value={filters.state || ''} onChange={e => onChange('state', e.target.value)}
+      {/* Hub/State — commits on blur or Enter to avoid per-keystroke API calls */}
+      <input
+        value={stateInput}
+        onChange={e => setStateInput(e.target.value)}
+        onBlur={() => onChange('state', stateInput)}
+        onKeyDown={e => e.key === 'Enter' && onChange('state', stateInput)}
         placeholder="State..." style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, width: 100 }} />
-      {/* Courier */}
-      <input value={filters.courier || ''} onChange={e => onChange('courier', e.target.value)}
+      {/* Courier — commits on blur or Enter */}
+      <input
+        value={courierInput}
+        onChange={e => setCourierInput(e.target.value)}
+        onBlur={() => onChange('courier', courierInput)}
+        onKeyDown={e => e.key === 'Enter' && onChange('courier', courierInput)}
         placeholder="Courier..." style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, width: 110 }} />
-      {/* AWB */}
-      <input value={filters.awb || ''} onChange={e => onChange('awb', e.target.value)}
+      {/* AWB — commits on blur or Enter */}
+      <input
+        value={awbInput}
+        onChange={e => setAwbInput(e.target.value)}
+        onBlur={() => onChange('awb', awbInput)}
+        onKeyDown={e => e.key === 'Enter' && onChange('awb', awbInput)}
         placeholder="AWB / Track #" style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, width: 130 }} />
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -936,7 +960,6 @@ export default function OpsDashboard() {
     ...(isAdminOrManager ? [
       { key: 'salesDelivered',   label: 'Sales Delivered',   color: '#059669', formatter: fmtNum, subtext: 'Sales team delivered orders' },
       { key: 'supportDelivered', label: 'Support Delivered', color: '#0d9488', formatter: fmtNum, subtext: 'Support team delivered orders' },
-      { key: 'revenue',          label: 'Delivered Revenue', color: STATUS_COLORS.revenue,       formatter: fmtCurr, subtext: 'Total collected revenue from delivered shipments this period' },
     ] : []),
     { key: 'undelivered',  label: 'Undelivered',        color: STATUS_COLORS.undelivered,   formatter: fmtNum },
     { key: 'rto',          label: 'RTO',                color: STATUS_COLORS.rto,           formatter: fmtNum },

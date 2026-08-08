@@ -150,7 +150,7 @@ export default function Shiprocket({ initialSection, initialReturnsTab = 'return
           }
         }
       }
-    } catch { }
+    } catch (e) { /* ignore */ }
   };
 
   // Load pickup locations on mount
@@ -420,7 +420,7 @@ export default function Shiprocket({ initialSection, initialReturnsTab = 'return
             <button onClick={async () => {
               setRtsLoading(true);
               try { const res = await api.get('/ready-to-shipment/for-shipment'); setRtsRecords(res.data.data || []); }
-              catch { } finally { setRtsLoading(false); }
+              catch (e) { /* ignore */ } finally { setRtsLoading(false); }
             }} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition-all font-semibold">
               {rtsLoading ? 'Loading...' : 'Load People'}
             </button>
@@ -934,7 +934,7 @@ export default function Shiprocket({ initialSection, initialReturnsTab = 'return
                     try {
                       const res = await api.get('/shiprocket/next-order-id');
                       setOrder(p => ({ ...p, order_id: res.data.data.order_id, order_date: new Date().toLocaleDateString('en-CA') }));
-                    } catch { }
+                    } catch (e) { /* ignore */ }
                     goStep(2);
                   })}
                   className="text-xs font-bold px-3 py-1.5 rounded-xl bg-red-600 text-white hover:bg-red-700 transition">

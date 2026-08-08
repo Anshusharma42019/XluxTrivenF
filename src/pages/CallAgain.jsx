@@ -11,15 +11,20 @@ function TaskModal({ lead, assignedTo, recordId, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const navigate = useNavigate();
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true); setError('');
     try {
       const payload = { ...form, type: 'task', status: 'pending' };
       if (!payload.assignedTo) delete payload.assignedTo;
-      if (!payload.reminderAt) delete payload.reminderAt;
+      if (payload.reminderAt) {
+        payload.dueDate = new Date(payload.reminderAt).toISOString();
+      } else {
+        delete payload.reminderAt;
+      }
       await createTask(payload);
       if (recordId) await updateCallAgain(recordId, { status: 'done' });
-      if (lead?._id || lead) await updateLead(lead?._id || lead, { status: 'contacted' });
+      if (lead?._id || lead) await updateLead(lead?._id || lead, { status: 'in_progress', cnp: false });
       onClose(true);
     } catch (err) { setError(err.response?.data?.message || 'Something went wrong'); }
     finally { setLoading(false); }

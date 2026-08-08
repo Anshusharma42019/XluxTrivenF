@@ -397,7 +397,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datePreset, filterFrom, filterTo, department, user?.role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -468,8 +469,8 @@ export default function Dashboard() {
     finally { setCsvLoading(false); }
   };
 
-  const checkedIn = !attStatus?.checkIn;
-  const checkedOut = !attStatus?.checkOut;
+  const checkedIn = !!attStatus?.checkIn;
+  const checkedOut = !!attStatus?.checkOut;
   const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : null;
 
   const handleCheckIn = async () => {

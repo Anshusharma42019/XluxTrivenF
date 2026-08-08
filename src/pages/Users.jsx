@@ -388,15 +388,19 @@ export default function Users() {
                           </td>
                           <td className="py-4 px-2 text-center">
                             <div className="flex flex-col items-center gap-1">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1" title="Ready to Shipment">
                                 <span className="text-[9px] font-bold text-gray-400">RDY</span>
                                 <span className={`text-xs font-black ${readyCount > 0 ? 'text-purple-600' : 'text-gray-300'}`}>{readyCount}</span>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[9px] font-bold text-gray-400">DEL</span>
-                                <span className={`text-xs font-black ${s.deliveredCount > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>{s.deliveredCount || 0}</span>
+                              <div className="flex items-center gap-1" title="New / First-Time Delivered Orders">
+                                <span className="text-[9px] font-bold text-gray-400">{u.role === 'support' ? 'NEW' : 'NEW DEL'}</span>
+                                <span className={`text-xs font-black ${(s.newDeliveredCount ?? s.deliveredCount) > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>{s.newDeliveredCount ?? s.deliveredCount ?? 0}</span>
                               </div>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1" title={u.role === 'support' ? 'Re-Verifications Delivered by Support' : 'Repeat / Re-Order Deliveries from Old Customers'}>
+                                <span className="text-[9px] font-bold text-gray-400">{u.role === 'support' ? 'RE-VER' : 'OLD DEL'}</span>
+                                <span className={`text-xs font-black ${(u.role === 'support' ? s.supportOldDeliveredCount : s.salesOldDeliveredCount) > 0 ? 'text-indigo-600' : 'text-gray-300'}`}>{(u.role === 'support' ? s.supportOldDeliveredCount : s.salesOldDeliveredCount) || 0}</span>
+                              </div>
+                              <div className="flex items-center gap-1" title="Returned / RTO">
                                 <span className="text-[9px] font-bold text-gray-400">RTO</span>
                                 <span className={`text-xs font-black ${s.rtoCount > 0 ? 'text-orange-600' : 'text-gray-300'}`}>{s.rtoCount || 0}</span>
                               </div>
@@ -485,7 +489,8 @@ export default function Users() {
                         ['ON HOLD', s.onHoldCount, 'text-amber-600', 'bg-amber-50'],
                         ['NOT INT.', s.todayNotInterested, 'text-gray-500', 'bg-gray-50'],
                         ['READY', s.readyToShipmentCount, 'text-purple-600', 'bg-purple-50'],
-                        ['DELIVERED', s.deliveredCount, 'text-emerald-600', 'bg-emerald-50']
+                        [viewUser.role === 'support' ? 'NEW DELIV.' : 'NEW DELIV.', (s.newDeliveredCount ?? s.deliveredCount) || 0, 'text-emerald-600', 'bg-emerald-50'],
+                        [viewUser.role === 'support' ? 'RE-VER DEL.' : 'OLD DELIV.', (viewUser.role === 'support' ? s.supportOldDeliveredCount : s.salesOldDeliveredCount) || 0, 'text-indigo-600', 'bg-indigo-50']
                       ].map(([label, val, tc, bg]) => (
                         <div key={label} className={`${bg} rounded-xl p-3 text-center border border-black/0.03 shadow-sm`}>
                           <p className={`text-xl font-black ${tc}`}>{val}</p>

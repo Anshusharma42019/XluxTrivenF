@@ -126,7 +126,10 @@ const NAV_GROUPS = [
         to: '/users', label: 'Staff', roles: ['admin', 'manager'],
         icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
       },
-
+      {
+        to: '/staff-activity', label: 'Staff Activity', roles: ['admin', 'manager', 'sales', 'support', 'logistics'],
+        icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+      },
     ]
   },
 ];
