@@ -15,9 +15,10 @@ const fmtCurr = (n) => (n === null || n === undefined ? '—' : `₹${fmtNum(n)}
 /* ─── Sparkline (mini SVG line) ──────────────────────────────────────────── */
 function Sparkline({ data = [], color = '#16a34a', height = 28 }) {
   if (data.length <= 1) return null;
-  const max = Math.max(...data, 1);
+  const safeData = data.map(v => (typeof v === 'number' && !isNaN(v)) ? v : 0);
+  const max = Math.max(...safeData, 1);
   const w = 80; const h = height;
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * h}`).join(' ');
+  const pts = safeData.map((v, i) => `${(i / (safeData.length - 1)) * w},${h - (v / max) * h}`).join(' ');
   return (
     <svg width={w} height={h} style={{ overflow: 'visible' }}>
       <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
