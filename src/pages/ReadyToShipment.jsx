@@ -460,10 +460,20 @@ export default function ReadyToShipment() {
                 {selected.lead?.phone && <p className="text-xs text-gray-400">{selected.lead.phone}</p>}
               </div>
             </div>
-            <button onClick={() => setSelected(null)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition text-lg">
-              ×
-            </button>
+            <div className="flex items-center gap-3">
+              {selected.createdAt && (
+                <div className="text-right hidden sm:block">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Synced To RTS</p>
+                  <p className="text-xs font-bold text-gray-700 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">
+                    {new Date(selected.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} {new Date(selected.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              )}
+              <button onClick={() => setSelected(null)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition text-lg shrink-0">
+                ×
+              </button>
+            </div>
           </div>
 
           {/* Panel body */}
