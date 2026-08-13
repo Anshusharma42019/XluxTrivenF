@@ -124,6 +124,7 @@ const ROLES = [
   { label: <><Users size={14} className="inline-block mr-1" />{" All Teams"}</>, value: 'all' },
   { label: '💼 Sales Team', value: 'sales' },
   { label: <><Headphones size={14} className="inline-block mr-1" />{" Support Team"}</>, value: 'support' },
+  { label: <><Truck size={14} className="inline-block mr-1" />{" Logistics Team"}</>, value: 'logistics' },
 ];
 
 export default function StaffActivity() {
@@ -162,7 +163,7 @@ export default function StaffActivity() {
       const staffList = data.staffStats || (Array.isArray(data) ? data : []);
 
       const raw = staffList.filter(item => 
-        item.user && ['sales', 'support'].includes(item.user.role)
+        item.user && ['sales', 'support', 'logistics'].includes(item.user.role)
       );
       setStats(raw);
       setDeliveryMeta({
@@ -285,6 +286,7 @@ export default function StaffActivity() {
       totalUniqueDelivered: deliveryMeta.total,     // Real total matching shipping platform
       totalAttributed: deliveryMeta.attributed,     // Orders linked to a staff
       totalUnattributed: deliveryMeta.unattributed, // Orders with no staff link
+      totalCommission: filteredStaff.reduce((sum, s) => sum + (s.commission || 0), 0),
       totalRTO,
       rtoRate,
       delRate,
@@ -568,7 +570,7 @@ export default function StaffActivity() {
 
                       groups[role].forEach((row) => {
                         const u = row.user || {};
-                        const isSupport = u.role === 'support';
+                        const isSupport = u.role === 'support' || u.role === 'logistics';
                         const newDel = row.newDeliveredCount || 0;
                         const oldDel = isSupport 
                           ? (row.supportOldDeliveredCount || row.oldDeliveredCount || 0) 
@@ -672,7 +674,7 @@ export default function StaffActivity() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: 20 }}>
               {filteredStaff.map((row, idx) => {
                 const u = row.user || {};
-                const isSupport = u.role === 'support';
+                const isSupport = u.role === 'support' || u.role === 'logistics';
                 const newDel = row.newDeliveredCount || 0;
                 const oldDel = isSupport 
                   ? (row.supportOldDeliveredCount || row.oldDeliveredCount || 0) 
@@ -960,9 +962,9 @@ export default function StaffActivity() {
                     {/* Category Tabs */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
                       {[
-                        { id: 'all', label: 'All Delivered', count: staffOrdersData.deliveredOrders?.length || 0, color: '#2563eb', bg: '#eff6ff' },
-                        { id: 'new', label: <>{"New (1st Kit) "}<Star size={12} className="inline-block ml-1" /></>, count: staffOrdersData.newDeliveredOrders?.length || 0, color: '#16a34a', bg: '#f0fdf4' },
-                        { id: 'old', label: <>{"Repeat / Re-Ver "}<RefreshCcw size={12} className="inline-block ml-1" /></>, count: staffOrdersData.oldDeliveredOrders?.length || 0, color: '#7c3aed', bg: '#f5f3ff' },
+                        { id: 'all', label: 'All Delivered', count: staffOrdersData.deliveredOrders?.length || 0, commission: staffOrdersData.totalCommission || 0, color: '#2563eb', bg: '#eff6ff' },
+                        { id: 'new', label: <>{"New (1st Kit) "}<Star size={12} className="inline-block ml-1" /></>, count: staffOrdersData.newDeliveredOrders?.length || 0, commission: staffOrdersData.newCommissionTotal || 0, color: '#16a34a', bg: '#f0fdf4' },
+                        { id: 'old', label: <>{"Repeat / Re-Ver "}<RefreshCcw size={12} className="inline-block ml-1" /></>, count: staffOrdersData.oldDeliveredOrders?.length || 0, commission: staffOrdersData.oldCommissionTotal || 0, color: '#7c3aed', bg: '#f5f3ff' },
                         { id: 'rto', label: <>{"RTO Returns "}<AlertTriangle size={14} className="inline-block ml-1 text-red-600" /></>, count: staffOrdersData.rtoOrders?.length || 0, color: '#dc2626', bg: '#fef2f2' }
                       ].map(tab => {
                         const isActive = activeTab === tab.id;
@@ -977,13 +979,20 @@ export default function StaffActivity() {
                             }}
                           >
                             <span>{tab.label}</span>
-                            <span style={{
-                              fontSize: 13, fontWeight: 900, padding: '2px 8px', borderRadius: 20,
-                              background: isActive ? 'rgba(255,255,255,0.2)' : tab.bg,
-                              color: isActive ? '#fff' : tab.color
-                            }}>
-                              {tab.count}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{
+                                fontSize: 13, fontWeight: 900, padding: '2px 8px', borderRadius: 20,
+                                background: isActive ? 'rgba(255,255,255,0.2)' : tab.bg,
+                                color: isActive ? '#fff' : tab.color
+                              }}>
+                                {tab.count}
+                              </span>
+                              {(tab.commission !== undefined) && (
+                                <span style={{ fontSize: 11, fontWeight: 800, color: isActive ? '#4ade80' : '#059669', background: isActive ? 'rgba(74,222,128,0.2)' : '#d1fae5', padding: '2px 6px', borderRadius: 6 }}>
+                                  ₹{tab.commission || 0}
+                                </span>
+                              )}
+                            </div>
                           </button>
                         );
                       })}
@@ -1034,6 +1043,11 @@ export default function StaffActivity() {
                               </div>
                               <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>₹{(Number(order.amount) || 0).toLocaleString('en-IN')}</div>
+                                {(order.commission > 0) && (
+                                  <div style={{ fontSize: 12, fontWeight: 800, color: '#059669', marginTop: 2 }}>
+                                    + ₹{order.commission} Comm.
+                                  </div>
+                                )}
                                 <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>
                                   {order.date ? new Date(order.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Date N/A'}
                                 </div>

@@ -689,9 +689,11 @@ export default function Dashboard() {
                         {attLoading ? 'Processing...' : <>{icons.logout} Clock Out</>}
                       </button>
                     ) : (
-                      <span className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-500/20 text-green-300 border border-green-500/30 text-sm font-bold">
-                        {icons.checkCircle} Work Day Complete
-                      </span>
+                      <button onClick={handleCheckIn} disabled={attLoading}
+                        className="px-6 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-60 active:scale-95 flex items-center gap-2"
+                        style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)' }}>
+                        {attLoading ? 'Processing...' : <>{icons.clock} Clock In Again</>}
+                      </button>
                     )}
                   </div>
                 </div>

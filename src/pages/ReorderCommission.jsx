@@ -9,6 +9,57 @@ const fmt = (v) => {
   return isNaN(d) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+function KpiCard({ label, value, colorHex, unit }) {
+  return (
+    <div
+      className="group relative overflow-hidden transition-all duration-300 ease-out flex flex-col justify-between"
+      style={{
+        background: `linear-gradient(135deg, ${colorHex}0A, ${colorHex}14)`,
+        border: `1px solid ${colorHex}25`,
+        borderRadius: 16, padding: '20px',
+        boxShadow: `0 4px 12px -2px ${colorHex}15`,
+        minHeight: 120,
+        height: '100%',
+      }}
+      onMouseEnter={e => { 
+        e.currentTarget.style.boxShadow = `0 8px 24px -4px ${colorHex}40`; 
+        e.currentTarget.style.transform = 'translateY(-4px)'; 
+        e.currentTarget.style.borderColor = `${colorHex}40`;
+      }}
+      onMouseLeave={e => { 
+        e.currentTarget.style.boxShadow = `0 4px 12px -2px ${colorHex}15`; 
+        e.currentTarget.style.transform = 'none'; 
+        e.currentTarget.style.borderColor = `${colorHex}25`;
+      }}
+    >
+      <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none" style={{ background: colorHex, opacity: 0.1 }}></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+      
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', position: 'relative', zIndex: 10, width: '100%', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, textShadow: '0 1px 2px rgba(255,255,255,0.8)' }}>{label}</div>
+          </div>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }} className="group-hover:scale-110 transition-transform">
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: colorHex, boxShadow: `0 0 8px ${colorHex}` }}></div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', position: 'relative', zIndex: 10, marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <div style={{ fontSize: 34, fontWeight: 900, color: colorHex, lineHeight: 1, letterSpacing: '-0.02em', textShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              ₹{(value || 0).toLocaleString()}
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 1, color: colorHex }}>{unit}</span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="absolute bottom-0 left-0 right-0 h-1 transition-opacity pointer-events-none group-hover:opacity-30" style={{ background: colorHex, opacity: 0.15 }}></div>
+    </div>
+  );
+}
+
 export default function ReorderCommission() {
   // Settings
   const [settings, setSettings] = useState({
@@ -85,6 +136,8 @@ export default function ReorderCommission() {
           <span>Saved Successfully!</span>
         </div>
       );
+      loadStaff();
+      loadCommissions(page);
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (e) {
       setSaveMsg(e?.response?.data?.message || 'Failed to save');
@@ -157,22 +210,9 @@ export default function ReorderCommission() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        {[
-          { label: 'Total Revenue Generated', val: summary.total_amount, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
-          { label: 'Pending Payout', val: summary.pending, color: 'text-orange-500', bg: 'bg-orange-50', icon: 'M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-          { label: 'Paid Commission', val: summary.paid, color: 'text-blue-600', bg: 'bg-blue-50', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-        ].map((c, i) => (
-          <div key={i} className="group relative overflow-hidden bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-all hover:-translate-y-1">
-            <div className="flex items-center gap-4 mb-4">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${c.bg}`} style={{ color: c.color }}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path d={c.icon}/></svg>
-              </div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] leading-tight">{c.label}</p>
-            </div>
-            <p className={`text-4xl font-black ${c.color} tracking-tight`}>₹{(c.val || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
-            <div className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full opacity-[0.03] group-hover:scale-110 transition-transform" style={{ background: 'currentColor' }} />
-          </div>
-        ))}
+        <KpiCard label="Total Revenue Generated" value={summary.total_amount} colorHex="#10b981" unit="REVENUE" />
+        <KpiCard label="Pending Payout" value={summary.pending} colorHex="#f97316" unit="PENDING" />
+        <KpiCard label="Paid Commission" value={summary.paid} colorHex="#3b82f6" unit="PAID" />
       </div>
 
       {/* ── Commission Settings (Expandable) ── */}
@@ -345,88 +385,97 @@ export default function ReorderCommission() {
              <p className="text-sm font-black text-gray-400 uppercase tracking-widest">No staff performance data found</p>
           </div>
         ) : (
-          <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden">
-            {/* Column Header */}
-            <div className="hidden md:flex items-center gap-6 px-8 py-4 bg-gray-50/50 border-b border-gray-100">
-              <div className="w-[300px] text-[9px] font-black text-gray-400 uppercase tracking-widest">Staff Member</div>
-              <div className="flex-1 grid grid-cols-3 gap-8">
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Earned</div>
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Paid Out</div>
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Pending</div>
-              </div>
-              <div className="w-[140px] text-[9px] font-black text-gray-400 uppercase tracking-widest text-right">Action</div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {staffList.map((s, i) => (
+              <div key={String(s.staff_id)} className="group bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col">
+                {/* Background Accent */}
+                <div className="absolute -right-8 -top-8 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors" />
 
-            <div className="divide-y divide-gray-50">
-              {staffList.map((s, i) => (
-                <div key={String(s.staff_id)} className="group flex flex-col md:flex-row md:items-center gap-6 px-8 py-6 hover:bg-gray-50/30 transition-all">
-                  
-                  {/* Rank & Profile */}
-                  <div className="flex items-center gap-5 shrink-0 w-full md:w-[300px]">
-                    <div className={`relative w-10 h-10 rounded-xl shadow-sm flex items-center justify-center text-[10px] font-black border-2 transition-transform group-hover:scale-110 shrink-0 ${
-                      i === 0 ? 'bg-amber-100 text-amber-600 border-amber-200' : 
-                      i === 1 ? 'bg-gray-100 text-gray-500 border-gray-200' : 
-                      i === 2 ? 'bg-orange-100 text-orange-600 border-orange-200' : 
-                      'bg-white text-gray-400 border-gray-100'
-                    }`}>
-                      {i < 3 ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <circle cx="12" cy="8" r="6" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11" />
-                        </svg>
-                      ) : (
-                        <span className="text-sm">#{i + 1}</span>
-                      )}
-                    </div>
-
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white text-base font-black shadow-lg shrink-0">
+                <div className="relative z-10 flex items-start justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[1.25rem] bg-gray-900 flex items-center justify-center text-white text-lg font-black shadow-lg">
                       {(s.name || '?').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}
                     </div>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-lg font-black text-gray-900 truncate tracking-tight leading-none mb-1.5">{s.name || 'Unknown'}</p>
+                    <div>
+                      <p className="text-lg font-black text-gray-900 tracking-tight leading-none mb-1.5">{s.name || 'Unknown'}</p>
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">{s.role}</span>
+                        <span className="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-md text-[8px] font-black text-gray-500 uppercase tracking-widest">{s.role}</span>
                         <span className="w-1 h-1 rounded-full bg-gray-300" />
-                        <span className="text-[10px] font-bold text-blue-500 tracking-tight">{s.original_count + s.reorder_count} Deliveries</span>
+                        <span className="text-[10px] font-bold text-gray-500">{s.original_count + s.reorder_count} Deliveries</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Financial Summary */}
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
-                    <div>
-                      <p className="md:hidden text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Earned</p>
-                      <p className="text-xl font-black text-gray-800 tracking-tight">₹{(s.total_amount || 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="md:hidden text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1">Paid Out</p>
-                      <p className="text-xl font-black text-emerald-600 tracking-tight">₹{(s.paid_amount || 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="md:hidden text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Pending</p>
-                      <p className="text-xl font-black text-orange-600 tracking-tight">₹{(s.pending_amount || 0).toLocaleString()}</p>
-                    </div>
-                  </div>
-
-                  {/* Action */}
-                  <div className="shrink-0 w-full md:w-[140px]">
-                    {s.pending_amount > 0 ? (
-                      <button onClick={() => markStaffPaid(String(s.staff_id))} disabled={staffPayingId === String(s.staff_id)}
-                        className="w-full py-4 rounded-2xl text-[10px] font-black text-white uppercase tracking-widest disabled:opacity-50 transition-all hover:shadow-xl active:scale-95 shadow-lg shadow-emerald-500/20"
-                        style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-                        {staffPayingId === String(s.staff_id) ? 'Syncing...' : `Pay ₹${(s.pending_amount).toLocaleString()}`}
-                      </button>
-                    ) : (
-                      <div className="w-full py-4 rounded-2xl text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 flex items-center justify-center gap-2 tracking-widest uppercase shadow-inner">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
-                        Paid
-                      </div>
-                    )}
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-xl text-[10px] font-black shrink-0 ${
+                    i === 0 ? 'bg-amber-100 text-amber-600' : 
+                    i === 1 ? 'bg-gray-100 text-gray-500' : 
+                    i === 2 ? 'bg-orange-100 text-orange-600' : 
+                    'bg-gray-50 text-gray-400'
+                  }`}>
+                    #{i + 1}
                   </div>
                 </div>
-              ))}
-            </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                  {/* EARNED (Active style) */}
+                  <div style={{ flex: 1, padding: '10px 4px', borderRadius: 10, background: '#0f172a', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontWeight: 700, fontSize: 11 }}>
+                    <span>EARNED</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 900, padding: '2px 6px', borderRadius: 20, background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+                        {s.original_count + s.reorder_count}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#4ade80', background: 'rgba(74,222,128,0.2)', padding: '2px 6px', borderRadius: 6 }}>
+                        ₹{(s.total_amount || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* PAID */}
+                  <div style={{ flex: 1, padding: '10px 4px', borderRadius: 10, background: 'transparent', color: '#475569', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontWeight: 700, fontSize: 11 }}>
+                    <span>PAID</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#059669', background: '#d1fae5', padding: '2px 6px', borderRadius: 6 }}>
+                        ₹{(s.paid_amount || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* PENDING */}
+                  <div style={{ flex: 1, padding: '10px 4px', borderRadius: 10, background: 'transparent', color: '#475569', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontWeight: 700, fontSize: 11 }}>
+                    <span>PENDING</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#ea580c', background: '#ffedd5', padding: '2px 6px', borderRadius: 6 }}>
+                        ₹{(s.pending_amount || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative z-10 mt-auto">
+                  {s.pending_amount > 0 ? (
+                    <button onClick={() => markStaffPaid(String(s.staff_id))} disabled={staffPayingId === String(s.staff_id)}
+                      className="w-full py-3.5 rounded-xl text-[10px] font-black text-white uppercase tracking-widest transition-all hover:shadow-lg hover:shadow-emerald-500/30 active:scale-95 flex items-center justify-center gap-2"
+                      style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                      {staffPayingId === String(s.staff_id) ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin text-white/70" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+                          <span>Processing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Pay ₹{(s.pending_amount).toLocaleString()}</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="w-full py-3.5 rounded-xl text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 flex items-center justify-center gap-2 tracking-widest uppercase">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      All Paid Up
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

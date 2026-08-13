@@ -187,10 +187,11 @@ export default function DoctorDashboard() {
               {attLoading ? 'Processing...' : '🔴 Clock Out'}
             </button>
           ) : (
-            <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-500/20 text-green-300 text-sm font-semibold">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/></svg>
-              Day Complete
-            </span>
+            <button onClick={handleCheckIn} disabled={attLoading}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition-all shadow-lg"
+              style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)' }}>
+              {attLoading ? 'Processing...' : '🟢 Clock In Again'}
+            </button>
           )}
         </div>
       </div>

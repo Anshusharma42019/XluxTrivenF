@@ -330,36 +330,26 @@ function StaffAttendance() {
               </div>
 
               <div className="mt-8">
-                {checkedIn && checkedOut ? (
-                  <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-6 text-center backdrop-blur-xl">
-                     <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-                       <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/></svg>
-                     </div>
-                     <p className="text-white font-black text-base tracking-tight">Shift Ended</p>
-                     <p className="text-green-400/60 text-[9px] font-bold uppercase tracking-wider mt-0.5">See you tomorrow!</p>
+                <div className="space-y-4">
+                  <div className="relative group/input">
+                    <input type="text" placeholder="Note (optional)" value={notes} onChange={e => setNotes(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white text-xs focus:outline-none focus:ring-2 focus:ring-green-500 transition-all placeholder:text-gray-600" />
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="relative group/input">
-                      <input type="text" placeholder="Note (optional)" value={notes} onChange={e => setNotes(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white text-xs focus:outline-none focus:ring-2 focus:ring-green-500 transition-all placeholder:text-gray-600" />
-                    </div>
-                    {!checkedIn ? (
-                      <button onClick={handleCheckIn} disabled={actionLoading}
-                        className="w-full py-5 rounded-xl text-sm font-black text-white shadow-2xl hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-60"
-                        style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                        {actionLoading ? 'SYCING...' : '🕐 CLOCK IN'}
-                      </button>
-                    ) : (
-                      <button onClick={handleCheckOut} disabled={actionLoading}
-                        className="w-full py-5 rounded-xl text-sm font-black text-white shadow-2xl hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-60"
-                        style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)' }}>
-                        {actionLoading ? 'SYCING...' : '🌙 CLOCK OUT'}
-                      </button>
-                    )}
-                    {error && <p className="text-center text-red-400 text-[8px] font-bold uppercase tracking-widest">{error}</p>}
-                  </div>
-                )}
+                  {checkedIn && !checkedOut ? (
+                    <button onClick={handleCheckOut} disabled={actionLoading}
+                      className="w-full py-5 rounded-xl text-sm font-black text-white shadow-2xl hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-60"
+                      style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)' }}>
+                      {actionLoading ? 'SYCING...' : '🌙 CLOCK OUT'}
+                    </button>
+                  ) : (
+                    <button onClick={handleCheckIn} disabled={actionLoading}
+                      className="w-full py-5 rounded-xl text-sm font-black text-white shadow-2xl hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-60"
+                      style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                      {actionLoading ? 'SYCING...' : '🕐 CLOCK IN'}
+                    </button>
+                  )}
+                  {error && <p className="text-center text-red-400 text-[8px] font-bold uppercase tracking-widest">{error}</p>}
+                </div>
               </div>
             </div>
           </div>
@@ -403,8 +393,8 @@ function AdminAttendance() {
       const todayStart = new Date(); todayStart.setHours(0,0,0,0);
       const todayEnd = new Date(); todayEnd.setHours(23,59,59,999);
       const [uRes, aRes] = await Promise.all([
-        getUsers(),
-        svc.getAllAttendance({ startDate: todayStart.toISOString(), endDate: todayEnd.toISOString(), limit: 200 }),
+        getUsers({ limit: 1000 }),
+        svc.getAllAttendance({ startDate: todayStart.toISOString(), endDate: todayEnd.toISOString(), limit: 1000 }),
       ]);
       const filteredUsers = (uRes?.results || []).filter(u => u.role !== 'admin');
       setUsers(filteredUsers);
@@ -475,6 +465,27 @@ function AdminAttendance() {
       toastError(e.response?.data?.message || 'Failed to assign order');
     }
   };
+  const handleAdminCheckIn = async (e, userId) => {
+    e.stopPropagation();
+    try {
+      await svc.checkIn({ userId, notes: 'Checked in by Admin' });
+      success('Staff checked in successfully');
+      load();
+    } catch (err) {
+      toastError(err.response?.data?.message || 'Failed to check in staff');
+    }
+  };
+
+  const handleAdminCheckOut = async (e, userId) => {
+    e.stopPropagation();
+    try {
+      await svc.checkOut({ userId, notes: 'Checked out by Admin' });
+      success('Staff checked out successfully');
+      load();
+    } catch (err) {
+      toastError(err.response?.data?.message || 'Failed to check out staff');
+    }
+  };
 
 
   const openUser = async (u) => {
@@ -538,290 +549,6 @@ function AdminAttendance() {
         <GlassCard label="Absent" value={users.length - records.filter(r => r.checkIn).length} color="#ef4444" icon="M18 6L6 18M6 6l12 12" />
       </div>
 
-      {/* Salary Sheet */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <button className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors" onClick={() => setShowCommission(!showCommission)}>
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-gray-100 text-gray-700">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            </div>
-            <div className="text-left">
-              <h3 className="text-[18px] font-medium text-gray-900 leading-tight">Salary Hub</h3>
-              <p className="text-sm text-gray-500 mt-0.5">Attendance-based Base Pay + Performance Commission</p>
-            </div>
-          </div>
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 transition-transform ${showCommission ? 'rotate-180' : ''}`}>
-             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
-          </div>
-        </button>
-
-        {showCommission && (
-          <div className="px-5 pb-5">
-            <div className="flex items-center justify-between mb-6">
-              <button onClick={() => setCommMonth(p => {
-                const m = p.month - 1;
-                return m < 0 ? { month: 11, year: p.year - 1 } : { month: m, year: p.year };
-              })} className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-              <div className="text-base font-medium text-gray-900">
-                {new Date(commMonth.year, commMonth.month).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-              </div>
-              <button onClick={() => setCommMonth(p => {
-                const m = p.month + 1;
-                return m > 11 ? { month: 0, year: p.year + 1 } : { month: m, year: p.year };
-              })} className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </div>
-
-            {commLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : commData ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                  <GlassCard label="Deliveries" value={commData.grandTotalDeliveries} color="#3b82f6" icon="M5 13l4 4L19 7" subtext={commData.unassignedDeliveries > 0 ? `${commData.unassignedDeliveries} Unassigned` : null} />
-                  <GlassCard label="Revenue" value={`₹${(commData.grandTotalRevenue || 0).toLocaleString('en-IN')}`} color="#10b981" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  <GlassCard label="Avg. commission" value={`₹${commData.staff.length ? Math.round((commData.grandTotalCommission || 0) / commData.staff.length).toLocaleString('en-IN') : 0}`} color="#f59e0b" icon="M13 10V3L4 14h7v7l9-11h-7z" />
-                  <GlassCard label="Total payout" value={`₹${(commData.grandTotalPay || 0).toLocaleString('en-IN')}`} color="#6366f1" icon="M12 8v4l3 2" />
-                </div>
-
-                <div className="mt-12">
-                  {/* Desktop Table View */}
-                  <div className="hidden lg:block overflow-x-auto pb-8 px-2">
-                    <table className="w-full text-left border-separate" style={{ borderSpacing: '0 20px' }}>
-                      <thead>
-                        <tr className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em]">
-                          <th className="px-8 pb-2">Member</th>
-                          <th className="px-4 pb-2">Joined</th>
-                          <th className="px-4 pb-2">History</th>
-                          <th className="px-4 pb-2 text-right">Deliveries</th>
-                          <th className="px-4 pb-2 text-right">Base</th>
-                          <th className="px-4 pb-2 text-right">Commission</th>
-                          <th className="px-8 pb-2 text-right">Final</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {commData.staff.map((s, idx) => {
-                          const isNewRole = idx === 0 || commData.staff[idx - 1].user.role !== s.user.role;
-                          const roleColor = ROLE_COLORS[s.user.role?.toLowerCase()] || 'bg-gray-500 text-white';
-                          const roleColorHex = s.user.role === 'sales' ? '#3b82f6' : s.user.role === 'support' ? '#10b981' : s.user.role === 'verification' ? '#a855f7' : s.user.role === 'management' ? '#f59e0b' : '#ef4444';
-                          
-                          return (
-                            <React.Fragment key={s.user._id}>
-                              {isNewRole && (
-                                <tr>
-                                  <td colSpan={7} className="pt-4 pb-0 px-6">
-                                    <div className="flex items-center gap-3">
-                                      <div className="h-1.5 w-1.5 rounded-full" style={{ background: roleColorHex }} />
-                                      <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: roleColorHex }}>
-                                        {s.user.role || 'Other'} Department
-                                      </span>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                              <tr className="group bg-white shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300 cursor-default">
-                                <td className="py-5 px-8 rounded-l-[2.5rem] border-y border-l border-gray-100/50 relative overflow-hidden">
-                                  <div className="absolute inset-y-0 left-0 w-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: roleColorHex }} />
-                                  <div className="flex items-center gap-4">
-                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black shadow-sm ${s.user.avatar ? 'bg-gray-100' : roleColor} group-hover:scale-110 transition-transform overflow-hidden`}>
-                                      {s.user.avatar ? (
-                                        <img src={s.user.avatar} alt={s.user.name} className="w-full h-full object-cover" />
-                                      ) : (
-                                        s.user.name?.charAt(0)
-                                      )}
-                                    </div>
-                                    <div className="flex flex-col">
-                                      <p className="font-black text-gray-900 text-[15px] tracking-tight">{s.user.name}</p>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{s.user.role}</p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="py-5 px-4 border-y border-gray-100/50">
-                                  {(() => {
-                                    const jd = s.user.joiningDate || s.user.createdAt;
-                                    return jd ? (
-                                      <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                                        {new Date(jd).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                      </span>
-                                    ) : <span className="text-gray-300">—</span>;
-                                  })()}
-                                </td>
-                                <td className="py-5 px-4 border-y border-gray-100/50">
-                                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
-                                    <span className="text-[11px] font-black text-emerald-600 tracking-wider">{s.attendance.present + s.attendance.late}P</span>
-                                    <span className="w-1.5 h-1.5 bg-gray-300 rounded-full" />
-                                    <span className="text-[11px] font-black text-amber-500 tracking-wider">{s.attendance.half_day}H</span>
-                                  </div>
-                                </td>
-                                <td className="py-5 px-4 border-y border-gray-100/50 text-right">
-                                  <span className="text-base font-black text-gray-900">{s.totalDeliveries || 0}</span>
-                                </td>
-                                <td className="text-right py-5 px-4 border-y border-gray-100/50">
-                                  {editingComm?.userId === s.user._id && editingComm?.field === 'base' ? (
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      <input type="number" className="w-16 px-2 py-1 bg-gray-50 border border-indigo-200 rounded-lg text-right text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                        value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleSaveOverride()} />
-                                      <button onClick={handleSaveOverride} className="w-7 h-7 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold">✓</button>
-                                      <button onClick={() => setEditingComm(null)} className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 font-bold">×</button>
-                                    </div>
-                                  ) : (
-                                    <div className="cursor-pointer group/cell flex items-center justify-end gap-2" onClick={() => {
-                                      setEditingComm({ userId: s.user._id, field: 'base' });
-                                      setEditVal(s.basePay);
-                                    }}>
-                                      <span className="text-sm font-black text-gray-700 group-hover/cell:text-indigo-600 transition-colors">₹{s.basePay?.toLocaleString()}</span>
-                                      <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest opacity-0 group-hover/cell:opacity-100 transition-opacity">edit</span>
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="text-right py-5 px-4 border-y border-gray-100/50">
-                                  <div className="flex flex-col items-end">
-                                    {editingComm?.userId === s.user._id && editingComm?.field === 'commission' ? (
-                                      <div className="flex items-center justify-end gap-1.5">
-                                        <input type="number" className="w-20 px-2 py-1 bg-gray-50 border border-indigo-200 rounded-lg text-right text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                          value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleSaveOverride()} />
-                                        <button onClick={handleSaveOverride} className="w-7 h-7 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold">✓</button>
-                                        <button onClick={() => setEditingComm(null)} className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 font-bold">×</button>
-                                      </div>
-                                    ) : (
-                                      <div className="cursor-pointer group/comm flex flex-col items-end" onClick={() => {
-                                        setEditingComm({ userId: s.user._id, field: 'commission' });
-                                        setEditVal(s.totalCommission);
-                                      }}>
-                                        <span className="text-sm font-black text-gray-700 group-hover/comm:text-indigo-600 transition-colors">₹{(s.totalCommission || 0).toLocaleString()}</span>
-                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                                          {s.isManualCommission ? 'manual' : (s.user.role === 'support' ? '@₹50/order' : `@${s.user.commissionRate || 5}%`)} 
-                                          <span className="text-indigo-400 opacity-0 group-hover/comm:opacity-100 transition-opacity ml-1">· edit</span>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-5 px-8 rounded-r-[2.5rem] border-y border-r border-gray-100/50 text-right">
-                                  <span className="text-xl font-black text-indigo-600">₹{s.totalPay?.toLocaleString()}</span>
-                                </td>
-                              </tr>
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    
-                    {/* Desktop unassigned */}
-                    {commData.unassignedDeliveries > 0 && (
-                      <table className="w-full text-left border-separate mt-6" style={{ borderSpacing: '0' }}>
-                        <tbody>
-                           <tr className="bg-gray-50 hover:bg-gray-100 transition-colors rounded-[2.5rem] cursor-pointer group" onClick={openUnassigned}>
-                             <td className="py-5 px-8 rounded-l-[2.5rem] border-y border-l border-gray-200 w-1/3">
-                               <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-500 font-black text-xl group-hover:scale-110 transition-transform">U</div>
-                                  <div className="flex flex-col">
-                                    <span className="font-black text-gray-900 text-[15px]">Unassigned Orders</span>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">No staff assigned</span>
-                                  </div>
-                               </div>
-                             </td>
-                             <td className="py-5 px-4 border-y border-gray-200 text-right">
-                                <span className="text-base font-black text-gray-900">{commData.unassignedDeliveries}</span>
-                             </td>
-                             <td className="py-5 px-4 border-y border-gray-200 text-right text-gray-400">—</td>
-                             <td className="py-5 px-4 border-y border-gray-200 text-right text-gray-400">—</td>
-                             <td className="py-5 px-8 rounded-r-[2.5rem] border-y border-r border-gray-200 text-right text-gray-400">—</td>
-                           </tr>
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                  
-                  {/* Mobile Card View */}
-                  <div className="lg:hidden flex flex-col gap-6">
-                    {commData.staff.map((s, idx) => {
-                      const isNewRole = idx === 0 || commData.staff[idx - 1].user.role !== s.user.role;
-                      const roleColorHex = s.user.role === 'sales' ? '#3b82f6' : s.user.role === 'support' ? '#10b981' : s.user.role === 'verification' ? '#a855f7' : s.user.role === 'management' ? '#f59e0b' : '#ef4444';
-                      const roleColor = ROLE_COLORS[s.user.role?.toLowerCase()] || 'bg-gray-500 text-white';
-                      return (
-                        <React.Fragment key={s.user._id}>
-                          {isNewRole && (
-                            <div className="pt-2 pb-0 px-2 flex items-center gap-2">
-                              <div className="h-1.5 w-1.5 rounded-full" style={{ background: roleColorHex }} />
-                              <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: roleColorHex }}>
-                                {s.user.role || 'Other'} Department
-                              </span>
-                            </div>
-                          )}
-                          <div className="p-6 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.04)] rounded-[2rem] border border-gray-100 relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-1.5" style={{ background: roleColorHex }}></div>
-                            <div className="flex items-center justify-between mb-6 mt-2">
-                              <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black shadow-sm ${s.user.avatar ? 'bg-gray-100' : roleColor} overflow-hidden`}>
-                                  {s.user.avatar ? (
-                                    <img src={s.user.avatar} alt={s.user.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    s.user.name?.charAt(0)
-                                  )}
-                                </div>
-                                <div className="flex flex-col">
-                                  <p className="font-black text-gray-900 text-base">{s.user.name}</p>
-                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{s.user.role}</p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                 <p className="text-2xl font-black text-indigo-600 leading-none">₹{s.totalPay?.toLocaleString()}</p>
-                                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1.5">Total payout</p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-y-5 gap-x-4">
-                              <div className="flex flex-col border-b border-dashed border-gray-200 pb-4">
-                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Attendance</p>
-                                 <div className="flex items-center gap-2">
-                                   <span className="text-sm font-black text-emerald-600">{s.attendance.present + s.attendance.late}P</span>
-                                   <span className="text-sm font-black text-amber-500">{s.attendance.half_day}H</span>
-                                 </div>
-                              </div>
-                              <div className="flex flex-col border-b border-dashed border-gray-200 pb-4">
-                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Performance</p>
-                                 <p className="text-sm font-black text-gray-900">{s.totalDeliveries || 0} Delivered</p>
-                              </div>
-                              <div className="flex flex-col">
-                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Base pay</p>
-                                 <p className="text-sm font-black text-gray-900">₹{s.basePay?.toLocaleString()}</p>
-                              </div>
-                              <div className="flex flex-col text-right">
-                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Commission</p>
-                                 <p className="text-sm font-black text-gray-900">₹{(s.totalCommission || 0).toLocaleString()}</p>
-                               </div>
-                            </div>
-                          </div>
-                        </React.Fragment>
-                      );
-                    })}
-                    {commData.unassignedDeliveries > 0 && (
-                      <div className="mt-2">
-                        {/* Mobile unassigned */}
-                        <div className="p-6 bg-gray-50 shadow-sm rounded-[2rem] border border-gray-200 flex items-center justify-between cursor-pointer hover:bg-gray-100" onClick={openUnassigned}>
-                           <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-2xl bg-gray-200 flex items-center justify-center text-gray-500 font-black text-xl">U</div>
-                              <div className="flex flex-col">
-                                <p className="font-black text-gray-900 text-base">Unassigned Orders</p>
-                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">{commData.unassignedDeliveries} Delivered</p>
-                              </div>
-                           </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-gray-400 text-center py-10 italic">No salary data available for this month</p>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Staff Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -878,17 +605,27 @@ function AdminAttendance() {
                 </div>
               </div>
               
-              <div className="mt-10 flex items-center justify-between relative z-10">
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${status.bg} ${status.text} ${status.border} shadow-sm backdrop-blur-md bg-white/50`}>
-                  {status.icon}
-                  <span className="text-[10px] font-black tracking-widest uppercase">{status.label}</span>
-                </div>
-                {att?.checkIn && (
-                  <div className="text-right">
-                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">In Time</p>
-                    <p className="text-sm font-black text-gray-900 leading-none mt-1">{formatTime(att.checkIn)}</p>
+              <div className="mt-10 flex flex-col gap-3 relative z-10">
+                <div className="flex items-center justify-between">
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${status.bg} ${status.text} ${status.border} shadow-sm backdrop-blur-md bg-white/50`}>
+                    {status.icon}
+                    <span className="text-[10px] font-black tracking-widest uppercase">{status.label}</span>
                   </div>
-                )}
+                  {att?.checkIn && (
+                    <div className="text-right">
+                      <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">In Time</p>
+                      <p className="text-sm font-black text-gray-900 leading-none mt-1">{formatTime(att.checkIn)}</p>
+                    </div>
+                  )}
+                </div>
+                
+                <button 
+                  onClick={(e) => (att?.checkIn && !att?.checkOut) ? handleAdminCheckOut(e, u._id) : handleAdminCheckIn(e, u._id)}
+                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-md hover:opacity-90 active:scale-95`}
+                  style={{ background: (att?.checkIn && !att?.checkOut) ? 'linear-gradient(135deg, #ea580c, #c2410c)' : 'linear-gradient(135deg, #16a34a, #15803d)' }}
+                >
+                  {att?.checkIn && !att?.checkOut ? 'Clock Out' : (att?.checkOut ? 'Clock In Again' : 'Clock In')}
+                </button>
               </div>
             </div>
           );

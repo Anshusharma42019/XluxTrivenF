@@ -185,6 +185,7 @@ export default function OrderStatusBoard({
 }) {
   const { t } = useLanguage();
   const svc = platform === 'shipmaxx' ? smxSvc : srSvc;
+  const [fastPoll, setFastPoll] = useState(false);
   const [deliveredStats, setDeliveredStats] = useState({ count: 0, revenue: 0, statusBreakdown: [] });
   const [datePreset, setDatePreset] = useState(defaultPreset);
   const [filterFrom, setFilterFrom] = useState('');
@@ -257,16 +258,17 @@ export default function OrderStatusBoard({
       loadStatusOrders(selectedStatus, params);
     }
     
-    // Auto-refresh stats and selected status orders every 15 seconds silently
+    // Auto-refresh stats and selected status orders silently
+    // If fastPoll is active (e.g. immediately after a sync), poll every 3 seconds to show live updates
     const interval = setInterval(() => {
       loadDelivered(params);
       if (selectedStatus) {
         loadStatusOrders(selectedStatus, params, true);
       }
-    }, 15000);
+    }, fastPoll ? 3000 : 15000);
     
     return () => clearInterval(interval);
-  }, [getParams, selectedStatus, filterParams, datePreset, loadDelivered, loadStatusOrders]);
+  }, [getParams, selectedStatus, filterParams, datePreset, loadDelivered, loadStatusOrders, fastPoll]);
 
   const handleSaveNote = async (e, mongoId) => {
     e.stopPropagation();
@@ -298,10 +300,16 @@ export default function OrderStatusBoard({
     try {
       if (platform === 'shipmaxx') {
         const res = await smxSvc.syncShipmaxx();
-        const d = res.data?.data || {};
-        const timeMsg = d.elapsed ? ` (${d.elapsed}s)` : '';
-        const warnMsg = d.timedOut ? ' ⚠ Partial sync' : '';
-        setSyncMsg(`Sync complete! Updated ${d.updatedCount || 0} orders${timeMsg}${warnMsg}`);
+        if (res.data?.message && res.data.message.toLowerCase().includes('background')) {
+          setSyncMsg('Sync running... Watch the numbers update live!');
+          setFastPoll(true);
+          setTimeout(() => setFastPoll(false), 45000); // fast poll for 45 seconds
+        } else {
+          const d = res.data?.data || {};
+          const timeMsg = d.elapsed ? ` (${d.elapsed}s)` : '';
+          const warnMsg = d.timedOut ? ' ⚠ Partial sync' : '';
+          setSyncMsg(`Sync complete! Updated ${d.updatedCount || 0} orders${timeMsg}${warnMsg}`);
+        }
       } else {
         await srSvc.syncShiprocket();
         const backfill = await srSvc.backfillDeliveredAt();
@@ -313,7 +321,7 @@ export default function OrderStatusBoard({
       setSyncMsg(e?.response?.data?.message || 'Sync failed');
     } finally {
       setSyncing(false);
-      setTimeout(() => setSyncMsg(''), 6000);
+      setTimeout(() => setSyncMsg(''), 45000); // keep message visible during fast poll
     }
   };
 
