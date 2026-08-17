@@ -53,3 +53,6 @@ export const fetchInteraktTemplates = () =>
 export const sendInteraktMessages = (payload, filters = {}) =>
   API.post(`${BASE}/send-interakt-messages`, payload, { params: buildParams(filters) }).then(r => r.data);
 
+export const saveInvoiceHistory = (payload) =>
+  API.post(`${BASE}/invoice-history`, payload).then(r => r.data);
+

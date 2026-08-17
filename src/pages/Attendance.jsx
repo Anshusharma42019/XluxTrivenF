@@ -50,10 +50,11 @@ const ROLE_COLORS = {
 };
 
 /* ─── Glass Card Component ─── */
-function GlassCard({ label, value, color, icon, subtext }) {
+function GlassCard({ label, value, color, icon, subtext, onClick }) {
   return (
     <div
-      className="group relative overflow-hidden transition-all duration-300 ease-out active:scale-95 flex flex-col justify-between"
+      onClick={onClick}
+      className={`group relative overflow-hidden transition-all duration-300 ease-out active:scale-95 flex flex-col justify-between ${onClick ? 'cursor-pointer' : ''}`}
       style={{
         background: `linear-gradient(135deg, ${color}0A, ${color}14)`,
         border: `1px solid ${color}25`,
@@ -199,6 +200,56 @@ function AttendanceCalendar({ records, year, month, onChangeMonth }) {
           })}
         </div>
       </div>
+
+      {/* Daily Logs list */}
+      {records && records.length > 0 && (
+        <div className="border-t border-gray-100 bg-gray-50/30 p-6 sm:p-8">
+          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-4">Daily Logs</h4>
+          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+            {records.map((r, index) => {
+              const theme = STATUS_THEMES[r.status] || STATUS_THEMES.present;
+              const formattedDate = new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' });
+              return (
+                <div key={r._id || index} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-2xl shadow-sm transition-all hover:border-gray-200">
+                  <div className="flex items-center gap-3">
+                    {/* Status Dot/Icon */}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${theme.bg} ${theme.text}`}>
+                      {theme.icon}
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-gray-900">{formattedDate}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{theme.label}</span>
+                        {r.notes && (
+                          <span className="inline-block text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium truncate max-w-[150px]" title={r.notes}>
+                            📝 {r.notes}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-center">
+                      <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">In</p>
+                      <p className="text-xs font-black text-gray-900">{r.checkIn ? formatTime(r.checkIn) : '--:--'}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Out</p>
+                      <p className="text-xs font-black text-gray-900">{r.checkOut ? formatTime(r.checkOut) : '--:--'}</p>
+                    </div>
+                    {r.sessionDuration && (
+                      <div className="text-center min-w-[50px]">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
+                        <p className="text-xs font-black text-emerald-600 font-mono">{r.sessionDuration}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -369,6 +420,12 @@ function AdminAttendance() {
   const [users, setUsers] = useState([]);
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [logsModalType, setLogsModalType] = useState(null); // 'all' | 'working' | 'completed' | 'absent'
+  const [logsMonth, setLogsMonth] = useState({ month: new Date().getMonth(), year: new Date().getFullYear() });
+  const [logsData, setLogsData] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsSearch, setLogsSearch] = useState('');
+  const [expandedUserId, setExpandedUserId] = useState(null);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -511,6 +568,40 @@ function AdminAttendance() {
   // Reload user modal data when month changes
   useEffect(() => { if (selectedUser) openUser(selectedUser); }, [year, month]);
 
+  // Load monthly logs for statistics card modal click
+  useEffect(() => {
+    if (!logsModalType) return;
+    let cancelled = false;
+    setLogsLoading(true);
+    const startDate = new Date(logsMonth.year, logsMonth.month, 1).toISOString();
+    const endDate = new Date(logsMonth.year, logsMonth.month + 1, 0, 23, 59, 59).toISOString();
+    
+    svc.getAllAttendance({ startDate, endDate, limit: 1000 })
+      .then(res => {
+        if (!cancelled) {
+          setLogsData(res?.results || []);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load logs:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setLogsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [logsModalType, logsMonth]);
+
+  const changeLogsMonth = (dir) => {
+    setLogsMonth(prev => {
+      let m = prev.month + dir;
+      let y = prev.year;
+      if (m < 0) { m = 11; y--; }
+      else if (m > 11) { m = 0; y++; }
+      return { month: m, year: y };
+    });
+  };
+
   const getAttendanceForUser = (uid) => records.find(r => (r.user?._id || r.user) === uid);
 
   const ROLE_GRADIENT = { admin: 'from-purple-500 to-violet-600', manager: 'from-blue-500 to-cyan-500', sales: 'from-green-500 to-emerald-500' };
@@ -543,10 +634,34 @@ function AdminAttendance() {
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <GlassCard label="Total staff" value={users.length} color="#3b82f6" icon="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <GlassCard label="Clocked in" value={records.filter(r => r.checkIn).length} color="#10b981" icon="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <GlassCard label="Shift over" value={records.filter(r => r.checkOut).length} color="#f59e0b" icon="M9 11l3 3L22 4" />
-        <GlassCard label="Absent" value={users.length - records.filter(r => r.checkIn).length} color="#ef4444" icon="M18 6L6 18M6 6l12 12" />
+        <GlassCard 
+          label="Total staff" 
+          value={users.length} 
+          color="#3b82f6" 
+          icon="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" 
+          onClick={() => { setLogsModalType('all'); setLogsMonth({ month, year }); }}
+        />
+        <GlassCard 
+          label="Clocked in" 
+          value={records.filter(r => r.checkIn && !r.checkOut).length} 
+          color="#10b981" 
+          icon="M22 11.08V12a10 10 0 1 1-5.93-9.14" 
+          onClick={() => { setLogsModalType('working'); setLogsMonth({ month, year }); }}
+        />
+        <GlassCard 
+          label="Shift over" 
+          value={records.filter(r => r.checkOut).length} 
+          color="#f59e0b" 
+          icon="M9 11l3 3L22 4" 
+          onClick={() => { setLogsModalType('completed'); setLogsMonth({ month, year }); }}
+        />
+        <GlassCard 
+          label="Absent" 
+          value={users.length - records.filter(r => r.checkIn).length} 
+          color="#ef4444" 
+          icon="M18 6L6 18M6 6l12 12" 
+          onClick={() => { setLogsModalType('absent'); setLogsMonth({ month, year }); }}
+        />
       </div>
 
 
@@ -611,12 +726,26 @@ function AdminAttendance() {
                     {status.icon}
                     <span className="text-[10px] font-black tracking-widest uppercase">{status.label}</span>
                   </div>
-                  {att?.checkIn && (
-                    <div className="text-right">
-                      <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">In Time</p>
-                      <p className="text-sm font-black text-gray-900 leading-none mt-1">{formatTime(att.checkIn)}</p>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-4">
+                    {att?.checkIn && (
+                      <div className="text-right">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">In Time</p>
+                        <p className="text-sm font-black text-gray-900 leading-none mt-1">{formatTime(att.checkIn)}</p>
+                      </div>
+                    )}
+                    {att?.checkOut && (
+                      <div className="text-right">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Out Time</p>
+                        <p className="text-sm font-black text-gray-900 leading-none mt-1">{formatTime(att.checkOut)}</p>
+                      </div>
+                    )}
+                    {att?.checkOut && att?.sessionDuration && (
+                      <div className="text-right">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Duration</p>
+                        <p className="text-sm font-black text-emerald-600 leading-none mt-1 font-mono">{att.sessionDuration}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <button 
@@ -688,6 +817,238 @@ function AdminAttendance() {
                 ))}
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Monthly Filtered Logs Modal */}
+      {logsModalType && (
+        <Modal 
+          title="Monthly Attendance Report" 
+          onClose={() => { setLogsModalType(null); setLogsSearch(''); setExpandedUserId(null); }}
+        >
+          <div className="space-y-4 p-4 max-h-[80vh] overflow-y-auto bg-gray-50/50">
+            {/* Month Filter Selector */}
+            <div className="flex items-center justify-between px-4 py-3 bg-white rounded-2xl border border-gray-100 shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.25em]">Monthly Filter</span>
+                <span className="text-sm font-black text-gray-900">{MONTHS[logsMonth.month]} {logsMonth.year}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => changeLogsMonth(-1)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-all active:scale-95">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <button onClick={() => changeLogsMonth(1)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-all active:scale-95">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Status Sub-filters */}
+            <div className="flex flex-wrap gap-1.5 p-1 bg-gray-200/40 rounded-2xl border border-black/5">
+              {[
+                { type: 'all', label: 'All Staff' },
+                { type: 'working', label: 'Clocked In' },
+                { type: 'completed', label: 'Shift Over' },
+                { type: 'absent', label: 'Absent' }
+              ].map(tab => (
+                <button
+                  key={tab.type}
+                  onClick={() => { setLogsModalType(tab.type); setExpandedUserId(null); }}
+                  className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all ${
+                    logsModalType === tab.type 
+                      ? 'bg-white text-gray-900 shadow-sm font-black' 
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Box */}
+            <div className="relative">
+              <input 
+                type="text" 
+                placeholder="Search by staff name..." 
+                value={logsSearch} 
+                onChange={e => setLogsSearch(e.target.value)}
+                className="w-full bg-white border border-gray-100 rounded-2xl px-5 py-3 text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all placeholder:text-gray-400 shadow-sm"
+              />
+            </div>
+
+            {/* Logs List grouped by User */}
+            {logsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (() => {
+              // Helper to resolve today's status for a user
+              const getTodayStatusForUser = (userId) => {
+                const att = records.find(r => (r.user?._id || r.user) === userId);
+                if (!att || !att.checkIn) return 'absent';
+                if (att.checkOut) return 'completed';
+                return 'working';
+              };
+
+              // Filter users matching search & stats category
+              const filteredUsers = users.filter(u => {
+                // Search filter
+                if (logsSearch && !u.name.toLowerCase().includes(logsSearch.toLowerCase())) {
+                  return false;
+                }
+                
+                // Status type filter for today
+                const todayStatus = getTodayStatusForUser(u._id);
+                if (logsModalType === 'working' && todayStatus !== 'working') return false;
+                if (logsModalType === 'completed' && todayStatus !== 'completed') return false;
+                if (logsModalType === 'absent' && todayStatus !== 'absent') return false;
+                
+                return true;
+              });
+
+              if (filteredUsers.length === 0) {
+                return (
+                  <div className="text-center text-sm font-bold text-gray-400 py-16 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                    No staff found matching these filters.
+                  </div>
+                );
+              }
+
+              // Helper to fetch log summaries for the month
+              const getEmployeeStats = (userId) => {
+                const empRecords = logsData.filter(r => (r.user?._id || r.user) === userId);
+                const counts = { present: 0, late: 0, half_day: 0, absent: 0 };
+                empRecords.forEach(r => {
+                  if (counts[r.status] !== undefined) counts[r.status]++;
+                });
+                return { empRecords, counts };
+              };
+
+              return (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto no-scrollbar">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50/75 border-b border-gray-100 text-gray-400 font-black uppercase text-[10px] tracking-[0.1em]">
+                          <th className="py-4 px-5">Staff Identity</th>
+                          <th className="py-4 px-2 text-center">Today's Status</th>
+                          <th className="py-4 px-2 text-center">Monthly Summary</th>
+                          <th className="py-4 px-5 text-right">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-150">
+                        {filteredUsers.map(u => {
+                          const { counts, empRecords } = getEmployeeStats(u._id);
+                          const todayStatus = getTodayStatusForUser(u._id);
+                          const todayStatusTheme = 
+                            todayStatus === 'working' ? { label: 'Working', bg: 'bg-blue-50 text-blue-700 border-blue-200' } :
+                            todayStatus === 'completed' ? { label: 'Shift Over', bg: 'bg-green-50 text-green-700 border-green-200' } :
+                            { label: 'Absent Today', bg: 'bg-red-50 text-red-700 border-red-200' };
+
+                          const isExpanded = expandedUserId === u._id;
+
+                          return (
+                            <React.Fragment key={u._id}>
+                              <tr className="hover:bg-gray-50/50 transition-all">
+                                {/* Staff Identity */}
+                                <td className="py-4 px-5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden font-black text-white bg-gradient-to-tr from-gray-500 to-gray-600">
+                                      {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : u.name?.charAt(0)}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-black text-gray-900 leading-tight">{u.name}</p>
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{u.role || 'Staff'}</p>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Today's Status */}
+                                <td className="py-4 px-2 text-center">
+                                  <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${todayStatusTheme.bg} ${todayStatusTheme.border}`}>
+                                    {todayStatusTheme.label}
+                                  </span>
+                                </td>
+
+                                {/* Monthly Summary Counts */}
+                                <td className="py-4 px-2 text-center">
+                                  <div className="flex items-center justify-center gap-3 text-[11px]">
+                                    <span className="text-green-600 font-bold" title="Present">P: {counts.present}</span>
+                                    <span className="text-indigo-600 font-bold" title="Late">L: {counts.late}</span>
+                                    <span className="text-amber-600 font-bold" title="Half Day">H: {counts.half_day}</span>
+                                    <span className="text-red-600 font-bold" title="Absent">A: {counts.absent}</span>
+                                  </div>
+                                </td>
+
+                                {/* Expand Toggle Button */}
+                                <td className="py-4 px-5 text-right">
+                                  <button 
+                                    onClick={() => setExpandedUserId(isExpanded ? null : u._id)}
+                                    className="py-1.5 px-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-[9px] font-black uppercase tracking-wider text-gray-600 transition-all inline-flex items-center gap-1"
+                                  >
+                                    <span>{isExpanded ? 'Hide' : `Logs (${empRecords.length})`}</span>
+                                    <svg className={`w-3 h-3 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                      <path d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                  </button>
+                                </td>
+                              </tr>
+
+                              {/* Expanded Row showing Daily Sub-Table */}
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan="4" className="bg-gray-50/50 p-4">
+                                    <div className="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-inner">
+                                      {empRecords.length === 0 ? (
+                                        <p className="text-center text-[10px] font-bold text-gray-400 py-6">No daily records found for this month.</p>
+                                      ) : (
+                                        <table className="w-full text-[11px] text-left border-collapse">
+                                          <thead>
+                                            <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 font-black uppercase text-[9px] tracking-wider">
+                                              <th className="py-2.5 px-4">Date</th>
+                                              <th className="py-2.5 px-2 text-center">Status</th>
+                                              <th className="py-2.5 px-2 text-center">In Time</th>
+                                              <th className="py-2.5 px-2 text-center">Out Time</th>
+                                              <th className="py-2.5 px-2 text-center font-mono">Total Hours</th>
+                                              <th className="py-2.5 px-4">Notes</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-gray-50">
+                                            {empRecords.map((r, idx) => {
+                                              const logTheme = STATUS_THEMES[r.status] || STATUS_THEMES.present;
+                                              const logDateStr = new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' });
+                                              return (
+                                                <tr key={r._id || idx} className="hover:bg-gray-50/20">
+                                                  <td className="py-2.5 px-4 font-black text-gray-900">{logDateStr}</td>
+                                                  <td className="py-2.5 px-2 text-center">
+                                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${logTheme.bg} ${logTheme.border} ${logTheme.text}`}>
+                                                      {logTheme.label}
+                                                    </span>
+                                                  </td>
+                                                  <td className="py-2.5 px-2 text-center text-gray-600">{r.checkIn ? formatTime(r.checkIn) : '--:--'}</td>
+                                                  <td className="py-2.5 px-2 text-center text-gray-600">{r.checkOut ? formatTime(r.checkOut) : '--:--'}</td>
+                                                  <td className="py-2.5 px-2 text-center font-mono text-emerald-600 font-bold">{r.sessionDuration || '--'}</td>
+                                                  <td className="py-2.5 px-4 text-gray-500 font-medium">{r.notes ? `📝 ${r.notes}` : '—'}</td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </Modal>
       )}

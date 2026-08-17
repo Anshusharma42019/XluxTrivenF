@@ -7,6 +7,8 @@ import {
 } from '../services/opsDashboard.service';
 import RtoVerificationModal from '../components/RtoVerificationModal';
 import OpsInteraktModal from '../components/OpsInteraktModal';
+import InvoiceModal from '../components/InvoiceModal';
+import BulkInvoiceModal from '../components/BulkInvoiceModal';
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 const fmtNum = (n) => {
@@ -414,10 +416,11 @@ function LeaderboardTable({ rows = [], sortKey, sortDir, onSort }) {
 }
 
 /* ─── Shipments Table ────────────────────────────────────────────────────── */
-function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick, onSendInterakt }) {
+function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick, onSendInterakt, onCreateInvoice }) {
   const { shipments = [], total = 0, pages = 1, page = 1 } = data || {};
   const isUndeliveredView = ['undelivered', 'blUndelivered', 'interaktReplies', 'reply_reattempt', 'reply_dawa'].includes(filters.status);
-  const showActionColumn = isUndeliveredView || ['rto', 'rtoIntersite', 'blRto', 'blRtoIntersite', ''].includes(filters.status || '');
+  const isDeliveredView = ['delivered', 'salesDelivered', 'supportDelivered'].includes(filters.status);
+  const showActionColumn = isUndeliveredView || isDeliveredView || ['rto', 'rtoIntersite', 'blRto', 'blRtoIntersite', ''].includes(filters.status || '');
   const statusChip = (status) => {
     const cat = (() => {
       const s = (status || '').toLowerCase();
@@ -589,6 +592,19 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                           RTO Verification
                         </button>
                       )
+                    )}
+                    {/^delivered$|^del$/i.test(s.status) && (
+                      <button
+                        onClick={() => onCreateInvoice && onCreateInvoice(s, i + 1)}
+                        style={{
+                          padding: '4px 10px', borderRadius: 6, border: '1px solid #86efac',
+                          background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', color: '#15803d',
+                          fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'inline-flex',
+                          alignItems: 'center', gap: 4, transition: 'all .15s',
+                        }}
+                      >
+                        🧾 Invoice
+                      </button>
                     )}
                   </td>
                 )}
@@ -813,6 +829,12 @@ export default function OpsDashboard() {
   const [verificationShipment, setVerificationShipment] = useState(null);
   const [interaktModalOpen, setInteraktModalOpen] = useState(false);
   const [interaktTargetShipment, setInteraktTargetShipment] = useState(null);
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [invoiceShipment, setInvoiceShipment] = useState(null);
+  const [invoiceDeliveryIndex, setInvoiceDeliveryIndex] = useState(1);
+  const [invoiceDoctorFee, setInvoiceDoctorFee] = useState(0);
+  const [invoiceTaxMode, setInvoiceTaxMode] = useState('inter');
+  const [bulkInvoiceModalOpen, setBulkInvoiceModalOpen] = useState(false);
   const autoRefreshTimer = useRef(null);
 
   const handleOpenInteraktModal = (shipment = null) => {
@@ -1016,22 +1038,41 @@ export default function OpsDashboard() {
             </p>
           </div>
           
-          {kpis && !loading.kpis && (
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <div style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', padding: '8px 16px', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(22,163,74,0.1)' }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.5 }}>Delivered Rate</span>
-                <span style={{ fontSize: 22, fontWeight: 900, color: '#15803d', lineHeight: 1.1 }}>
-                  {kpis.kpis?.deliveredRate?.value || 0}%
-                </span>
-              </div>
-              <div style={{ background: 'linear-gradient(135deg, #fef2f2, #fee2e2)', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(220,38,38,0.1)' }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5 }}>RTO Rate</span>
-                <span style={{ fontSize: 22, fontWeight: 900, color: '#b91c1c', lineHeight: 1.1 }}>
-                  {kpis.kpis?.rtoRate?.value || 0}%
-                </span>
-              </div>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            {kpis && !loading.kpis && (
+              <>
+                <div style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', padding: '8px 16px', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(22,163,74,0.1)' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.5 }}>Delivered Rate</span>
+                  <span style={{ fontSize: 22, fontWeight: 900, color: '#15803d', lineHeight: 1.1 }}>
+                    {kpis.kpis?.deliveredRate?.value || 0}%
+                  </span>
+                </div>
+                <div style={{ background: 'linear-gradient(135deg, #fef2f2, #fee2e2)', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(220,38,38,0.1)' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5 }}>RTO Rate</span>
+                  <span style={{ fontSize: 22, fontWeight: 900, color: '#b91c1c', lineHeight: 1.1 }}>
+                    {kpis.kpis?.rtoRate?.value || 0}%
+                  </span>
+                </div>
+              </>
+            )}
+            {/* Bulk Invoice Download Button */}
+            <button
+              onClick={() => setBulkInvoiceModalOpen(true)}
+              title="Download all invoices for a month as PDF"
+              style={{
+                padding: '8px 16px', borderRadius: 12, border: '1.5px solid #16a34a',
+                background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
+                color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 7,
+                boxShadow: '0 4px 12px rgba(22,163,74,0.3)',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(22,163,74,0.4)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(22,163,74,0.3)'; }}
+            >
+              🧾 Bulk Invoices
+            </button>
+          </div>
         </div>
 
         {/* Alert banners */}
@@ -1174,7 +1215,14 @@ export default function OpsDashboard() {
             }
           >
             {loading.ships ? <Skeleton h={400} /> : (
-              <ShipmentsTable data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} onSendInterakt={handleOpenInteraktModal} />
+              <ShipmentsTable data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} onSendInterakt={handleOpenInteraktModal} onCreateInvoice={(s, idx) => {
+                setInvoiceShipment(s);
+                setInvoiceDeliveryIndex(idx || 1);
+                const cleanState = (s.billing_state || '').toLowerCase().replace(/[^a-z]/g, '');
+                const isUP = cleanState === 'up' || cleanState === 'uttarpradesh' || cleanState.includes('uttarpradesh');
+                setInvoiceTaxMode(isUP ? 'intra' : 'inter');
+                setInvoiceModalOpen(true);
+              }} />
             )}
           </SectionCard>
         )}
@@ -1192,6 +1240,20 @@ export default function OpsDashboard() {
         targetShipment={interaktTargetShipment}
         filters={activeTab === 'shipments' ? shipmentFilters : { ...filters, status: 'undelivered' }}
         totalCount={interaktTargetShipment ? 1 : (activeTab === 'aging' ? aging?.undelivered_3plus?.length : shipments?.total)}
+      />
+      <InvoiceModal
+        isOpen={invoiceModalOpen}
+        onClose={() => { setInvoiceModalOpen(false); setInvoiceShipment(null); }}
+        shipment={invoiceShipment}
+        deliveryIndex={invoiceDeliveryIndex}
+        doctorFee={invoiceDoctorFee}
+        onDoctorFeeChange={setInvoiceDoctorFee}
+        taxMode={invoiceTaxMode}
+        onTaxModeChange={setInvoiceTaxMode}
+      />
+      <BulkInvoiceModal
+        isOpen={bulkInvoiceModalOpen}
+        onClose={() => setBulkInvoiceModalOpen(false)}
       />
     </div>
   );

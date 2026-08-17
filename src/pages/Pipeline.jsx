@@ -573,7 +573,7 @@ export default function Pipeline() {
                             getTaskByLead(leadId).catch(() => null),
                           ]);
                           if (fullLead) setSelected(prev => ({ ...prev, lead: fullLead }));
-                          if (task) setLeadTask(task);
+                          setLeadTask(task || fullLead);
                         } catch { }
                       }
                     } else if (filter === 'call_again') {
@@ -592,9 +592,7 @@ export default function Pipeline() {
                           getTaskByLead(leadId).catch(() => null),
                           getLead(leadId).catch(() => null),
                         ]);
-                        // Use task if it has address data, otherwise use lead
-                        const hasAddress = task && (task.houseNo || task.cityVillage || task.district || task.pincode);
-                        setLeadTask(hasAddress ? task : (fullLead || task));
+                        setLeadTask(task || fullLead);
                         if (fullLead) setSelected(prev => ({ ...prev, lead: fullLead }));
                       } catch { }
                     }
@@ -902,21 +900,133 @@ export default function Pipeline() {
               </div>
             </div>
 
-            <div className="space-y-4 px-2 pb-8">
-              {(() => { const ml = selected.lead || selected; return (
-                <>
-                  <DetailRow label="Status" value={ml.status?.replace(/_/g,' ')} />
-                  <DetailRow label="Problem" value={ml.problem} />
-                  <DetailRow label="House No" value={leadTask?.houseNo || ml.houseNo} />
-                  <DetailRow label="City/Village" value={leadTask?.cityVillage || ml.cityVillage} />
-                  <DetailRow label="Post Office" value={leadTask?.postOffice || ml.postOffice} />
-                  <DetailRow label="Landmark" value={leadTask?.landmark || ml.landmark} />
-                  <DetailRow label="District" value={leadTask?.district || ml.district} />
-                  <DetailRow label="State" value={leadTask?.state || ml.state} />
-                  <DetailRow label="Pincode" value={leadTask?.pincode || ml.pincode} />
-                  <DetailRow label="Address" value={leadTask?.address || ml.address} />
-                </>
-              );})()}
+            <div className="space-y-4 px-2 pb-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {(() => {
+                const isOrder = !!selected.billing_customer_name;
+                const lead = selected.lead || selected;
+
+                if (isOrder) {
+                  return (
+                    <>
+                      <SectionHead label="Order Details" color="blue" />
+                      <DetailRow label="City" value={selected.billing_city} />
+                      <DetailRow label="Product" value={selected.order_items?.[0]?.name} />
+                      <DetailRow label="Amount" value={`₹${selected.sub_total}`} />
+                      <DetailRow label="Delivered At" value={selected.delivered_at && new Date(selected.delivered_at).toLocaleDateString('en-IN')} />
+                      
+                      <SectionHead label="Follow-up Checklist" color="blue" />
+                      <div className="space-y-3 mt-3">
+                        {Array.from({ length: 5 }, (_, i) => {
+                          const fu = selected.followups?.find(f => f.followup_number === i + 1);
+                          const isDone = fu?.completed;
+                          const completedCount = selected.followups?.filter(f => f.completed).length || 0;
+                          const isActive = i === completedCount;
+                          const ordinal = ['1st','2nd','3rd','4th','5th'][i];
+
+                          return (
+                            <div key={i} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${isDone ? 'bg-gray-50 border-gray-100 opacity-60' : isActive ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-100'}`}>
+                              <span className={`text-xs font-bold ${isActive ? 'text-orange-600' : 'text-gray-400'}`}>{ordinal} Follow-up</span>
+                              {isActive ? (
+                                <button onClick={() => handleFollowUpDone(selected._id)} disabled={doneLoading === String(selected._id)}
+                                  className="px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg hover:bg-orange-600 shadow-sm transition-all disabled:opacity-50">
+                                  {doneLoading === String(selected._id) ? '...' : 'Mark Done'}
+                                </button>
+                              ) : isDone ? (
+                                <span className="text-emerald-500 font-bold text-[10px]">✓ COMPLETED</span>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                }
+
+                return (
+                  <>
+                    <SectionHead label="Lead Information" />
+                    <DetailRow label="Status" value={lead.status?.replace(/_/g,' ')} />
+                    <DetailRow label="Department" value={lead.department || selected.department} color="blue" />
+                    <DetailRow label="Assigned To" value={lead.assignedTo?.name || selected.assignedTo?.name} />
+                    <DetailRow label="Added By" value={lead.createdBy?.name || selected.createdBy?.name} />
+                    {lead.status === 'on_hold' && lead.onHoldReason && (
+                      <div className="mt-2 mb-1 p-3 rounded-xl bg-gray-50 border border-gray-200">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">On Hold Info</p>
+                        <p className="text-sm text-gray-700 font-medium">{lead.onHoldReason}</p>
+                        {lead.onHoldUntil && (
+                          <p className="text-xs text-gray-500 mt-0.5">Until: {new Date(lead.onHoldUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                        )}
+                      </div>
+                    )}
+                    <DetailRow label="Source" value={lead.source} />
+                    <DetailRow label="Problem" value={leadTask?.problem || lead.problem} />
+                    {(leadTask?.age || leadTask?.weight || leadTask?.height) && (
+                      <>
+                        <SectionHead label="Health Info" />
+                        <DetailRow label="Age" value={leadTask?.age ? `${leadTask.age} yrs` : null} />
+                        <DetailRow label="Weight" value={leadTask?.weight ? `${leadTask.weight} kg` : null} />
+                        <DetailRow label="Height" value={leadTask?.height ? `${leadTask.height} ft` : null} />
+                        <DetailRow label="Other Problems" value={leadTask?.otherProblems} />
+                        <DetailRow label="Duration" value={leadTask?.problemDuration} />
+                        <DetailRow label="Price" value={leadTask?.price ? `₹${leadTask.price}` : null} />
+                      </>
+                    )}
+                    
+                    <SectionHead label="Contact Details" />
+                    <DetailRow label="Email" value={lead.email} />
+                    <DetailRow label="Phone" value={leadTask?.phone || lead.phone} />
+
+                    <SectionHead label="Address" />
+                    <DetailRow label="House No" value={leadTask?.houseNo || lead.houseNo} />
+                    <DetailRow label="City/Village" value={leadTask?.cityVillage || lead.cityVillage} />
+                    <DetailRow label="Post Office" value={leadTask?.postOffice || lead.postOffice} />
+                    <DetailRow label="Landmark" value={leadTask?.landmark || lead.landmark} />
+                    <DetailRow label="District" value={leadTask?.district || lead.district} />
+                    <DetailRow label="State" value={leadTask?.state || lead.state} />
+                    <DetailRow label="Pincode" value={leadTask?.pincode || lead.pincode} />
+                    <DetailRow label="Address" value={leadTask?.address || lead.address} />
+
+                    <SectionHead label="Follow-up Action" />
+                    <div className="space-y-3 mt-3 p-4 rounded-2xl bg-gray-50 border border-gray-100">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Add Note</label>
+                           <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className={`${inputCls} bg-white`} placeholder="What happened on the call?" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Next Date</label>
+                          <input type="date" value={nextDate} onChange={e => setNextDate(e.target.value)} className={`${inputCls} bg-white`} />
+                        </div>
+                        <div className="flex items-end">
+                          <button onClick={handleFollowUpNote} disabled={savingNote || (!note.trim() && !nextDate)}
+                            className="w-full py-2.5 bg-green-600 text-white text-xs font-bold rounded-xl hover:bg-green-700 shadow-md transition-all disabled:opacity-50">
+                            {savingNote ? '...' : 'Save Activity'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(lead.notes?.length > 0 || lead.follow_ups?.length > 0) && (
+                      <div className="mt-4">
+                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Activity History</p>
+                         <div className="space-y-2">
+                           {[
+                             ...(lead.follow_ups || []).map(f => ({ ...f, type: 'followup' })),
+                             ...(lead.notes || []).map(n => ({ ...n, type: 'note' }))
+                           ].sort((a,b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt)).map((n, i) => (
+                             <div key={i} className="p-3 rounded-2xl bg-white border border-gray-100 shadow-sm">
+                               {n.note && <p className="text-xs text-gray-700 leading-relaxed">{n.note}</p>}
+                               {n.text && <p className="text-xs text-gray-700 leading-relaxed">{n.text}</p>}
+                               {n.next_date && <p className="text-[10px] text-green-600 font-bold mt-1">Next: {new Date(n.next_date).toLocaleDateString('en-IN')}</p>}
+                               <p className="text-[9px] text-gray-400 mt-1 font-bold uppercase tracking-tight">{new Date(n.date || n.createdAt).toLocaleString()}</p>
+                             </div>
+                           ))}
+                         </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               
               <div className="grid grid-cols-2 gap-3 pt-6">
                 {filter !== 'interested' && (
