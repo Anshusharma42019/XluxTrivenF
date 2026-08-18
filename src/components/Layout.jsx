@@ -90,6 +90,8 @@ export default function Layout() {
   const lastNotifRef = useRef(null);
   const [commissionStats, setCommissionStats] = useState(null);
   const [shiftTime, setShiftTime] = useState('00h 00m 00s');
+  const [whatsappUnreadCount, setWhatsappUnreadCount] = useState(0);
+  const prevWhatsappUnreadRef = useRef(0);
 
   const DEPT_COLOR = {
     migraine: 'bg-purple-50 text-purple-600 border-purple-100',
@@ -323,6 +325,43 @@ export default function Layout() {
     return () => { active = false; clearInterval(t); };
   }, []);
 
+  // WhatsApp unread count polling — runs every 30s
+  useEffect(() => {
+    let active = true;
+    const pollWA = async () => {
+      try {
+        const res = await import('../services/lead.service').then(m => m.getLeads({ page: 1, limit: 100, whatsappOnly: true }));
+        const leads = res?.leads || [];
+        const count = leads.filter(lead => {
+          const notes = lead.notes || [];
+          const inbound = notes.filter(n => n.direction === 'inbound' || (!n.direction && n.text?.includes('[Interakt Message]')));
+          const outbound = notes.filter(n => n.direction === 'outbound');
+          const lastIn = inbound[inbound.length - 1];
+          const lastOut = outbound[outbound.length - 1];
+          const hasInteraktProblem = lead.problem?.includes('[Interakt Message]');
+          if (lastIn) return !lastOut || new Date(lastIn.createdAt) > new Date(lastOut.createdAt);
+          return hasInteraktProblem && outbound.length === 0;
+        }).length;
+        if (active) {
+          setWhatsappUnreadCount(count);
+          // Show popup toast when new messages arrive
+          if (count > prevWhatsappUnreadRef.current && prevWhatsappUnreadRef.current !== null) {
+            const newCount = count - prevWhatsappUnreadRef.current;
+            toastInfo(
+              `${newCount} new WhatsApp message${newCount > 1 ? 's' : ''} received`,
+              '💬 WhatsApp'
+            );
+          }
+          prevWhatsappUnreadRef.current = count;
+        }
+      } catch {}
+    };
+    // Delay first poll slightly so page loads first
+    const init = setTimeout(pollWA, 3000);
+    const t = setInterval(pollWA, 30000);
+    return () => { active = false; clearTimeout(init); clearInterval(t); };
+  }, []);
+
   const handleResultClick = async (item) => {
     setSearchOpen(false); setPhoneQuery(''); setSearchResults([]);
     // Lead result
@@ -406,7 +445,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden theme-root" style={{ background: 'var(--theme-bg, #f0f4f0)' }}>
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} unreadCount={unreadCount} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} unreadCount={unreadCount} whatsappUnreadCount={whatsappUnreadCount} />
 
       <div className="flex-1 md:ml-64 flex flex-col h-screen min-w-0 overflow-hidden">
         {/* Header */}

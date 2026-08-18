@@ -134,7 +134,7 @@ const NAV_GROUPS = [
   },
 ];
 
-export default function Sidebar({ open, onClose, unreadCount = 0 }) {
+export default function Sidebar({ open, onClose, unreadCount = 0, whatsappUnreadCount = 0 }) {
   const { user } = useAuth();
   const { t } = useLanguage();
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
@@ -189,6 +189,14 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                       <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-r-full opacity-0 group-[.active-nav]:opacity-100 transition-opacity" style={{ background: accent }} />
                       <span className="transition-all duration-150 text-white/60 group-hover:text-white group-[.active-nav]:text-white">{icon}</span>
                       <span className="flex-1 truncate">{t(label)}</span>
+                      {label === 'WhatsApp' && whatsappUnreadCount > 0 && (
+                        <span className="relative flex items-center">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00a884] opacity-50" />
+                          <span className="relative bg-[#00a884] text-white text-[9px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center font-bold leading-none">
+                            {whatsappUnreadCount}
+                          </span>
+                        </span>
+                      )}
                       {label === 'Notifications' && unreadCount > 0 && (
                         <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center font-bold">
                           {unreadCount > 99 ? '99+' : unreadCount}

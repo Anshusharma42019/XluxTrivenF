@@ -41,14 +41,18 @@ export default function Whatsapp({ onClose, initialLeadId }) {
   const [chatLeadSearch, setChatLeadSearch] = useState('');
   const [selectedChatLead, setSelectedChatLead] = useState(null);
   const [chatLeadsLoading, setChatLeadsLoading] = useState(false);
+  const [messageFilter, setMessageFilter] = useState('all'); // 'all' | 'unread' | 'read'
   const [chatNotes, setChatNotes] = useState([]);
   
   const chatEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [chatMsg, setChatMsg] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [templates, setTemplates] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [mediaFile, setMediaFile] = useState(null);      // File object
+  const [mediaPreview, setMediaPreview] = useState(null); // { url, type }
 
   useEffect(() => {
     getInteraktTemplates().then(res => setTemplates(res)).catch(console.error);
@@ -107,6 +111,32 @@ export default function Whatsapp({ onClose, initialLeadId }) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatNotes]);
+
+  // Unified send handler for text + optional media attachment
+  const doSend = async () => {
+    if ((!chatMsg.trim() && !mediaFile) || sending) return;
+    setSending(true); setSendError('');
+    const msgToSend = chatMsg;
+    const fileToSend = mediaFile;
+    // Optimistic preview
+    const previewText = fileToSend
+      ? `[Attached Media] ${msgToSend}`.trim()
+      : msgToSend;
+    setChatNotes(prev => [...prev, { text: previewText, direction: 'outbound', createdAt: new Date().toISOString() }]);
+    setChatMsg('');
+    setMediaFile(null);
+    setMediaPreview(null);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    try {
+      const res = await sendLeadWhatsApp(selectedChatLead._id, msgToSend, undefined, undefined, fileToSend || undefined);
+      if (res && res.note) {
+        setChatNotes(prev => { const n = [...prev]; n[n.length - 1] = res.note; return n; });
+      }
+    } catch (err) {
+      console.error(err);
+      setSendError('Failed to send message');
+    } finally { setSending(false); }
+  };
 
   // Sidebar Icons (Mock)
   const SidebarIcons = () => (
@@ -174,45 +204,146 @@ export default function Whatsapp({ onClose, initialLeadId }) {
           </div>
         </div>
 
+        {/* ── Read / Unread Filter Chips ── */}
+        <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-100 shrink-0">
+          {[{id:'all',label:'All'},{id:'unread',label:'Unread'},{id:'read',label:'Read'}].map(f => {
+            const isActive = messageFilter === f.id;
+            // count unread for badge
+            const unreadCount = f.id === 'unread'
+              ? chatLeads.filter(l => {
+                  const notes = l.notes || [];
+                  const inbound = notes.filter(n => n.direction === 'inbound' || (!n.direction && n.text?.includes('[Interakt Message]')));
+                  const outbound = notes.filter(n => n.direction === 'outbound');
+                  const lastInbound = inbound[inbound.length - 1];
+                  const lastOutbound = outbound[outbound.length - 1];
+                  // Also unread if lead came via Interakt (problem has marker) and has no outbound reply
+                  const hasInteraktProblem = l.problem?.includes('[Interakt Message]');
+                  if (lastInbound) {
+                    if (!lastOutbound) return true;
+                    return new Date(lastInbound.createdAt) > new Date(lastOutbound.createdAt);
+                  }
+                  return hasInteraktProblem && outbound.length === 0;
+                }).length
+              : 0;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setMessageFilter(f.id)}
+                className={`relative flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold transition-all duration-200
+                  ${isActive
+                    ? 'bg-[#00a884] text-white shadow-sm shadow-[#00a884]/30'
+                    : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'}`}
+              >
+                {f.label}
+                {f.id === 'unread' && unreadCount > 0 && (
+                  <span className={`text-[10px] font-bold px-1 py-0.5 rounded-full min-w-[16px] text-center leading-none
+                    ${isActive ? 'bg-white text-[#00a884]' : 'bg-[#00a884] text-white'}`}>
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
           {chatLeadsLoading ? (
             <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-[3px] border-[#00a884] border-t-transparent rounded-full animate-spin" /></div>
-          ) : chatLeads.length === 0 ? (
-            <p className="text-center text-[#54656f] text-sm py-10">No chats found</p>
           ) : (
+            (() => {
+              const filteredLeads = chatLeads.filter(lead => {
+                if (messageFilter === 'all') return true;
+                const notes = lead.notes || [];
+                const inbound = notes.filter(n => n.direction === 'inbound' || (!n.direction && n.text?.includes('[Interakt Message]')));
+                const outbound = notes.filter(n => n.direction === 'outbound');
+                const lastInbound = inbound[inbound.length - 1];
+                const lastOutbound = outbound[outbound.length - 1];
+                const hasInteraktProblem = lead.problem?.includes('[Interakt Message]');
+                let isUnread;
+                if (lastInbound) {
+                  isUnread = !lastOutbound || new Date(lastInbound.createdAt) > new Date(lastOutbound.createdAt);
+                } else {
+                  isUnread = hasInteraktProblem && outbound.length === 0;
+                }
+                if (messageFilter === 'unread') return isUnread;
+                if (messageFilter === 'read') return !isUnread;
+                return true;
+              });
+              if (filteredLeads.length === 0) return (
+                <div className="flex flex-col items-center justify-center py-16 px-4">
+                  <div className="w-14 h-14 rounded-full bg-[#f0f2f5] flex items-center justify-center mb-3">
+                    {messageFilter === 'unread'
+                      ? <svg className="w-7 h-7 text-[#8696a0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                      : <svg className="w-7 h-7 text-[#8696a0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    }
+                  </div>
+                  <p className="text-[#54656f] text-sm font-medium">
+                    {messageFilter === 'unread' ? 'No unread messages' : 'No read chats'}
+                  </p>
+                  <p className="text-[#8696a0] text-xs mt-1">
+                    {messageFilter === 'unread' ? "You're all caught up!" : 'Reply to a chat to see it here'}
+                  </p>
+                </div>
+              );
+              return (
             <div className="flex flex-col">
-              {chatLeads.map((lead, i) => {
+              {filteredLeads.map((lead, i) => {
                 const color = PIN_COLORS[i % PIN_COLORS.length];
                 const isActive = selectedChatLead?._id === lead._id;
                 const lastMessage = lead.problem || 'Tap to start conversation';
                 const time = new Date(lead.updatedAt || lead.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
                 
+                const notes = lead.notes || [];
+                const inboundNotes = notes.filter(n => n.direction === 'inbound' || (!n.direction && n.text?.includes('[Interakt Message]')));
+                const outboundNotes = notes.filter(n => n.direction === 'outbound');
+                const lastIn = inboundNotes[inboundNotes.length - 1];
+                const lastOut = outboundNotes[outboundNotes.length - 1];
+                const hasInteraktProblem = lead.problem?.includes('[Interakt Message]');
+                let isUnread;
+                if (lastIn) {
+                  isUnread = !lastOut || new Date(lastIn.createdAt) > new Date(lastOut.createdAt);
+                } else {
+                  isUnread = hasInteraktProblem && outboundNotes.length === 0;
+                }
+
                 return (
                   <div key={lead._id} onClick={() => setSelectedChatLead(lead)}
                     className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-gray-50 last:border-0
                       ${isActive ? 'bg-[#f0f2f5]' : 'bg-white hover:bg-[#f5f6f6]'}`}>
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0 ${color}`}>
-                      {initials(lead.name)}
+                    <div className="relative shrink-0">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold ${color}`}>
+                        {initials(lead.name)}
+                      </div>
+                      {isUnread && (
+                        <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-[#00a884] rounded-full border-2 border-white" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-baseline gap-2 truncate">
-                          <p className={`text-[16px] ${isActive ? 'font-bold' : 'font-medium'} text-[#111b21] truncate`}>{lead.name || 'Unknown'}</p>
+                          <p className={`text-[16px] ${isUnread ? 'font-bold text-[#111b21]' : isActive ? 'font-bold' : 'font-medium'} text-[#111b21] truncate`}>{lead.name || 'Unknown'}</p>
                           {lead.phone && <p className="text-[12px] font-bold text-[#667781] shrink-0">{lead.phone}</p>}
                         </div>
-                        <span className={`text-[11px] ${isActive ? 'text-[#111b21] font-bold' : 'text-[#667781] font-medium'} shrink-0 ml-2`}>{time}</span>
+                        <span className={`text-[11px] ${isUnread ? 'text-[#00a884] font-bold' : isActive ? 'text-[#111b21] font-bold' : 'text-[#667781] font-medium'} shrink-0 ml-2`}>{time}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <p className="text-[13px] text-[#667781] truncate leading-snug flex-1 mr-2">
-                          <span className="text-[#53bdeb] mr-1 text-[11px]">✓✓</span>
+                        <p className={`text-[13px] truncate leading-snug flex-1 mr-2 ${isUnread ? 'text-[#111b21] font-semibold' : 'text-[#667781]'}`}>
+                          {!isUnread && <span className="text-[#667781] mr-1 text-[11px]">✓✓</span>}
                           {lastMessage}
                         </p>
+                        {isUnread && (
+                          <span className="shrink-0 bg-[#00a884] text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                            1
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+              );
+            })()
           )}
         </div>
       </div>
@@ -271,26 +402,78 @@ export default function Whatsapp({ onClose, initialLeadId }) {
                   const isOutbound = note.direction === 'outbound';
                   const isInterakt = (!isOutbound && note.text?.includes('[Interakt Message]')) || note.isSyntheticProblem;
                   const isFailed = isOutbound && note.text?.includes('[FAILED]');
-                  const displayText = note.text?.replace(/^\[Interakt Message\]\s*/, '')?.replace(/^\[FAILED\]\s*/, '') || note.text || '';
+                  const rawText = note.text || '';
+                  const attachedMediaMatch = rawText.match(/\[Attached Media: ([^\]]+)\]/);
+                  const attachedMediaUrl = attachedMediaMatch ? attachedMediaMatch[1] : null;
+                  const displayText = rawText
+                    .replace(/^\[Interakt Message\]\s*/, '')
+                    .replace(/^\[FAILED\]\s*/, '')
+                    .replace(/\[Attached Media: [^\]]+\]\s*/, '')
+                    .trim();
                   const time = note.createdAt ? new Date(note.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+                  // Blue tick only if contact replied AFTER this outbound message (confirmed read)
+                  const isReadByContact = isOutbound && note.createdAt
+                    ? displayNotes.some(n => n.direction === 'inbound' && n.createdAt && new Date(n.createdAt) > new Date(note.createdAt))
+                    : false;
+                  // Detect media type for rendering
+                  const isImage = attachedMediaUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachedMediaUrl);
+                  const isVideo = attachedMediaUrl && /\.(mp4|mov|webm|avi)$/i.test(attachedMediaUrl);
+                  const isDoc = attachedMediaUrl && !isImage && !isVideo;
+                  // Inbound image check (from webhook text)
+                  const inboundImageMatch = !isOutbound && rawText.match(/\[Image: ([^\]]+)\]/);
+                  const inboundImageUrl = inboundImageMatch ? inboundImageMatch[1] : null;
                   
                   return (
                     <div key={note._id || i} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'} mb-1`}>
-                      <div className={`max-w-[75%] rounded-lg px-2.5 py-1.5 shadow-sm relative text-[14.5px] leading-relaxed
+                      <div className={`max-w-[75%] rounded-lg shadow-sm relative text-[14.5px] leading-relaxed overflow-hidden
                         ${isOutbound ? (isFailed ? 'bg-red-100 rounded-tr-none text-red-900 border border-red-200' : 'bg-[#d9fdd3] rounded-tr-none text-[#111b21]') : 'bg-white rounded-tl-none text-[#111b21]'}`}>
                         
                         {isInterakt && !isOutbound && (
-                          <div className="flex items-center gap-1.5 mb-1 opacity-80">
+                          <div className="flex items-center gap-1.5 px-2.5 pt-1.5 opacity-80">
                             <span className="text-[11px] font-bold text-emerald-600">~ WhatsApp Lead</span>
                           </div>
                         )}
-                        
-                        <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-                          <p className="whitespace-pre-wrap break-words">{displayText}</p>
+
+                        {/* Outbound media */}
+                        {attachedMediaUrl && (
+                          <div className="relative">
+                            {isImage && (
+                              <a href={attachedMediaUrl} target="_blank" rel="noopener noreferrer">
+                                <img src={attachedMediaUrl} alt="Media" className="max-w-full max-h-60 w-full object-cover cursor-pointer hover:opacity-95 transition-opacity" />
+                              </a>
+                            )}
+                            {isVideo && (
+                              <video controls className="max-w-full max-h-60 w-full" src={attachedMediaUrl} />
+                            )}
+                            {isDoc && (
+                              <a href={attachedMediaUrl} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-3 px-3 py-3 bg-black/5 hover:bg-black/10 transition-colors">
+                                <div className="w-10 h-10 rounded-lg bg-[#00a884] flex items-center justify-center shrink-0">
+                                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold truncate">{attachedMediaUrl.split('/').pop()?.split('?')[0] || 'Document'}</p>
+                                  <p className="text-xs text-[#667781]">Tap to open</p>
+                                </div>
+                                <svg className="w-4 h-4 ml-auto text-[#667781] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Inbound image (from webhook) */}
+                        {inboundImageUrl && (
+                          <a href={inboundImageUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={inboundImageUrl} alt="Received" className="max-w-full max-h-60 w-full object-cover cursor-pointer" />
+                          </a>
+                        )}
+
+                        <div className="flex flex-wrap items-end gap-x-2 gap-y-1 px-2.5 py-1.5">
+                          {displayText && <p className="whitespace-pre-wrap break-words">{displayText}</p>}
                           <div className="flex items-center gap-1 ml-auto shrink-0 mt-1 opacity-70">
                             <span className={`text-[10px] font-medium ${isFailed ? 'text-red-500' : 'text-[#667781]'}`}>{time}</span>
                             {isOutbound && !isFailed && (
-                              <svg className="w-4 h-4 text-[#53bdeb]" viewBox="0 0 16 11" fill="currentColor">
+                              <svg className={`w-4 h-4 ${isReadByContact ? 'text-[#53bdeb]' : 'text-[#8696a0]'}`} viewBox="0 0 16 11" fill="currentColor">
                                 <path d="M11.071.653a.75.75 0 0 1 .025 1.06l-6.5 7a.75.75 0 0 1-1.086 0l-3-3.228a.75.75 0 1 1 1.086-1.034l2.457 2.643L10.01.678a.75.75 0 0 1 1.06-.025z"/>
                                 <path d="M14.571.653a.75.75 0 0 1 .025 1.06l-6.5 7a.75.75 0 0 1-1.086 0 .75.75 0 0 1 0-1.034l6-6.5a.75.75 0 0 1 1.061-.026l.5.5z" opacity=".8"/>
                               </svg>
@@ -309,14 +492,58 @@ export default function Whatsapp({ onClose, initialLeadId }) {
             <div ref={chatEndRef} className="h-4" />
           </div>
 
-          <div className="shrink-0 px-4 py-3 bg-[#f0f2f5] relative z-10 border-t border-[#d1d7db]">
-            <div className="flex items-end gap-3">
-              <button className="p-2 text-[#54656f] hover:text-[#111b21]">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z"/></svg>
-              </button>
-              <button className="p-2 text-[#54656f] hover:text-[#111b21]">
+          <div className="shrink-0 bg-[#f0f2f5] relative z-10 border-t border-[#d1d7db]">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setMediaFile(file);
+                if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+                  setMediaPreview({ url: URL.createObjectURL(file), type: file.type.startsWith('image/') ? 'image' : 'video' });
+                } else {
+                  setMediaPreview({ url: null, type: 'doc', name: file.name });
+                }
+                e.target.value = '';
+              }}
+            />
+
+            {/* Media preview bar */}
+            {mediaFile && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-[#d1d7db]">
+                {mediaPreview?.type === 'image' && (
+                  <img src={mediaPreview.url} alt="preview" className="w-14 h-14 object-cover rounded-lg border border-gray-200" />
+                )}
+                {mediaPreview?.type === 'video' && (
+                  <video src={mediaPreview.url} className="w-14 h-14 object-cover rounded-lg border border-gray-200" />
+                )}
+                {mediaPreview?.type === 'doc' && (
+                  <div className="w-14 h-14 rounded-lg bg-[#00a884]/10 border border-[#00a884]/30 flex flex-col items-center justify-center">
+                    <svg className="w-6 h-6 text-[#00a884]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <span className="text-[9px] text-[#00a884] font-bold mt-0.5 uppercase">{mediaFile.name.split('.').pop()}</span>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[#111b21] truncate">{mediaFile.name}</p>
+                  <p className="text-xs text-[#667781]">{(mediaFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+                <button onClick={() => { setMediaFile(null); setMediaPreview(null); }}
+                  className="p-1.5 rounded-full hover:bg-gray-100 text-[#667781] hover:text-red-500 transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-end gap-3 px-4 py-3">
+              {/* Paperclip — open file picker */}
+              <button onClick={() => fileInputRef.current?.click()} className={`p-2 transition-colors rounded-full ${mediaFile ? 'text-[#00a884] bg-[#00a884]/10' : 'text-[#54656f] hover:text-[#111b21] hover:bg-black/5'}`} title="Attach file">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M1.816 15.556v.002c0 1.502.584 2.912 1.646 3.972s2.472 1.647 3.974 1.647a5.58 5.58 0 0 0 3.972-1.645l9.547-9.548c.769-.768 1.147-1.767 1.058-2.817-.079-.968-.548-1.927-1.319-2.698-1.594-1.592-4.068-1.711-5.517-.262l-7.916 7.915c-.881.881-.792 2.25.214 3.261.959.958 2.423 1.053 3.263.215l5.511-5.512c.28-.28.267-.722.053-.936l-.244-.244c-.191-.191-.567-.349-.957.04l-5.506 5.506c-.18.18-.635.127-.976-.214-.098-.097-.576-.613-.213-.973l7.915-7.917c.818-.817 2.267-.699 3.23.262.5.501.802 1.1.849 1.685.051.573-.156 1.077-.546 1.465l-9.541 9.541c-.832.833-1.969 1.288-3.14 1.286-1.17-.002-2.31-.453-3.142-1.284s-1.282-1.973-1.284-3.143c-.002-1.171.453-2.311 1.286-3.141l7.17-7.17c.28-.28.267-.722.053-.936l-.244-.244c-.191-.191-.567-.349-.957.04l-7.17 7.17c-1.063 1.06-1.647 2.47-1.647 3.972z"/></svg>
               </button>
+
               <div className="relative">
                 <button 
                   onClick={() => setShowTemplates(!showTemplates)}
@@ -340,18 +567,12 @@ export default function Whatsapp({ onClose, initialLeadId }) {
                             setShowTemplates(false);
                             if (sending) return;
                             setSending(true); setSendError('');
-                            
                             const msgToSend = `[Template: ${t.name}]`;
                             setChatNotes(prev => [...prev, { text: msgToSend, direction: 'outbound', createdAt: new Date().toISOString() }]);
-                            
                             try {
                               const res = await sendLeadWhatsApp(selectedChatLead._id, msgToSend, t.name, t.language);
                               if (res && res.note) {
-                                setChatNotes(prev => {
-                                  const newNotes = [...prev];
-                                  newNotes[newNotes.length - 1] = res.note;
-                                  return newNotes;
-                                });
+                                setChatNotes(prev => { const n = [...prev]; n[n.length - 1] = res.note; return n; });
                               }
                             } catch (err) {
                               console.error(err);
@@ -368,65 +589,27 @@ export default function Whatsapp({ onClose, initialLeadId }) {
                 )}
               </div>
               
-              <div className="flex-1 bg-white rounded-lg flex items-end relative h-10 px-3 border border-gray-100">
+              <div className="flex-1 bg-white rounded-lg flex items-end relative min-h-[40px] px-3 border border-gray-100">
                 <input 
                   type="text" 
-                  placeholder="Type a message" 
+                  placeholder={mediaFile ? 'Add a caption (optional)...' : 'Type a message'}
                   value={chatMsg}
                   onChange={e => setChatMsg(e.target.value)}
                   onKeyDown={async e => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      if (!chatMsg.trim() || sending) return;
-                      setSending(true); setSendError('');
-                      const msgToSend = chatMsg;
-                      setChatNotes(prev => [...prev, { text: msgToSend, direction: 'outbound', createdAt: new Date().toISOString() }]);
-                      setChatMsg('');
-                      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-                      try {
-                        const res = await sendLeadWhatsApp(selectedChatLead._id, msgToSend);
-                        // Refresh notes to get real status (success or [FAILED])
-                        if (res && res.note) {
-                          setChatNotes(prev => {
-                            const newNotes = [...prev];
-                            newNotes[newNotes.length - 1] = res.note;
-                            return newNotes;
-                          });
-                        }
-                      } catch (err) {
-                        console.error(err);
-                        setSendError('Failed to send message');
-                      } finally { setSending(false); }
+                      if ((!chatMsg.trim() && !mediaFile) || sending) return;
+                      await doSend();
                     }
                   }}
-                  className="w-full h-full bg-transparent border-none outline-none text-[15px] text-[#111b21] placeholder-[#8696a0]"
+                  className="w-full h-10 bg-transparent border-none outline-none text-[15px] text-[#111b21] placeholder-[#8696a0]"
                 />
               </div>
-              {chatMsg.trim() ? (
+              {(chatMsg.trim() || mediaFile) ? (
                 <button 
                   disabled={sending}
-                  onClick={async () => {
-                    if (!chatMsg.trim() || sending) return;
-                    setSending(true); setSendError('');
-                    const msgToSend = chatMsg;
-                    setChatNotes(prev => [...prev, { text: msgToSend, direction: 'outbound', createdAt: new Date().toISOString() }]);
-                    setChatMsg('');
-                    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-                    try {
-                      const res = await sendLeadWhatsApp(selectedChatLead._id, msgToSend);
-                      if (res && res.note) {
-                        setChatNotes(prev => {
-                          const newNotes = [...prev];
-                          newNotes[newNotes.length - 1] = res.note;
-                          return newNotes;
-                        });
-                      }
-                    } catch (err) {
-                      console.error(err);
-                      setSendError('Failed to send message');
-                    } finally { setSending(false); }
-                  }}
-                  className={`p-2 transition-colors ${sending ? 'text-gray-300' : 'text-[#54656f] hover:text-[#111b21]'}`}>
+                  onClick={doSend}
+                  className={`p-2 transition-colors rounded-full ${sending ? 'text-gray-300' : 'text-[#54656f] hover:text-[#111b21]'}`}>
                   {sending ? (
                     <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
                   ) : (
