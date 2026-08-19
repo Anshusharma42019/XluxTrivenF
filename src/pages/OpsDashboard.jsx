@@ -416,7 +416,7 @@ function LeaderboardTable({ rows = [], sortKey, sortDir, onSort }) {
 }
 
 /* ─── Shipments Table ────────────────────────────────────────────────────── */
-function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick, onSendInterakt, onCreateInvoice }) {
+function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyClick, onSendInterakt, onCreateInvoice, loading }) {
   const { shipments = [], total = 0, pages = 1, page = 1 } = data || {};
   const isUndeliveredView = ['undelivered', 'blUndelivered', 'interaktReplies', 'reply_reattempt', 'reply_dawa'].includes(filters.status);
   const isDeliveredView = ['delivered', 'salesDelivered', 'supportDelivered'].includes(filters.status);
@@ -483,8 +483,15 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
           <option value="shiprocket">Shiprocket</option>
           <option value="shipmaxx">ShipMaxx</option>
         </select>
-        <input value={filters.awb || ''} onChange={e => onFilterChange('awb', e.target.value)}
-          placeholder="Search AWB..." style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, minWidth: 180 }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <input value={filters.awb || ''} onChange={e => onFilterChange('awb', e.target.value)}
+            placeholder="Search AWB..." style={{ padding: '7px 28px 7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, minWidth: 180 }} />
+          {filters.awb && (
+            <button onClick={() => onFilterChange('awb', '')} style={{ position: 'absolute', right: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2, display: 'flex' }} title="Clear AWB">
+              <svg width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          )}
+        </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {isUndeliveredView && (
             <button onClick={() => onSendInterakt && onSendInterakt(null)} style={{
@@ -505,6 +512,8 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
         </div>
       </div>
       <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>{total.toLocaleString()} shipments found</div>
+      {loading ? <Skeleton h={400} /> : (
+      <>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -624,6 +633,8 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
             style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: page < pages ? 'pointer' : 'not-allowed', opacity: page >= pages ? 0.4 : 1 }}>›</button>
         </div>
       )}
+      </>
+      )}
     </div>
   );
 }
@@ -716,12 +727,19 @@ function FilterBar({ filters, onChange, lastUpdated, onRefresh, autoRefresh, onT
         onKeyDown={e => e.key === 'Enter' && onChange('courier', courierInput)}
         placeholder="Courier..." style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, width: 110 }} />
       {/* AWB — commits on blur or Enter */}
-      <input
-        value={awbInput}
-        onChange={e => setAwbInput(e.target.value)}
-        onBlur={() => onChange('awb', awbInput)}
-        onKeyDown={e => e.key === 'Enter' && onChange('awb', awbInput)}
-        placeholder="AWB / Track #" style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, width: 130 }} />
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <input
+          value={awbInput}
+          onChange={e => setAwbInput(e.target.value)}
+          onBlur={() => onChange('awb', awbInput)}
+          onKeyDown={e => e.key === 'Enter' && onChange('awb', awbInput)}
+          placeholder="AWB / Track #" style={{ padding: '6px 24px 6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, width: 130 }} />
+        {awbInput && (
+          <button onClick={() => { setAwbInput(''); onChange('awb', ''); }} style={{ position: 'absolute', right: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2, display: 'flex' }} title="Clear AWB">
+            <svg width={12} height={12} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        )}
+      </div>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {lastUpdated && <span style={{ fontSize: 11, color: '#94a3b8' }}>Updated {lastUpdated}</span>}
@@ -1214,16 +1232,14 @@ export default function OpsDashboard() {
               ) : undefined
             }
           >
-            {loading.ships ? <Skeleton h={400} /> : (
-              <ShipmentsTable data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} onSendInterakt={handleOpenInteraktModal} onCreateInvoice={(s, idx) => {
-                setInvoiceShipment(s);
-                setInvoiceDeliveryIndex(idx || 1);
-                const cleanState = (s.billing_state || '').toLowerCase().replace(/[^a-z]/g, '');
-                const isUP = cleanState === 'up' || cleanState === 'uttarpradesh' || cleanState.includes('uttarpradesh');
-                setInvoiceTaxMode(isUP ? 'intra' : 'inter');
-                setInvoiceModalOpen(true);
-              }} />
-            )}
+            <ShipmentsTable loading={loading.ships} data={shipments} filters={shipmentFilters} onFilterChange={handleShipmentFilterChange} onExportCsv={handleExportCsv} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} onSendInterakt={handleOpenInteraktModal} onCreateInvoice={(s, idx) => {
+              setInvoiceShipment(s);
+              setInvoiceDeliveryIndex(idx || 1);
+              const cleanState = (s.billing_state || '').toLowerCase().replace(/[^a-z]/g, '');
+              const isUP = cleanState === 'up' || cleanState === 'uttarpradesh' || cleanState.includes('uttarpradesh');
+              setInvoiceTaxMode(isUP ? 'intra' : 'inter');
+              setInvoiceModalOpen(true);
+            }} />
           </SectionCard>
         )}
       </div>

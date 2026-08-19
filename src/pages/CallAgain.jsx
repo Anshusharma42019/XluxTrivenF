@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { getCallAgains, updateCallAgain, updateLead } from '../services/lead.service';
 import { createTask } from '../services/task.service';
 
@@ -109,6 +110,7 @@ function TaskModal({ lead, assignedTo, recordId, onClose }) {
 }
 
 export default function CallAgain() {
+  const { user } = useAuth();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(null);
@@ -243,7 +245,7 @@ export default function CallAgain() {
                       await updateCallAgain(record._id, { status: 'converted' });
                       if (record.lead?._id) {
                         await updateLead(record.lead._id, { status: 'interested' });
-                        await createTask({ title: record.lead.name, lead: record.lead._id, assignedTo: record.assignedTo?._id || undefined, type: 'task', status: 'verification', priority: 'medium' });
+                        await createTask({ title: record.lead.name, lead: record.lead._id, assignedTo: user?._id || undefined, type: 'task', status: 'verification', priority: 'medium' });
                       }
                       navigate('/verification');
                     } catch { /* ignore */ }

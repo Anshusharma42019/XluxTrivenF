@@ -245,8 +245,13 @@ export default function Verification() {
 
   const flattenRecord = (r) => {
     const taskData = r.task && typeof r.task === 'object' ? r.task : {};
+    // Exclude fields that are already populated on the verification record itself
+    // so task's raw ObjectId doesn't override the populated assignedTo/verifiedBy objects
     const filteredTaskData = Object.fromEntries(
-      Object.entries(taskData).filter(([_, v]) => v !== null && v !== undefined && v !== '')
+      Object.entries(taskData).filter(([k, v]) =>
+        v !== null && v !== undefined && v !== '' &&
+        !['assignedTo', 'verifiedBy', 'createdBy', '_id', '__v'].includes(k)
+      )
     );
     return {
       ...r,
@@ -543,7 +548,12 @@ export default function Verification() {
                               Until {new Date(r.onHoldUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                             </span>
                           )}
-                          {flattened.assignedTo?.name && <span className="text-[10px] text-gray-400 hidden sm:block">Assigned: {flattened.assignedTo.name}</span>}
+                          {flattened.assignedTo?.name && (
+                            <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                              <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                              {flattened.assignedTo.name}
+                            </span>
+                          )}
                           {flattened.department && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{flattened.department}</span>}
                         </div>
                       </div>
@@ -600,7 +610,12 @@ export default function Verification() {
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${flattened.status === 'on_hold' ? 'bg-gray-50 text-gray-600 border-gray-100' : flattened.status === 'verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : flattened.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
                           {flattened.status?.replace(/_/g, ' ').toUpperCase()}
                         </span>
-                        {flattened.assignedTo?.name && <span className="text-[10px] text-gray-400 hidden sm:block">Assigned: {flattened.assignedTo.name}</span>}
+                        {(flattened.assignedTo?.name) && (
+                          <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                            {flattened.assignedTo.name}
+                          </span>
+                        )}
                         {(flattened.department || flattened.lead?.department || flattened.task?.department) && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 uppercase">{flattened.department || flattened.lead?.department || flattened.task?.department}</span>
                         )}
@@ -807,9 +822,19 @@ export default function Verification() {
                     Change
                   </button>
                 </div>
-                <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0 mt-0.5">Assigned To</span>
-                  <span className="text-sm text-gray-800 font-medium capitalize flex-1">{selected.assignedTo?.name || '—'}</span>
+                {/* Employee who added to Verification — always shown prominently */}
+                <div className="flex items-start gap-3 py-2 border-b border-gray-50">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0 mt-0.5">Closer / Owner</span>
+                  <span className="flex-1">
+                    {(selected.assignedTo?.name) ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 border border-green-200 text-green-800 text-xs font-black">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                        {selected.assignedTo.name}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-gray-400">—</span>
+                    )}
+                  </span>
                   {user?.role === 'admin' && (
                     <button type="button" onClick={() => { setAssignTo(selected.assignedTo?._id || selected.assignedTo || ''); setShowAssignModal(true); }}
                       className="text-[10px] font-bold text-green-600 hover:bg-green-50 px-2 py-0.5 rounded border border-green-200 transition">
@@ -817,7 +842,7 @@ export default function Verification() {
                     </button>
                   )}
                 </div>
-                <DetailRow label="Added By" value={selected.task?.createdBy?.name || selected.lead?.createdBy?.name || '-'} />
+                <DetailRow label="Added By" value={selected.task?.createdBy?.name || selected.lead?.createdBy?.name || '—'} />
                 <DetailRow label="Description" value={selected.description} />
 
                 <SectionHead label="Health Info" />
@@ -974,7 +999,18 @@ export default function Verification() {
                       Change
                     </button>
                   </div>
-                  <DetailRow label="Assigned" value={selected.assignedTo?.name} />
+                  {/* Employee who added to Verification */}
+                  <div className="flex items-start gap-3 py-2 border-b border-gray-50">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0 mt-0.5">Closer / Owner</span>
+                    <span className="flex-1">
+                      {selected.assignedTo?.name ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 border border-green-200 text-green-800 text-xs font-black">
+                          <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                          {selected.assignedTo.name}
+                        </span>
+                      ) : <span className="text-sm text-gray-400">—</span>}
+                    </span>
+                  </div>
                   <DetailRow label="Problem" value={selected.problem} />
                   <DetailRow label="Duration" value={selected.problemDuration} />
 

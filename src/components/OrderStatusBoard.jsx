@@ -132,6 +132,24 @@ const normalizeStatus = (status) => {
 const formatStatusLabel = (status) => String(status || '').replace(/[-_]+/g, ' ');
 const formatMoney = (value) => `Rs ${Number(value || 0).toLocaleString()}`;
 
+// Extract display fields with fallback to raw_response for orders imported from ShipMaxx
+const resolveOrder = (order) => {
+  const r = order?.raw_response || {};
+  const rc = r.customer || r.billing || r;
+  return {
+    ...order,
+    billing_customer_name: order.billing_customer_name || rc.name || rc.customer_name || rc.billing_customer_name || '',
+    billing_phone:         order.billing_phone         || rc.phone || rc.customer_phone || rc.billing_phone || '',
+    billing_city:          order.billing_city          || rc.city  || rc.billing_city   || '',
+    billing_state:         order.billing_state         || rc.state || rc.billing_state  || '',
+    billing_pincode:       order.billing_pincode       || rc.pincode || rc.billing_pincode || '',
+    courier_name:          order.courier_name          || r.courier_name || r.courier || '',
+    payment_method:        order.payment_method        || r.payment_method || r.payment || '',
+    sub_total:             order.sub_total > 0 ? order.sub_total : Number(r.total_amount || r.sub_total || r.amount || r.total_price || 0),
+    order_items:           (order.order_items?.length > 0 ? order.order_items : r.order_items) || [],
+  };
+};
+
 const formatDateTime = (value) => {
   if (!value) return '-';
   return new Date(value).toLocaleDateString('en-IN', {
@@ -504,7 +522,9 @@ export default function OrderStatusBoard({
           )}
           {!statusLoading && !statusError && statusOrders.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {statusOrders.map(order => (
+              {statusOrders.map(rawOrder => {
+              const order = resolveOrder(rawOrder);
+              return (
                 <div key={order._id}
                   className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm hover:shadow-md transition-all">
                   <div className="flex items-start justify-between gap-3">
@@ -651,7 +671,8 @@ export default function OrderStatusBoard({
                     )}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
