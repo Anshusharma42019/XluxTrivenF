@@ -132,6 +132,20 @@ export default function FollowUp() {
   });
   const [manualSaving, setManualSaving] = useState(false);
   const [autofilling, setAutofilling] = useState(false);
+  const [replyFilter, setReplyFilter] = useState('all');
+
+  const REPLY_OPTIONS = [
+    { label: 'All Replies', value: 'any_reply' },
+    { label: 'हाँ, समय पर ले रहा हूँ', value: 'हाँ, समय पर ले रहा हूँ' },
+    { label: 'नहीं, नियमित नहीं', value: 'नहीं, नियमित नहीं' },
+    { label: 'आराम मिल रहा है', value: 'आराम मिल रहा है' },
+    { label: 'कम आराम मिल रहा है', value: 'कम आराम मिल रहा है' },
+    { label: 'अगले महीने की दवाइयाँ बुक करें', value: 'अगले महीने की दवाइयाँ बुक करें' },
+    { label: 'डॉक्टर से बात करें', value: 'डॉक्टर से बात करें' },
+    { label: 'Aaram Mil Raha Hai', value: 'aaram mil raha hai' },
+    { label: 'Kam Aaram Mil Raha Hai', value: 'kam aaram mil raha hai' },
+    { label: 'Doctor Se Baat Karni Hai', value: 'doctor se baat karni hai' }
+  ];
 
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(''); }
@@ -212,6 +226,16 @@ export default function FollowUp() {
       }
     }
   }, [searchParams, all, completedList, setSearchParams, settings]);
+  const handleMarkReplyRead = async (e, id) => {
+    e.stopPropagation();
+    setAll(prev => prev.map(o => String(o._id) === String(id) ? { ...o, interakt_reply_read: true } : o));
+    try {
+      await api.patch(`/shiprocket/orders/${id}/read-reply`);
+    } catch(e) {
+      console.error(e);
+      setAll(prev => prev.map(o => String(o._id) === String(id) ? { ...o, interakt_reply_read: false } : o));
+    }
+  };
 
   const handleFollowUpDone = async (orderId) => {
     const oid = String(orderId);
@@ -419,7 +443,11 @@ export default function FollowUp() {
     const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
     const totalFU = Number(settings.total_followups) || 5;
     if (completedCount >= totalFU || o.sent_to_verification || o.followup_done) return false;
-    if (filterFollowupNum) {
+    
+    if (filterFollowupNum === 'replies') {
+      if (!o.interakt_reply_text || o.interakt_reply_read) return false;
+      if (replyFilter !== 'any_reply' && !o.interakt_reply_text.toLowerCase().includes(replyFilter.toLowerCase())) return false;
+    } else if (filterFollowupNum) {
       const fu = getFollowup(o, filterFollowupNum);
       if (!fu || fu.completed || !previousFollowupsDone(o, filterFollowupNum) || !isDue(fu.scheduled_date, filterDelivered)) return false;
     }
@@ -516,6 +544,12 @@ export default function FollowUp() {
                 </button>
               );
             })}
+            
+            <button onClick={() => { setShowCompleted(false); setFilterFollowupNum('replies'); setPage(1); }}
+              className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition whitespace-nowrap ${!showCompleted && filterFollowupNum === 'replies' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-500 hover:bg-indigo-50'}`}>
+              💬 Replies ({all.filter(o => !!o.interakt_reply_text && !o.interakt_reply_read && !o.sent_to_verification && !o.followup_done && (completedMap[o._id] ?? (o.followups||[]).filter(f=>f.completed).length) < (Number(settings.total_followups) || 5)).length})
+            </button>
+
             <button
               type="button"
               onClick={() => { setShowCompleted(true); setCompletedPage(1); loadCompleted(1, search); }}
@@ -535,7 +569,6 @@ export default function FollowUp() {
                 {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             )}
-          </div>
 
           {/* Patient Type Filter (Old / New) */}
           <div className="flex items-center bg-white rounded-2xl border border-gray-100 p-1 shadow-sm">
@@ -602,6 +635,26 @@ export default function FollowUp() {
               <svg className={`w-4 h-4 ${syncing || loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
               <span>{syncing ? 'Syncing...' : 'Sync Data'}</span>
             </button>
+
+            <div className="relative w-full sm:w-auto">
+              <select value={replyFilter} onChange={e => { setReplyFilter(e.target.value); setPage(1); }}
+                className="w-full sm:w-auto appearance-none pl-4 pr-10 py-3 rounded-2xl border border-gray-100 bg-white text-[10px] font-black text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 uppercase tracking-widest cursor-pointer hover:bg-gray-50 transition-colors">
+                <option value="all">ALL ORDERS ({all.filter(o => !o.followup_done && !o.sent_to_verification).length})</option>
+                {REPLY_OPTIONS.map(opt => {
+                  const count = opt.value === 'any_reply' 
+                    ? all.filter(o => !!o.interakt_reply_text && !o.interakt_reply_read && !o.followup_done && !o.sent_to_verification).length
+                    : all.filter(o => o.interakt_reply_text && !o.interakt_reply_read && o.interakt_reply_text.toLowerCase().includes(opt.value.toLowerCase()) && !o.followup_done && !o.sent_to_verification).length;
+                  return (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7"/></svg>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -736,6 +789,15 @@ export default function FollowUp() {
                           )}
                         </div>
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{o.billing_phone} • {o.billing_city}</p>
+                        {o.interakt_reply_text && !o.interakt_reply_read && (
+                          <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6">
+                            <span>💬</span>
+                            <span>{o.interakt_reply_text}</span>
+                            <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300">
+                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
@@ -867,9 +929,18 @@ export default function FollowUp() {
                         </div>
                       </td>
                       <td className="py-4 px-2">
-                         <div className="flex flex-col gap-1">
+                         <div className="flex flex-col gap-1 items-start">
                            <span className="text-sm font-bold text-gray-700">{o.billing_phone}</span>
                            <span className="text-[10px] font-bold text-gray-400 uppercase">{o.billing_city} {o.billing_state ? `, ${o.billing_state}` : ''}</span>
+                           {o.interakt_reply_text && !o.interakt_reply_read && (
+                             <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight max-w-[140px] relative pr-6">
+                               <span>💬</span>
+                               <span className="truncate">{o.interakt_reply_text}</span>
+                               <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300">
+                                 <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                               </button>
+                             </div>
+                           )}
                          </div>
                       </td>
                       <td className="py-4 px-2">
