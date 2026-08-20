@@ -569,6 +569,7 @@ export default function FollowUp() {
                 {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             )}
+          </div>
 
           {/* Patient Type Filter (Old / New) */}
           <div className="flex items-center bg-white rounded-2xl border border-gray-100 p-1 shadow-sm">
