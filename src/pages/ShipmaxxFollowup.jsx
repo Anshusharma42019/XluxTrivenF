@@ -137,6 +137,35 @@ export default function ShipmaxxFollowup() {
   const [autofilling, setAutofilling] = useState(false);
   const [replyFilter, setReplyFilter] = useState('all');
 
+  // Appointment Booking States
+  const [apptModalOpen, setApptModalOpen] = useState(false);
+  const [apptDoctors, setApptDoctors] = useState([]);
+  const [apptLoading, setApptLoading] = useState(false);
+  const [apptError, setApptError] = useState('');
+  const [apptForm, setApptForm] = useState({
+    patientName: '',
+    phone: '',
+    email: '',
+    doctorName: '',
+    appointmentDate: '',
+    type: 'follow_up',
+    status: 'scheduled',
+    patientType: 'old',
+    problem: '',
+    address: '',
+    houseNo: '',
+    cityVillage: '',
+    postOffice: '',
+    landmark: '',
+    district: '',
+    state: '',
+    pincode: '',
+    medicineDeliveryDate: '',
+    notes: '',
+    department: 'migraine',
+    lead: null
+  });
+
   const REPLY_OPTIONS = [
     { label: 'All Replies', value: 'any_reply' },
     { label: 'हाँ, समय पर ले रहा हूँ', value: 'हाँ, समय पर ले रहा हूँ' },
@@ -346,6 +375,70 @@ export default function ShipmaxxFollowup() {
     finally { setManualSaving(false); }
   };
 
+  // Load Doctors list for Appointment modal
+  useEffect(() => {
+    if (apptModalOpen && apptDoctors.length === 0) {
+      api.get('/users', { params: { role: 'doctor' } })
+        .then(res => {
+          const list = res.data?.data?.results || res.data?.data?.users || (Array.isArray(res.data?.data) ? res.data.data : []);
+          setApptDoctors(list);
+        })
+        .catch(() => {});
+    }
+  }, [apptModalOpen, apptDoctors.length]);
+
+  const openBookAppointment = () => {
+    if (!selected) return;
+    const deliveryDate = selected.delivered_date || selected.delivered_at;
+    const deliveryDateStr = deliveryDate ? new Date(deliveryDate).toISOString().split('T')[0] : '';
+    const cleanPhone = String(selected.billing_phone || '').replace(/\D/g, '');
+
+    setApptForm({
+      patientName: selected.billing_customer_name || '',
+      phone: cleanPhone,
+      email: selected.billing_email || '',
+      doctorName: '',
+      appointmentDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // tomorrow
+      type: 'follow_up',
+      status: 'scheduled',
+      patientType: 'old',
+      problem: selected.verification_problem || selected.problem || selected.lead_id?.problem || '',
+      houseNo: '',
+      address: selected.billing_address || '',
+      cityVillage: selected.billing_city || '',
+      postOffice: '',
+      landmark: '',
+      district: '',
+      state: selected.billing_state || '',
+      pincode: String(selected.billing_pincode || ''),
+      medicineDeliveryDate: deliveryDateStr,
+      notes: '',
+      department: selected.lead_id?.department || 'migraine',
+      lead: selected.lead_id?._id || selected.lead_id || null
+    });
+    setApptError('');
+    setApptModalOpen(true);
+  };
+
+  const handleApptSubmit = async (e) => {
+    e.preventDefault();
+    if (!apptForm.doctorName) {
+      setApptError('Please select a doctor');
+      return;
+    }
+    setApptLoading(true);
+    setApptError('');
+    try {
+      await api.post('/appointments', apptForm);
+      setApptModalOpen(false);
+      alert('Appointment booked successfully!');
+    } catch (err) {
+      setApptError(err.response?.data?.message || 'Failed to book appointment');
+    } finally {
+      setApptLoading(false);
+    }
+  };
+
   const handleSelect = (order) => {
     setSelected(order); setNoteText(''); setActivity([]); setEditMode(false); setEditFields({});
     setActivityLoading(true);
@@ -510,41 +603,46 @@ export default function ShipmaxxFollowup() {
           ) : (
             <div className="divide-y divide-gray-50/50">
               {completedList.map((o, i) => (
-                <div key={o._id} className="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-gray-50/30 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div key={o._id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/30 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                     <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${ROLE_GRADIENT[i % 5]} flex items-center justify-center text-white font-black shrink-0 shadow`}>{initials(o.billing_customer_name)}</div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="font-bold text-gray-800 text-sm truncate">
                         {o.billing_customer_name}
                         <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-100 text-purple-700 border border-purple-200">Kit {o.kit_number || 1}</span>
                       </p>
-                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{o.billing_phone} · {o.awb_code}</p>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{o.billing_phone} · {o.awb_code}</p>
                       {o.interakt_reply_text && !o.interakt_reply_read && (
-                        <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6">
-                          <span>💬</span>
-                          <span>{o.interakt_reply_text}</span>
-                          <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300">
+                        <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6 max-w-full">
+                          <span className="shrink-0">💬</span>
+                          <span className="break-words line-clamp-2">{o.interakt_reply_text}</span>
+                          <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300 shrink-0">
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                           </button>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: TOTAL_FU }, (_, idx) => (
-                        <div key={idx} className="w-6 h-6 rounded-lg text-[9px] font-black flex items-center justify-center bg-emerald-100 text-emerald-600 border border-emerald-200">{idx + 1}</div>
-                      ))}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-2 shrink-0 w-full sm:w-auto justify-between sm:justify-end mt-3 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-50 sm:border-0">
+                    <div className="flex items-center justify-between w-full sm:w-auto">
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: TOTAL_FU }, (_, idx) => (
+                          <div key={idx} className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg text-[9px] sm:text-[10px] font-black flex items-center justify-center bg-emerald-100 text-emerald-600 border border-emerald-200">{idx + 1}</div>
+                        ))}
+                      </div>
+                      <span className="text-sm font-black text-gray-700 sm:hidden">₹{o.sub_total}</span>
                     </div>
-                    <span className="text-sm font-black text-gray-700">₹{o.sub_total}</span>
-                    <button onClick={() => !o.sent_to_verification && handleSendToVerification(o._id)}
-                      disabled={doneLoading === String(o._id) || !!o.sent_to_verification}
-                      className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition ${o.sent_to_verification ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white disabled:opacity-50'}`}>
-                      {o.sent_to_verification ? '✓ Sent' : doneLoading === String(o._id) ? '...' : 'Verification'}
-                    </button>
-                    <button onClick={() => handleSelect(o)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 text-gray-700 hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                    </button>
+                    <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-2">
+                      <span className="text-sm font-black text-gray-700 hidden sm:block mr-2">₹{o.sub_total}</span>
+                      <button onClick={() => !o.sent_to_verification && handleSendToVerification(o._id)}
+                        disabled={doneLoading === String(o._id) || !!o.sent_to_verification}
+                        className={`flex-1 sm:flex-none px-3 py-2 sm:py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition ${o.sent_to_verification ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white disabled:opacity-50'}`}>
+                        {o.sent_to_verification ? '✓ Sent' : doneLoading === String(o._id) ? '...' : 'Verification'}
+                      </button>
+                      <button onClick={() => handleSelect(o)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 text-gray-700 hover:bg-emerald-600 hover:text-white transition-all shadow-sm shrink-0">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -584,11 +682,11 @@ export default function ShipmaxxFollowup() {
           ) : (
             <div className="overflow-x-auto no-scrollbar">
               {/* Desktop Table */}
-              <table className="hidden xl:table w-full text-xs min-w-[850px]">
+              <table className="hidden xl:table w-full text-xs min-w-[750px]">
                 <thead>
                   <tr className="text-gray-400 border-b border-gray-100 text-left bg-white">
                     {['Customer Order', 'Location & Contact', 'Medicine', 'Delivered', 'Progress', 'Next Call', 'Amount', 'Controls'].map(h => (
-                      <th key={h} className="py-4 px-4 font-black uppercase tracking-wider text-[10px]">{h}</th>
+                      <th key={h} className="py-4 px-2 xl:px-4 font-black uppercase tracking-wider text-[9px] xl:text-[10px]">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -601,9 +699,9 @@ export default function ShipmaxxFollowup() {
                     const activeFU = getFollowup(o, filterFollowupNum) || allFUs[completedCount];
                     return (
                       <tr key={o._id} className="transition-all duration-300 group hover:bg-emerald-50/20">
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-base font-black shadow-lg group-hover:scale-110 transition-transform duration-300 shrink-0`}>
+                        <td className="py-3 xl:py-4 px-2 xl:px-4">
+                          <div className="flex items-center gap-2 xl:gap-4">
+                            <div className={`w-9 h-9 xl:w-12 xl:h-12 rounded-xl xl:rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-sm xl:text-base font-black shadow-lg group-hover:scale-110 transition-transform duration-300 shrink-0`}>
                               {initials(o.billing_customer_name)}
                             </div>
                             <div className="min-w-0">
@@ -615,7 +713,7 @@ export default function ShipmaxxFollowup() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 xl:py-4 px-2 xl:px-4">
                           <p className="text-sm font-bold text-gray-700">{o.billing_phone}</p>
                           <p className="text-[10px] font-bold text-gray-400 uppercase">{o.billing_city}{o.billing_state ? `, ${o.billing_state}` : ''}</p>
                           {o.interakt_reply_text && !o.interakt_reply_read && (
@@ -628,45 +726,45 @@ export default function ShipmaxxFollowup() {
                             </div>
                           )}
                         </td>
-                        <td className="py-4 px-4">
-                          <span className="text-xs font-bold text-gray-700 truncate max-w-[140px] block" title={o.order_items?.[0]?.name}>{o.order_items?.[0]?.name || '—'}</span>
+                        <td className="py-3 xl:py-4 px-2 xl:px-4">
+                          <span className="text-xs font-bold text-gray-700 truncate max-w-[120px] xl:max-w-[140px] block" title={o.order_items?.[0]?.name}>{o.order_items?.[0]?.name || '—'}</span>
                         </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className="text-sm font-bold text-gray-600 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
+                        <td className="py-3 xl:py-4 px-2 xl:px-4 text-center">
+                          <span className="text-xs xl:text-sm font-bold text-gray-600 bg-gray-50 px-2 xl:px-3 py-1 xl:py-1.5 rounded-lg xl:rounded-xl border border-gray-100">
                             {formatDate(o.delivered_at || o.createdAt, { day: '2-digit', month: 'short' })}
                           </span>
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 xl:py-4 px-1 xl:px-4">
                           <div className="flex items-center justify-center gap-1">
                             {Array.from({ length: TOTAL_FU }, (_, idx) => {
                               const isDone = idx < completedCount;
                               const isCurrent = idx === completedCount && !allDone;
                               return (
-                                <div key={idx} className={`text-[9px] font-black w-6 h-6 flex items-center justify-center rounded-lg border transition-all ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : isCurrent ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-gray-50 text-gray-300 border-gray-100'}`}>
+                                <div key={idx} className={`text-[8px] xl:text-[9px] font-black w-5 h-5 xl:w-6 xl:h-6 flex items-center justify-center rounded-md xl:rounded-lg border transition-all ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : isCurrent ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-gray-50 text-gray-300 border-gray-100'}`}>
                                   {idx + 1}
                                 </div>
                               );
                             })}
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className={`text-[11px] font-black uppercase tracking-widest ${allDone ? 'text-gray-400' : 'text-orange-500'}`}>
+                        <td className="py-3 xl:py-4 px-1 xl:px-4 text-center">
+                          <span className={`text-[9px] xl:text-[11px] font-black uppercase tracking-widest ${allDone ? 'text-gray-400' : 'text-orange-500'}`}>
                             {allDone ? 'DONE' : formatDate(activeFU?.scheduled_date, { day: '2-digit', month: 'short' })}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className="text-sm font-black text-gray-700">₹{o.sub_total}</span>
+                        <td className="py-3 xl:py-4 px-1 xl:px-4 text-center">
+                          <span className="text-xs xl:text-sm font-black text-gray-700">₹{o.sub_total}</span>
                         </td>
-                        <td className="py-4 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="py-3 xl:py-4 px-2 xl:px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5 xl:gap-2">
                             {!allFUs[completedCount]?.completed && !allDone && (
                               <button onClick={() => handleFollowUpDone(o._id)} disabled={doneLoading === String(o._id)}
-                                className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-95 disabled:opacity-50">
-                                {doneLoading === String(o._id) ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                className="w-8 h-8 xl:w-10 xl:h-10 flex items-center justify-center rounded-lg xl:rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-95 disabled:opacity-50">
+                                {doneLoading === String(o._id) ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <svg className="w-4 h-4 xl:w-5 xl:h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                               </button>
                             )}
-                            <button onClick={() => handleSelect(o)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-800 hover:bg-gray-900 hover:text-white transition-all shadow-sm active:scale-95">
-                              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            <button onClick={() => handleSelect(o)} className="w-8 h-8 xl:w-10 xl:h-10 flex items-center justify-center rounded-lg xl:rounded-xl bg-gray-50 text-gray-800 hover:bg-gray-900 hover:text-white transition-all shadow-sm active:scale-95">
+                              <svg className="w-4 h-4 xl:w-6 xl:h-6" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             </button>
                           </div>
                         </td>
@@ -686,23 +784,26 @@ export default function ShipmaxxFollowup() {
                   const gradient = ROLE_GRADIENT[i % ROLE_GRADIENT.length];
                   return (
                     <div key={o._id} className="p-4 bg-white hover:bg-gray-50/30 transition-colors">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-4 gap-3">
+                        <div className="flex items-center gap-3 min-w-0 w-full">
                           <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-black shrink-0 shadow-lg`}>{initials(o.billing_customer_name)}</div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="font-bold text-gray-900 text-sm truncate">{o.billing_customer_name}</p>
-                            <p className="text-[10px] font-bold text-gray-400">{o.billing_phone} · {o.billing_city}</p>
-                            {o.interakt_reply_text && (
-                              <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight">
-                                <span>💬</span>
-                                <span>{o.interakt_reply_text}</span>
+                            <p className="text-[10px] font-bold text-gray-400 truncate">{o.billing_phone} · {o.billing_city}</p>
+                            {o.interakt_reply_text && !o.interakt_reply_read && (
+                              <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6 max-w-full">
+                                <span className="shrink-0">💬</span>
+                                <span className="break-words line-clamp-2">{o.interakt_reply_text}</span>
+                                <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300 shrink-0">
+                                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                </button>
                               </div>
                             )}
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
+                        <div className="text-left sm:text-right shrink-0 w-full sm:w-auto flex items-center sm:block justify-between">
                           <p className="font-black text-gray-900 text-sm">₹{o.sub_total}</p>
-                          <p className="text-[9px] font-bold text-orange-500 uppercase mt-1">{allDone ? 'DONE' : `Next: ${formatDate(activeFU?.scheduled_date, { day: '2-digit', month: 'short' })}`}</p>
+                          <p className="text-[9px] font-bold text-orange-500 uppercase mt-0 sm:mt-1">{allDone ? 'DONE' : `Next: ${formatDate(activeFU?.scheduled_date, { day: '2-digit', month: 'short' })}`}</p>
                         </div>
                       </div>
                       <div className="flex items-center justify-between bg-gray-50 rounded-[1.25rem] p-3 border border-gray-100 mb-4">
@@ -875,6 +976,13 @@ export default function ShipmaxxFollowup() {
                         {noteSaving ? 'SAVING...' : 'ADD NOTE'}
                       </button>
                     </div>
+                    <div className="mt-4">
+                      <button onClick={openBookAppointment}
+                        className="w-full py-3.5 rounded-xl text-[10px] font-black text-white shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 hover:opacity-95 tracking-widest"
+                        style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }}>
+                        📅 BOOK DOCTOR APPOINTMENT
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1021,6 +1129,102 @@ export default function ShipmaxxFollowup() {
               <button type="button" onClick={() => setManualModalOpen(false)} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">Cancel</button>
               <button type="submit" form="smx-manual-form" disabled={manualSaving} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-white shadow-md transition-all active:scale-95 disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}>
                 {manualSaving ? 'Saving...' : 'Add Followup'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Book Appointment Modal ── */}
+      {apptModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-emerald-50">
+              <h3 className="text-lg font-black text-emerald-900 tracking-tight flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                Book Doctor Appointment
+              </h3>
+              <button onClick={() => setApptModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-emerald-100/50 text-emerald-600 hover:bg-emerald-200 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {apptError && (
+                <div className="bg-red-50 text-red-600 text-xs p-3 rounded-xl font-bold border border-red-100 mb-4">{apptError}</div>
+              )}
+              <form id="smx-appt-form" onSubmit={handleApptSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Patient Name *</label>
+                    <input required className={inputCls} value={apptForm.patientName} onChange={e => setApptForm(p => ({ ...p, patientName: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Phone *</label>
+                    <input required className={inputCls} value={apptForm.phone} onChange={e => setApptForm(p => ({ ...p, phone: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Department *</label>
+                    <select required className={inputCls} value={apptForm.department} onChange={e => setApptForm(p => ({ ...p, department: e.target.value, doctorName: '' }))}>
+                      <option value="">Select Department</option>
+                      {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? ['migraine', 'piles'] : user.departments).map(d => (
+                        <option key={d} value={d}>{d.toUpperCase()}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Doctor Name *</label>
+                    <select required className={inputCls} value={apptForm.doctorName} onChange={e => setApptForm(p => ({ ...p, doctorName: e.target.value }))}>
+                      <option value="">Select Doctor</option>
+                      {apptDoctors.filter(d => !apptForm.department || !d.departments?.length || d.departments.includes(apptForm.department)).map(d => (
+                        <option key={d._id} value={d.name}>
+                          {d.name}{d.specialization ? ` — ${d.specialization}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Appointment Date *</label>
+                  <input type="date" required className={inputCls} value={apptForm.appointmentDate} onChange={e => setApptForm(p => ({ ...p, appointmentDate: e.target.value }))} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Appointment Type</label>
+                    <select className={inputCls} value={apptForm.type} onChange={e => setApptForm(p => ({ ...p, type: e.target.value }))}>
+                      {['consultation', 'follow_up', 'panchakarma', 'ayurveda', 'other'].map(t => (
+                        <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Patient Type</label>
+                    <select className={inputCls} value={apptForm.patientType} onChange={e => setApptForm(p => ({ ...p, patientType: e.target.value }))}>
+                      <option value="new">New Patient</option>
+                      <option value="old">Old Patient</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Problem / Complaint</label>
+                  <textarea className={inputCls} rows={2} value={apptForm.problem} onChange={e => setApptForm(p => ({ ...p, problem: e.target.value }))} />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Notes</label>
+                  <textarea className={inputCls} rows={2} value={apptForm.notes} onChange={e => setApptForm(p => ({ ...p, notes: e.target.value }))} />
+                </div>
+              </form>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button type="button" onClick={() => setApptModalOpen(false)} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button type="submit" form="smx-appt-form" disabled={apptLoading} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-white shadow-md transition-all active:scale-95 disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                {apptLoading ? 'Booking...' : 'Book Appointment'}
               </button>
             </div>
           </div>

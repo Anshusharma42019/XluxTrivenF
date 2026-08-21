@@ -64,7 +64,21 @@ const AppointmentList = ({ title, list, icon, color, bg, open, onToggle }) => (
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-gray-800 truncate">{appt.patientName}</p>
-              <p className="text-[10px] text-gray-400">{appt.phone} · {fmt(appt.appointmentDate)} {appt.timeSlot}</p>
+              <p className="text-[10px] text-gray-400">{appt.phone} · {fmt(appt.appointmentDate)}</p>
+              {appt.problem && (
+                <div className="mt-1">
+                  <span className="text-[9px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-bold inline-block">
+                    ⚠️ Problem: {appt.problem}
+                  </span>
+                </div>
+              )}
+              {appt.notes && (
+                <div className="mt-1">
+                  <span className="text-[9px] text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 font-medium inline-block whitespace-pre-wrap">
+                    📝 Notes: {appt.notes}
+                  </span>
+                </div>
+              )}
             </div>
             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full capitalize shrink-0 ${STATUS_COLORS[appt.status] || 'bg-gray-100 text-gray-500'}`}>
               {appt.status?.replace(/_/g, ' ')}

@@ -11,7 +11,7 @@ const STATUSES = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show']
 
 const EMPTY = {
   patientName: '', phone: '', email: '', doctorName: '',
-  appointmentDate: '', timeSlot: '', type: 'consultation',
+  appointmentDate: '', type: 'consultation',
   status: 'scheduled', notes: '', patientType: 'new',
   problem: '', address: '', houseNo: '', cityVillage: '',
   postOffice: '', landmark: '', district: '', state: '', pincode: '',
@@ -112,22 +112,10 @@ function FormFields({ form, sf, error, loading, onSubmit, submitLabel, selected,
           })}
           {doctors.length === 0 && <option disabled>No doctors found — add from Staff page</option>}
         </select>
-        {form.doctorName && bookedDoctors.includes(form.doctorName) && (
-          <p className="mt-1.5 text-xs font-bold text-red-500">⚠️ Dr. {form.doctorName} already has an appointment at this time. Please select another doctor.</p>
-        )}
-        {form.appointmentDate && form.timeSlot && bookedDoctors.length > 0 && !bookedDoctors.includes(form.doctorName) && form.doctorName && (
-          <p className="mt-1.5 text-xs font-bold text-emerald-600">✓ Dr. {form.doctorName} is available at this time.</p>
-        )}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date *</label>
-          <input type="date" required className={`${inputCls} mt-1`} value={form.appointmentDate} onChange={e => sf('appointmentDate', e.target.value)} />
-        </div>
-        <div>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Time Slot *</label>
-          <input type="time" required className={`${inputCls} mt-1`} value={form.timeSlot} onChange={e => sf('timeSlot', e.target.value)} />
-        </div>
+      <div>
+        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date *</label>
+        <input type="date" required className={`${inputCls} mt-1`} value={form.appointmentDate} onChange={e => sf('appointmentDate', e.target.value)} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -191,6 +179,7 @@ export default function AppointmentBook() {
   const today = new Date().toISOString().split('T')[0];
   const [filters, setFilters] = useState({ search: '', dateFrom: today, dateTo: today, status: '', page: 1, department: '' });
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'completed' | 'cancelled' | 'no_show'
+  const [activePreset, setActivePreset] = useState('today');
   const [loadError, setLoadError] = useState('');
   const [rightPanel, setRightPanel] = useState(null); // { mode: 'view'|'edit', appt }
   const selected = rightPanel?.mode === 'edit' ? rightPanel.appt : null;
@@ -278,17 +267,10 @@ export default function AppointmentBook() {
     if (error) setError('');
   };
 
-  useEffect(() => {
-    if (!form.appointmentDate || !form.timeSlot) { setBookedDoctors([]); return; }
-    getAvailability(form.appointmentDate, form.timeSlot)
-      .then(list => setBookedDoctors(list || []))
-      .catch(() => setBookedDoctors([]));
-  }, [form.appointmentDate, form.timeSlot]);
-
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!form.patientName.trim() || !form.phone.trim() || !form.doctorName.trim() || !form.appointmentDate || !form.timeSlot) {
-      setError('Patient name, phone, doctor, date and time slot are required');
+    if (!form.patientName.trim() || !form.phone.trim() || !form.doctorName.trim() || !form.appointmentDate) {
+      setError('Patient name, phone, doctor and date are required');
       return;
     }
     setLoading(true); setError('');
@@ -386,12 +368,31 @@ export default function AppointmentBook() {
   };
 
   const applyPreset = (preset) => {
+    setActivePreset(preset);
     const now = new Date();
     const f = d => d.toISOString().split('T')[0];
     let from = f(now), to = f(now);
-    if (preset === 'yesterday') { const y = new Date(now); y.setDate(y.getDate() - 1); from = to = f(y); }
-    else if (preset === 'week') { const w = new Date(now); w.setDate(w.getDate() - 6); from = f(w); }
-    else if (preset === 'month') { const m = new Date(now); m.setDate(1); from = f(m); }
+    if (preset === 'yesterday') {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      from = to = f(y);
+    } else if (preset === 'tomorrow') {
+      const tom = new Date(now);
+      tom.setDate(tom.getDate() + 1);
+      from = to = f(tom);
+    } else if (preset === 'week') {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 2);
+      const end = new Date(now);
+      end.setDate(end.getDate() + 7);
+      from = f(start);
+      to = f(end);
+    } else if (preset === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      from = f(start);
+      to = f(end);
+    }
     setFilters(prev => ({ ...prev, dateFrom: from, dateTo: to, page: 1 }));
   };
 
@@ -447,10 +448,10 @@ export default function AppointmentBook() {
         <div className="flex flex-col gap-4 shrink-0 glass p-5 rounded-3xl border border-white/50 shadow-sm">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-              {[['today', 'Today'], ['yesterday', 'Yesterday'], ['week', 'Week'], ['month', 'Month']].map(([key, label]) => (
+              {[['today', 'Today'], ['yesterday', 'Yesterday'], ['tomorrow', 'Tomorrow'], ['week', 'Week'], ['month', 'Month']].map(([key, label]) => (
                 <button key={key} onClick={() => applyPreset(key)}
                   className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-                    (key === 'today' && filters.dateFrom === today && filters.dateTo === today)
+                    activePreset === key
                       ? 'bg-emerald-600 text-white border-emerald-600'
                       : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                   }`}>
@@ -524,7 +525,7 @@ export default function AppointmentBook() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-800 truncate">{appt.patientName}</p>
                       <p className="text-xs text-gray-400">{appt.phone} · Dr. {appt.doctorName}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{fmt(appt.appointmentDate)} · {appt.timeSlot}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{fmt(appt.appointmentDate)}</p>
                     </div>
 
                     <div className="flex flex-col items-end gap-2 shrink-0">
@@ -601,7 +602,6 @@ export default function AppointmentBook() {
                 <DetailRow label="Department" value={rightPanel.appt.department?.toUpperCase()} />
                 <DetailRow label="Patient Type" value={rightPanel.appt.patientType} />
                 <DetailRow label="Date" value={fmt(rightPanel.appt.appointmentDate)} />
-                <DetailRow label="Time" value={rightPanel.appt.timeSlot} />
                 <DetailRow label="Type" value={rightPanel.appt.type?.replace(/_/g, ' ')} />
                 <DetailRow label="Status" value={rightPanel.appt.status?.replace(/_/g, ' ')} />
                 <DetailRow label="Phone" value={rightPanel.appt.phone} />
@@ -720,7 +720,6 @@ export default function AppointmentBook() {
                 <DetailRow label="Department" value={rightPanel.appt.department?.toUpperCase()} />
                 <DetailRow label="Patient Type" value={rightPanel.appt.patientType} />
                 <DetailRow label="Date" value={fmt(rightPanel.appt.appointmentDate)} />
-                <DetailRow label="Time" value={rightPanel.appt.timeSlot} />
                 <DetailRow label="Type" value={rightPanel.appt.type?.replace(/_/g, ' ')} />
                 <DetailRow label="Status" value={rightPanel.appt.status?.replace(/_/g, ' ')} />
                 <DetailRow label="Phone" value={rightPanel.appt.phone} />

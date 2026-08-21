@@ -166,6 +166,35 @@ export default function FollowUp() {
   const [autofilling, setAutofilling] = useState(false);
   const [replyFilter, setReplyFilter] = useState('all');
 
+  // Appointment Booking States
+  const [apptModalOpen, setApptModalOpen] = useState(false);
+  const [apptDoctors, setApptDoctors] = useState([]);
+  const [apptLoading, setApptLoading] = useState(false);
+  const [apptError, setApptError] = useState('');
+  const [apptForm, setApptForm] = useState({
+    patientName: '',
+    phone: '',
+    email: '',
+    doctorName: '',
+    appointmentDate: '',
+    type: 'follow_up',
+    status: 'scheduled',
+    patientType: 'old',
+    problem: '',
+    address: '',
+    houseNo: '',
+    cityVillage: '',
+    postOffice: '',
+    landmark: '',
+    district: '',
+    state: '',
+    pincode: '',
+    medicineDeliveryDate: '',
+    notes: '',
+    department: 'migraine',
+    lead: null
+  });
+
   const REPLY_OPTIONS = [
     { label: 'All Replies', value: 'any_reply' },
     { label: 'हाँ, समय पर ले रहा हूँ', value: 'हाँ, समय पर ले रहा हूँ' },
@@ -418,6 +447,70 @@ export default function FollowUp() {
       alert(err?.response?.data?.message || err.message);
     } finally {
       setManualSaving(false);
+    }
+  };
+
+  // Load Doctors list for Appointment modal
+  useEffect(() => {
+    if (apptModalOpen && apptDoctors.length === 0) {
+      api.get('/users', { params: { role: 'doctor' } })
+        .then(res => {
+          const list = res.data?.data?.results || res.data?.data?.users || (Array.isArray(res.data?.data) ? res.data.data : []);
+          setApptDoctors(list);
+        })
+        .catch(() => {});
+    }
+  }, [apptModalOpen, apptDoctors.length]);
+
+  const openBookAppointment = () => {
+    if (!selected) return;
+    const deliveryDate = selected.delivered_date || selected.delivered_at;
+    const deliveryDateStr = deliveryDate ? new Date(deliveryDate).toISOString().split('T')[0] : '';
+    const cleanPhone = String(selected.billing_phone || '').replace(/\D/g, '');
+
+    setApptForm({
+      patientName: selected.billing_customer_name || '',
+      phone: cleanPhone,
+      email: selected.billing_email || '',
+      doctorName: '',
+      appointmentDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // tomorrow
+      type: 'follow_up',
+      status: 'scheduled',
+      patientType: 'old',
+      problem: selected.verification_problem || selected.problem || selected.lead_id?.problem || '',
+      houseNo: '',
+      address: selected.billing_address || '',
+      cityVillage: selected.billing_city || '',
+      postOffice: '',
+      landmark: '',
+      district: '',
+      state: selected.billing_state || '',
+      pincode: String(selected.billing_pincode || ''),
+      medicineDeliveryDate: deliveryDateStr,
+      notes: '',
+      department: selected.lead_id?.department || 'migraine',
+      lead: selected.lead_id?._id || selected.lead_id || null
+    });
+    setApptError('');
+    setApptModalOpen(true);
+  };
+
+  const handleApptSubmit = async (e) => {
+    e.preventDefault();
+    if (!apptForm.doctorName) {
+      setApptError('Please select a doctor');
+      return;
+    }
+    setApptLoading(true);
+    setApptError('');
+    try {
+      await api.post('/appointments', apptForm);
+      setApptModalOpen(false);
+      alert('Appointment booked successfully!');
+    } catch (err) {
+      setApptError(err.response?.data?.message || 'Failed to book appointment');
+    } finally {
+      setApptLoading(false);
     }
   };
 
@@ -1274,6 +1367,13 @@ export default function FollowUp() {
                       {noteSaving ? 'SAVING...' : 'ADD NOTE'}
                     </button>
                   </div>
+                  <div className="mt-4">
+                    <button onClick={openBookAppointment}
+                      className="w-full py-3.5 rounded-xl text-[10px] font-black text-white shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 hover:opacity-95 tracking-widest"
+                      style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }}>
+                      📅 BOOK DOCTOR APPOINTMENT
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1522,6 +1622,101 @@ export default function FollowUp() {
         </div>
       )}
 
+      {/* ── Book Appointment Modal ── */}
+      {apptModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-emerald-50">
+              <h3 className="text-lg font-black text-emerald-900 tracking-tight flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                Book Doctor Appointment
+              </h3>
+              <button onClick={() => setApptModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-emerald-100/50 text-emerald-600 hover:bg-emerald-200 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {apptError && (
+                <div className="bg-red-50 text-red-600 text-xs p-3 rounded-xl font-bold border border-red-100 mb-4">{apptError}</div>
+              )}
+              <form id="smx-appt-form" onSubmit={handleApptSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Patient Name *</label>
+                    <input required className={inputCls} value={apptForm.patientName} onChange={e => setApptForm(p => ({ ...p, patientName: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Phone *</label>
+                    <input required className={inputCls} value={apptForm.phone} onChange={e => setApptForm(p => ({ ...p, phone: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Department *</label>
+                    <select required className={inputCls} value={apptForm.department} onChange={e => setApptForm(p => ({ ...p, department: e.target.value, doctorName: '' }))}>
+                      <option value="">Select Department</option>
+                      {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? ['migraine', 'piles'] : user.departments).map(d => (
+                        <option key={d} value={d}>{d.toUpperCase()}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Doctor Name *</label>
+                    <select required className={inputCls} value={apptForm.doctorName} onChange={e => setApptForm(p => ({ ...p, doctorName: e.target.value }))}>
+                      <option value="">Select Doctor</option>
+                      {apptDoctors.filter(d => !apptForm.department || !d.departments?.length || d.departments.includes(apptForm.department)).map(d => (
+                        <option key={d._id} value={d.name}>
+                          {d.name}{d.specialization ? ` — ${d.specialization}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Appointment Date *</label>
+                  <input type="date" required className={inputCls} value={apptForm.appointmentDate} onChange={e => setApptForm(p => ({ ...p, appointmentDate: e.target.value }))} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Appointment Type</label>
+                    <select className={inputCls} value={apptForm.type} onChange={e => setApptForm(p => ({ ...p, type: e.target.value }))}>
+                      {['consultation', 'follow_up', 'panchakarma', 'ayurveda', 'other'].map(t => (
+                        <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Patient Type</label>
+                    <select className={inputCls} value={apptForm.patientType} onChange={e => setApptForm(p => ({ ...p, patientType: e.target.value }))}>
+                      <option value="new">New Patient</option>
+                      <option value="old">Old Patient</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Problem / Complaint</label>
+                  <textarea className={inputCls} rows={2} value={apptForm.problem} onChange={e => setApptForm(p => ({ ...p, problem: e.target.value }))} />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Notes</label>
+                  <textarea className={inputCls} rows={2} value={apptForm.notes} onChange={e => setApptForm(p => ({ ...p, notes: e.target.value }))} />
+                </div>
+              </form>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button type="button" onClick={() => setApptModalOpen(false)} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button type="submit" form="smx-appt-form" disabled={apptLoading} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-white shadow-md transition-all active:scale-95 disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                {apptLoading ? 'Booking...' : 'Book Appointment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
