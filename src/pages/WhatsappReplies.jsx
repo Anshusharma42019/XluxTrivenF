@@ -51,6 +51,39 @@ const isDue = (value, inputDate) => {
   return toDateInputValue(value) <= inputDate;
 };
 
+const matchReply = (replyText, filterValue) => {
+  if (!replyText) return false;
+  const text = replyText.toLowerCase();
+  switch (filterValue) {
+    case 'हाँ, समय पर ले रहा हूँ':
+      return text.includes('हाँ, समय पर ले रहा हूँ');
+    case 'नहीं, नियमित नहीं':
+      return text.includes('नहीं, नियमित नहीं');
+    case 'आराम मिल रहा है':
+      if (text.includes('कम') || text.includes('kam')) return false;
+      return text.includes('आराम मिल रहा है') || text.includes('aaram mil raha hai');
+    case 'कम आराम मिल रहा है':
+      return text.includes('कम आराम मिल रहा है') || text.includes('kam aaram mil raha hai');
+    case 'आराम नहीं है':
+      return text.includes('aaram nahi') || text.includes('aaram nhi') || text.includes('fayda nahi') || text.includes('fayda nhi') || text.includes('kuch bhi aaram') || text.includes('koi aaram') || text.includes('farak nahi') || text.includes('farak nhi') || text.includes('relief nahi') || text.includes('relief nhi') || text.includes('no relief') || text.includes('नहीं पहुँचा') || text.includes('नहीं हुआ');
+    case 'अगles महीने की दवाइयाँ बुक करें':
+    case 'अगले महीने की दवाइयाँ बुक करें':
+      return text.includes('अगले महीने') || text.includes('अगle महीने') || text.includes('agle mahine') || text.includes('अगले महीने की दवाइयाँ बुक करें');
+    case 'डॉक्टर से बात करें':
+      return text.includes('डॉक्टर से बात करें') || text.includes('doctor se baat karni hai') || text.includes('doctor se baat');
+    case 'कॉल करें':
+      return text.includes('call me') || text.includes('please call') || text.includes('call kr') || text.includes('call kre') || text.includes('call karo') || text.includes('cl me') || text.includes('call back') || text.includes('कॉल करें') || text.includes('बात करें') || text.includes('baat kre');
+    case 'दवाई कैसे लें':
+      return text.includes('kaise le') || text.includes('kaise lena') || text.includes('kaise khana') || text.includes('kaise khaye') || text.includes('sevan kaise') || text.includes('use kaise') || text.includes('how to take') || text.includes('कैसे खाएं') || text.includes('कैसे लेना');
+    case 'दवाई नहीं मिली':
+      return text.includes('nahi mili') || text.includes('nhi mili') || text.includes('nahi aaya') || text.includes('nhi aaya') || text.includes('not received') || text.includes('kab tak') || text.includes('kab aayega') || text.includes('delivery kab') || text.includes('नहीं मिला') || text.includes('नही मिला') || text.includes('नहीं आया') || text.includes('नही आया');
+    case 'ready':
+      return text.includes('ready') || text.includes('तैयार') || text.includes('taiyar') || text.includes('tayar') || text.includes('tayaar');
+    default:
+      return false;
+  }
+};
+
 const DetailRow = ({ label, value }) =>
   value ? (
     <div className="flex items-start gap-2 sm:gap-3 py-2 border-b border-gray-50 last:border-0">
@@ -108,13 +141,15 @@ export default function ShipmaxxFollowup() {
     { label: 'All Replies', value: 'any_reply' },
     { label: 'हाँ, समय पर ले रहा हूँ', value: 'हाँ, समय पर ले रहा हूँ' },
     { label: 'नहीं, नियमित नहीं', value: 'नहीं, नियमित नहीं' },
-    { label: 'आराम मिल रहा है', value: 'आराम मिल रहा है' },
-    { label: 'कम आराम मिल रहा है', value: 'कम आराम मिल रहा है' },
+    { label: 'आराम मिल रहा है / Aaram Mil Raha Hai', value: 'आराम मिल रहा है' },
+    { label: 'कम आराम मिल रहा है / Kam Aaram Mil Raha Hai', value: 'कम आराम मिल रहा है' },
+    { label: 'आराम नहीं है / No Relief', value: 'आराम नहीं है' },
     { label: 'अगले महीने की दवाइयाँ बुक करें', value: 'अगले महीने की दवाइयाँ बुक करें' },
-    { label: 'डॉक्टर से बात करें', value: 'डॉक्टर से बात करें' },
-    { label: 'Aaram Mil Raha Hai', value: 'aaram mil raha hai' },
-    { label: 'Kam Aaram Mil Raha Hai', value: 'kam aaram mil raha hai' },
-    { label: 'Doctor Se Baat Karni Hai', value: 'doctor se baat karni hai' }
+    { label: 'डॉक्टर से बात करें / Doctor Se Baat Karni Hai', value: 'डॉक्टर से बात करें' },
+    { label: 'कॉल करें / Call Request', value: 'कॉल करें' },
+    { label: 'दवाई कैसे लें / Dosage Inquiry', value: 'दवाई कैसे लें' },
+    { label: 'दवाई नहीं मिली / Delivery Inquiry', value: 'दवाई नहीं मिली' },
+    { label: 'तैयार हूँ / Ready', value: 'ready' }
   ];
 
   const followupNumbers = Array.from({ length: TOTAL_FU }, (_, i) => i + 1);
@@ -323,7 +358,7 @@ export default function ShipmaxxFollowup() {
     if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
     if (filterFollowupNum === 'replies') {
       if (!o.interakt_reply_text) return false;
-      if (replyFilter !== 'any_reply' && !o.interakt_reply_text.toLowerCase().includes(replyFilter.toLowerCase())) return false;
+      if (replyFilter !== 'any_reply' && !matchReply(o.interakt_reply_text, replyFilter)) return false;
     } else if (filterFollowupNum) {
       const fu = getFollowup(o, filterFollowupNum);
       if (!fu || fu.completed || !previousFollowupsDone(o, filterFollowupNum) || !isDue(fu.scheduled_date, filterDelivered)) return false;
@@ -398,7 +433,7 @@ export default function ShipmaxxFollowup() {
               {REPLY_OPTIONS.map(opt => {
                 const count = opt.value === 'any_reply' 
                   ? all.filter(o => !!o.interakt_reply_text && !o.followup_done && !o.sent_to_verification).length
-                  : all.filter(o => o.interakt_reply_text && o.interakt_reply_text.toLowerCase().includes(opt.value.toLowerCase()) && !o.followup_done && !o.sent_to_verification).length;
+                  : all.filter(o => o.interakt_reply_text && matchReply(o.interakt_reply_text, opt.value) && !o.followup_done && !o.sent_to_verification).length;
                 const isActive = replyFilter === opt.value || (opt.value === 'any_reply' && replyFilter === 'all');
                 return (
                   <button key={opt.value} onClick={() => { setReplyFilter(opt.value); setPage(1); }}
