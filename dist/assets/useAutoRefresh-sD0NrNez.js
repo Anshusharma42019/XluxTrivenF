@@ -1,0 +1,1 @@
+import{r as e}from"./rolldown-runtime-QTnfLwEv.js";import{I as t}from"./vendor-TTSmL-XW.js";var n=e(t(),1);function r(e,t=6e4,r=[]){(0,n.useEffect)(()=>{if(typeof e!=`function`)return;let n=setInterval(()=>{e(!0)},t);return()=>clearInterval(n)},[e,t,...r])}export{r as t};
