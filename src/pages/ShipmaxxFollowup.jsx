@@ -461,7 +461,7 @@ export default function ShipmaxxFollowup() {
     const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
     if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
     if (filterFollowupNum === 'replies') {
-      if (!o.interakt_reply_text) return false;
+      if (!o.interakt_reply_text || o.interakt_reply_read) return false;
       if (replyFilter !== 'any_reply' && !matchReply(o.interakt_reply_text, replyFilter)) return false;
     } else if (filterFollowupNum) {
       const fu = getFollowup(o, filterFollowupNum);
