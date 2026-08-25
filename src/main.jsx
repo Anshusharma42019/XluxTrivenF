@@ -3,9 +3,8 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-// Keep backend warm — prevent Vercel cold start
-const BACKEND = ((import.meta.env.VITE_API_BASE_URL || 'https://xluxtriven.de/api/v1')).replace('/api/v1', '');
-const ping = () => fetch(`${BACKEND}/ping`).catch(() => {});
+// Keep backend warm — prevent cold start
+const ping = () => fetch('/ping').catch(() => {});
 ping();
 setInterval(ping, 4 * 60 * 1000); // every 4 minutes
 

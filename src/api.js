@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || 'https://xluxtriven.de/api/v1' });
+// In local dev (localhost), always use relative path so Vite proxy forwards to localhost:5000.
+// In production builds, VITE_API_BASE_URL from .env.production is used directly.
+const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+const BASE_URL = isLocalDev ? '/api/v1' : (import.meta.env.VITE_API_BASE_URL || '/api/v1');
+
+const API = axios.create({ baseURL: BASE_URL });
 API.interceptors.request.use((config) => {
   const tokens = JSON.parse(localStorage.getItem('crmTokens') || 'null');
   if (tokens?.access?.token) {
@@ -46,7 +51,7 @@ API.interceptors.response.use(
           throw new Error('No refresh token available');
         }
 
-        const { data } = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'https://xluxtriven.de/api/v1'}/auth/refresh-tokens`, {
+        const { data } = await axios.post(`${BASE_URL}/auth/refresh-tokens`, {
           refreshToken: tokens.refresh.token,
         });
 
