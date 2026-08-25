@@ -516,7 +516,7 @@ export default function CNP() {
         </div>
       </div>
 
-      {/* ── RIGHT DETAIL PANEL ── */}
+      {/* ── RIGHT DETAIL PANEL (Desktop) ── */}
       {selected && (
         <div className="hidden lg:flex flex-col w-[45%] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden h-full">
           <div className={`h-1.5 shrink-0 ${tab === 'tasks' ? 'bg-red-500' : 'bg-amber-500'}`} />
@@ -526,13 +526,13 @@ export default function CNP() {
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold ${PIN_COLORS[filteredItems.findIndex(i => i._id === selected._id) % PIN_COLORS.length]}`}>
                 {initials(selected.lead?.name || selected.title)}
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-bold text-gray-800 leading-tight">{selected.lead?.name || 'Task Details'}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-800 leading-tight truncate">{selected.lead?.name || 'Task Details'}</p>
                 <p className="text-xs text-gray-400">{selected.lead?.phone}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => openEditModal(selected)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-purple-500 hover:bg-purple-50 transition">
+              <button onClick={() => openEditModal(selected)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-purple-500 hover:bg-purple-50 transition" title="Edit Lead">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -543,6 +543,18 @@ export default function CNP() {
           </div>
 
           <div className="px-5 py-4 overflow-y-auto flex-1 custom-scrollbar">
+            {tab === 'tasks' && (
+              <div className="p-3.5 rounded-2xl bg-red-50/80 border border-red-100 mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-red-600 uppercase tracking-widest">CNP Progress</span>
+                  <span className="text-xs font-black text-red-600">{selected.cnpCount || 1} / 3</span>
+                </div>
+                <div className="w-full h-2 bg-red-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${((selected.cnpCount || 1) / 3) * 100}%` }} />
+                </div>
+              </div>
+            )}
+
             <SectionHead label="Contact Information" color={tab === 'tasks' ? 'red' : 'amber'} />
             <DetailRow label="Phone" value={selected.lead?.phone} />
             <DetailRow label="Department" value={selected.lead?.department || selected.department} color="blue" />
@@ -592,45 +604,48 @@ export default function CNP() {
                 if (!n.text) return true;
                 return !String(n.text).toLowerCase().includes('[interakt message]');
               });
-              if (staffNotes.length === 0) return null;
               return (
                 <div className="mt-4">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notes</p>
-                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                    {[...staffNotes].reverse().map((n, i) => (
-                      <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                        <p className="text-xs text-gray-600 leading-relaxed">{n.text}</p>
-                        <div className="flex justify-between items-center mt-1">
-                          <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(n.createdAt).toLocaleString()}</p>
-                          {n.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {n.createdBy.name}</p>}
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notes & Comments</p>
+                  {staffNotes.length > 0 ? (
+                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar">
+                      {[...staffNotes].reverse().map((n, i) => (
+                        <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                          <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{n.text}</p>
+                          <div className="flex justify-between items-center mt-1.5">
+                            <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(n.createdAt).toLocaleString()}</p>
+                            {n.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {n.createdBy.name}</p>}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic py-1">No comments added yet</p>
+                  )}
                 </div>
               );
             })()}
 
-            <div className="mt-4 p-3 rounded-xl bg-gray-50 border border-gray-100">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Note</p>
+            <div className="mt-4 p-3.5 rounded-xl bg-gray-50 border border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Note / Comment</p>
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400 transition mb-2"
-                placeholder="What happened on the call?" />
+                placeholder="What happened on the call? Add a comment..." />
               <div className="flex gap-2">
                 <input type="date" value={nextDate} onChange={e => setNextDate(e.target.value)}
                   className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400 transition" />
                 <button onClick={handleSaveNote} disabled={savingNote || (!note.trim() && !nextDate)}
-                  className="px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition">
-                  {savingNote ? '...' : 'Save'}
+                  className={`px-4 py-2 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition ${tab === 'tasks' ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                  {savingNote ? 'Saving...' : 'Save Note'}
                 </button>
               </div>
               {/* Activity history */}
               {(selectedLeadDetail?.follow_ups?.length > 0) && (
-                <div className="mt-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                <div className="mt-3 space-y-2 max-h-52 overflow-y-auto custom-scrollbar">
                   {[...selectedLeadDetail.follow_ups].reverse().map((f, i) => (
-                    <div key={i} className="p-2 rounded-lg bg-white border border-gray-100">
-                      {f.note && <p className="text-xs text-gray-700">{f.note}</p>}
-                      {f.next_date && <p className="text-[10px] text-green-600 font-bold">Next: {new Date(f.next_date).toLocaleDateString('en-IN')}</p>}
+                    <div key={i} className="p-2.5 rounded-lg bg-white border border-gray-100">
+                      {f.note && <p className="text-xs text-gray-700 leading-relaxed">{f.note}</p>}
+                      {f.next_date && <p className="text-[10px] text-green-600 font-bold mt-0.5">Next: {new Date(f.next_date).toLocaleDateString('en-IN')}</p>}
                       <div className="flex justify-between items-center mt-1">
                         <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(f.date).toLocaleString()}</p>
                         {f.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {f.createdBy.name}</p>}
@@ -679,6 +694,7 @@ export default function CNP() {
                     await deleteCnpRecord(selected._id);
                     load(dateFilter, callAgainDateFilter);
                     setSelected(null);
+                    setSelectedLeadDetail(null);
                   } catch { } finally { setUpdating(null); }
                 }} className="py-2.5 rounded-xl text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 hover:bg-amber-100 transition disabled:opacity-50">
                   Call Again
@@ -693,36 +709,34 @@ export default function CNP() {
       {selected && (
         <div className="lg:hidden">
           <Modal hideHeader={true} onClose={() => { setSelected(null); setSelectedLeadDetail(null); }}>
-            <div className={`-mx-4 -mt-4 mb-5 px-6 py-6 rounded-b-3xl relative ${tab === 'tasks' ? 'bg-gradient-to-br from-red-900 to-red-800' : 'bg-gradient-to-br from-amber-900 to-amber-800'}`}>
+            <div className={`-mx-4 -mt-4 mb-4 px-6 py-5 rounded-b-3xl relative ${tab === 'tasks' ? 'bg-gradient-to-br from-red-900 to-red-800' : 'bg-gradient-to-br from-amber-900 to-amber-800'}`}>
               <div className="absolute right-4 top-4 flex items-center gap-2">
-                <button onClick={() => openEditModal(selected)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 transition">
+                <button onClick={() => openEditModal(selected)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 transition" title="Edit Lead">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
                 </button>
-                <button onClick={() => setSelected(null)} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/10 text-white transition text-xl">×</button>
+                <button onClick={() => { setSelected(null); setSelectedLeadDetail(null); }} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/10 text-white transition text-xl">×</button>
               </div>
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-xl ${PIN_COLORS[filteredItems.findIndex(i => i._id === selected._id) % PIN_COLORS.length]}`}>
                   {initials(selected.lead?.name || selected.title)}
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-white font-bold text-lg tracking-tight">{selected.lead?.name || selected.title}</h3>
-                  <p className="text-white/60 text-sm">{selected.lead?.phone}</p>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-white font-bold text-lg tracking-tight truncate">{selected.lead?.name || selected.title}</h3>
+                  <p className="text-white/60 text-sm font-medium">{selected.lead?.phone}</p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-4 px-2 pb-6">
-              <DetailRow label="Status" value={selected.lead?.status?.replace(/_/g, ' ')} />
-              <DetailRow label="Address" value={selected.lead?.address} />
-              
+            <div className="space-y-4 px-1 pb-4">
+              {/* CNP Progress bar */}
               {tab === 'tasks' && (
-                <div className="p-4 rounded-2xl bg-red-50 border border-red-100">
-                  <div className="flex justify-between items-center mb-3">
+                <div className="p-3.5 rounded-2xl bg-red-50 border border-red-100">
+                  <div className="flex justify-between items-center mb-2">
                     <span className="text-xs font-bold text-red-600 uppercase tracking-widest">CNP Progress</span>
-                    <span className="text-xs font-black text-red-600">{selected.cnpCount || 1}/3</span>
+                    <span className="text-xs font-black text-red-600">{selected.cnpCount || 1} / 3</span>
                   </div>
                   <div className="w-full h-2 bg-red-100 rounded-full overflow-hidden">
                     <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${((selected.cnpCount || 1) / 3) * 100}%` }} />
@@ -730,23 +744,192 @@ export default function CNP() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 pt-4">
-                <button disabled={updating} onClick={() => handleStatusChange(selected.lead?._id, 'interested', tab === 'tasks' ? selected._id : null)}
-                  className="col-span-2 py-4 rounded-xl text-xs font-bold text-white bg-green-500 active:scale-95 transition shadow-lg shadow-green-100">Interested</button>
-                <button disabled={updating} onClick={() => handleStatusChange(selected.lead?._id, 'closed_lost', tab === 'tasks' ? selected._id : null)}
-                  className="py-4 rounded-xl text-xs font-bold text-gray-500 bg-gray-100 active:scale-95 transition">Mark Lost</button>
-                {tab === 'tasks' ? (
-                  <button disabled={updating || (selected.cnpCount || 1) >= 3} onClick={() => handleIncrementCnp(selected._id)}
-                    className="py-4 rounded-xl text-xs font-bold text-white bg-red-500 active:scale-95 transition shadow-lg shadow-red-100">CNP {selected.cnpCount || 1}/3</button>
-                ) : (
-                  <button onClick={() => handleGoToTask(selected)}
-                    className="py-4 rounded-xl text-xs font-bold text-white bg-blue-600 active:scale-95 transition shadow-lg shadow-blue-100">Task</button>
+              {/* Contact Information */}
+              <div>
+                <SectionHead label="Contact Information" color={tab === 'tasks' ? 'red' : 'amber'} />
+                <DetailRow label="Phone" value={selected.lead?.phone} />
+                <DetailRow label="Department" value={selected.lead?.department || selected.department} color="blue" />
+                <DetailRow label="Problem" value={selected.lead?.problem} />
+              </div>
+
+              {/* Address Details */}
+              <div>
+                <SectionHead label="Address Details" color={tab === 'tasks' ? 'red' : 'amber'} />
+                <DetailRow label="Address" value={selected.lead?.address} />
+                <DetailRow label="House No" value={selected.lead?.houseNo} />
+                <DetailRow label="City/Village" value={selected.lead?.cityVillage} />
+                <DetailRow label="Post Office" value={selected.lead?.postOffice} />
+                <DetailRow label="District" value={selected.lead?.district} />
+                <DetailRow label="State" value={selected.lead?.state} />
+                <DetailRow label="Pincode" value={selected.lead?.pincode} />
+                <DetailRow label="Landmark" value={selected.lead?.landmark} />
+              </div>
+
+              {/* Status & History */}
+              <div>
+                <SectionHead label="Status & History" color={tab === 'tasks' ? 'red' : 'amber'} />
+                <DetailRow label="Current Status" value={selected.lead?.status?.replace(/_/g, ' ')} />
+                <DetailRow label="Assigned To" value={selected.assignedTo?.name || selected.lead?.assignedTo?.name} />
+                {tab === 'tasks' && (
+                  <>
+                    <DetailRow label="CNP Count" value={`${selected.cnpCount || 1} of 3`} color="red" />
+                    <DetailRow label="Last Attempt" value={selected.lastCnpAt ? new Date(selected.lastCnpAt).toLocaleString() : 'N/A'} />
+                  </>
                 )}
               </div>
-              {tab === 'tasks' && (
-                <button onClick={() => handleGoToTask(selected)}
-                  className="w-full mt-2 py-4 rounded-xl text-xs font-bold text-white bg-blue-600 active:scale-95 transition shadow-lg shadow-blue-100">Task</button>
+
+              {/* Attempt History */}
+              {tab === 'tasks' && selected.cnpHistory?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Attempt History</p>
+                  <div className="space-y-2">
+                    {[...selected.cnpHistory].reverse().map((h, i) => (
+                      <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-red-50 border border-red-100/50">
+                        <div className="w-6 h-6 rounded-lg bg-red-500 flex items-center justify-center text-white text-[10px] font-bold shadow-sm shrink-0">
+                          {selected.cnpHistory.length - i}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-700">{new Date(h.clickedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                          <p className="text-[10px] text-gray-400 font-medium">{new Date(h.clickedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
+
+              {/* Staff Notes / Comments */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notes & Comments</p>
+                {(() => {
+                  const staffNotes = (selectedLeadDetail?.notes || []).filter(n => {
+                    if (!n.text) return true;
+                    return !String(n.text).toLowerCase().includes('[interakt message]');
+                  });
+                  if (staffNotes.length === 0) return <p className="text-xs text-gray-400 italic py-1">No comments added yet</p>;
+                  return (
+                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar">
+                      {[...staffNotes].reverse().map((n, i) => (
+                        <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                          <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{n.text}</p>
+                          <div className="flex justify-between items-center mt-1.5">
+                            <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(n.createdAt).toLocaleString()}</p>
+                            {n.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {n.createdBy.name}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Add Note / Comment Section */}
+              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Note / Comment</p>
+                <textarea 
+                  value={note} 
+                  onChange={e => setNote(e.target.value)} 
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400 transition mb-2"
+                  placeholder="What happened on the call? Add a comment..." 
+                />
+                <div className="flex gap-2">
+                  <input 
+                    type="date" 
+                    value={nextDate} 
+                    onChange={e => setNextDate(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400 transition text-xs" 
+                  />
+                  <button 
+                    onClick={handleSaveNote} 
+                    disabled={savingNote || (!note.trim() && !nextDate)}
+                    className={`px-4 py-2 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition shrink-0 ${tab === 'tasks' ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600'}`}
+                  >
+                    {savingNote ? 'Saving...' : 'Save Note'}
+                  </button>
+                </div>
+
+                {/* Follow-up Activity History */}
+                {(selectedLeadDetail?.follow_ups?.length > 0) && (
+                  <div className="mt-3 space-y-2 max-h-52 overflow-y-auto custom-scrollbar">
+                    {[...selectedLeadDetail.follow_ups].reverse().map((f, i) => (
+                      <div key={i} className="p-2.5 rounded-lg bg-white border border-gray-100">
+                        {f.note && <p className="text-xs text-gray-700 leading-relaxed">{f.note}</p>}
+                        {f.next_date && <p className="text-[10px] text-green-600 font-bold mt-0.5">Next: {new Date(f.next_date).toLocaleDateString('en-IN')}</p>}
+                        <div className="flex justify-between items-center mt-1">
+                          <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(f.date).toLocaleString()}</p>
+                          {f.createdBy?.name && <p className="text-[9px] text-blue-500 font-bold capitalize">By {f.createdBy.name}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 space-y-2">
+                <button 
+                  disabled={updating} 
+                  onClick={() => handleStatusChange(selected.lead?._id, 'interested', tab === 'tasks' ? selected._id : null)}
+                  className="w-full py-3.5 rounded-xl text-xs font-bold text-white bg-green-500 active:scale-95 transition shadow-lg shadow-green-100 disabled:opacity-50"
+                >
+                  Interested
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    disabled={updating} 
+                    onClick={() => handleStatusChange(selected.lead?._id, 'closed_lost', tab === 'tasks' ? selected._id : null)}
+                    className="py-3 rounded-xl text-xs font-bold text-gray-600 bg-gray-100 active:scale-95 transition disabled:opacity-50"
+                  >
+                    Mark Lost
+                  </button>
+
+                  {tab === 'tasks' ? (
+                    <button 
+                      disabled={updating || (selected.cnpCount || 1) >= 3} 
+                      onClick={() => handleIncrementCnp(selected._id)}
+                      className="py-3 rounded-xl text-xs font-bold text-white bg-red-500 active:scale-95 transition shadow-lg shadow-red-100 disabled:opacity-50"
+                    >
+                      CNP {selected.cnpCount || 1}/3
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleGoToTask(selected)}
+                      className="py-3 rounded-xl text-xs font-bold text-white bg-blue-600 active:scale-95 transition shadow-lg shadow-blue-100"
+                    >
+                      Task
+                    </button>
+                  )}
+                </div>
+
+                {tab === 'tasks' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => handleGoToTask(selected)}
+                      className="py-3 rounded-xl text-xs font-bold text-white bg-blue-600 active:scale-95 transition shadow-lg shadow-blue-100"
+                    >
+                      Task
+                    </button>
+                    <button 
+                      disabled={updating} 
+                      onClick={async () => {
+                        setUpdating(selected._id);
+                        try {
+                          await createCallAgain(selected.lead?._id);
+                          await deleteCnpRecord(selected._id);
+                          load(dateFilter, callAgainDateFilter);
+                          setSelected(null);
+                          setSelectedLeadDetail(null);
+                        } catch { } finally { setUpdating(null); }
+                      }} 
+                      className="py-3 rounded-xl text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 active:scale-95 transition disabled:opacity-50"
+                    >
+                      Call Again
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </Modal>
         </div>
