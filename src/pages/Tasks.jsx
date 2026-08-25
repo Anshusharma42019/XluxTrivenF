@@ -648,8 +648,11 @@ export default function Tasks() {
                 {selected.notes?.length > 0 ? (
                   [...selected.notes].reverse().map((n, i) => (
                     <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                      <p className="text-xs text-gray-600 leading-relaxed font-medium">{n.text}</p>
-                      <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-tight">{new Date(n.createdAt).toLocaleString()}</p>
+                      <p className="text-xs text-gray-700 leading-relaxed font-medium whitespace-pre-wrap">{n.text}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">{new Date(n.createdAt).toLocaleString()}</p>
+                        {n.createdBy?.name && <p className="text-[9px] text-emerald-600 font-bold capitalize">By {n.createdBy.name}</p>}
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -761,18 +764,32 @@ export default function Tasks() {
                  <DetailRow label="Price" value={selected.price ? `₹${selected.price}` : null} />
                  <DetailRow label="Description" value={selected.description} />
                  
-                 <SectionHead label="Activity" />
-                 <div className="space-y-3 pb-6">
+                 <SectionHead label="Activity & Comments" />
+                 <div className="space-y-3 pb-3">
                     {selected.notes?.length > 0 ? (
-                      selected.notes.map((n, i) => (
+                      [...selected.notes].reverse().map((n, i) => (
                         <div key={i} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                          <p className="text-xs text-gray-600 font-medium">{n.text}</p>
-                          <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase">{new Date(n.createdAt).toLocaleString()}</p>
+                          <p className="text-xs text-gray-700 leading-relaxed font-medium whitespace-pre-wrap">{n.text}</p>
+                          <div className="flex justify-between items-center mt-2">
+                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">{new Date(n.createdAt).toLocaleString()}</p>
+                            {n.createdBy?.name && <p className="text-[9px] text-emerald-600 font-bold capitalize">By {n.createdBy.name}</p>}
+                          </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-xs text-gray-400 italic text-center">No notes yet</p>
+                      <p className="text-xs text-gray-400 italic text-center py-2">No notes yet</p>
                     )}
+                 </div>
+
+                 <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 mb-6">
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Note / Comment</p>
+                   <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={2}
+                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 transition mb-2"
+                     placeholder="Type update / comment here..." />
+                   <button onClick={handleAddNote} disabled={!noteText.trim()}
+                     className="w-full py-2.5 bg-emerald-500 text-white text-xs font-bold rounded-xl hover:bg-emerald-600 active:scale-95 disabled:opacity-50 transition shadow-sm">
+                     Save Note
+                   </button>
                  </div>
               </div>
 
