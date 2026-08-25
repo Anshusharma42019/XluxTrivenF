@@ -250,6 +250,8 @@ export default function Tasks() {
           await updateLead(leadId, { cnp: true }).catch(() => {});
         } else if (payload.status === 'cancelled') {
           await updateLead(leadId, { status: 'on_hold' }).catch(() => {});
+        } else if (payload.status === 'verification') {
+          await updateLead(leadId, { status: 'verification' }).catch(() => {});
         }
       }
 
@@ -623,6 +625,7 @@ export default function Tasks() {
             <SectionHead label="Problem & Details" />
             <div className="grid grid-cols-1 gap-1">
               <DetailRow label="Problem" value={selected.problem} />
+              <DetailRow label="Duration" value={selected.problemDuration} />
               <DetailRow label="Vitals" value={selected.age || selected.weight || selected.height ? `${selected.age ? selected.age+'y ' : ''}${selected.weight ? selected.weight+'kg ' : ''}${selected.height ? selected.height+'ft' : ''}` : null} />
               <DetailRow label="Other Problems" value={selected.otherProblems} />
               <DetailRow label="Price" value={selected.price ? `₹${selected.price}` : null} />
@@ -750,6 +753,14 @@ export default function Tasks() {
                  <DetailRow label="Phone" value={selected.phone || selected.lead?.phone} />
                  <DetailRow label="Address" value={[selected.houseNo, selected.cityVillage, selected.district, selected.pincode].filter(Boolean).join(', ')} />
                  
+                 <SectionHead label="Problem & Details" />
+                 <DetailRow label="Problem" value={selected.problem} />
+                 <DetailRow label="Duration" value={selected.problemDuration} />
+                 <DetailRow label="Vitals" value={selected.age || selected.weight || selected.height ? `${selected.age ? selected.age+'y ' : ''}${selected.weight ? selected.weight+'kg ' : ''}${selected.height ? selected.height+'ft' : ''}` : null} />
+                 <DetailRow label="Other Problems" value={selected.otherProblems} />
+                 <DetailRow label="Price" value={selected.price ? `₹${selected.price}` : null} />
+                 <DetailRow label="Description" value={selected.description} />
+                 
                  <SectionHead label="Activity" />
                  <div className="space-y-3 pb-6">
                     {selected.notes?.length > 0 ? (
@@ -847,6 +858,9 @@ export default function Tasks() {
                   {(user?.role === 'admin' || user?.role === 'manager' || !user?.departments?.length ? DEPARTMENTS : user.departments).map(d => <option key={d} value={d}>{d.toUpperCase()}</option>)}
                 </select></div>
             )}
+
+            <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Problem Duration</label>
+              <input className={`${inputCls} mt-1`} placeholder="e.g. 2 years" value={form.problemDuration || ''} onChange={(e) => setForm({ ...form, problemDuration: e.target.value })} /></div>
 
             <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Problem</label>
               <textarea rows={1} className={`${inputCls} mt-1`} value={form.problem} onChange={(e) => setForm({ ...form, problem: e.target.value })} /></div>

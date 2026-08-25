@@ -890,7 +890,7 @@ export default function Verification() {
                 <div className="space-y-2">
                   <button onClick={() => handleStatusUpdate('pending')} disabled={updating}
                     className="w-full py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md bg-gradient-to-r from-blue-500 to-blue-600 disabled:opacity-50">
-                    Move to Pending
+                    Move to Verification
                   </button>
                   <button onClick={(e) => handleDelete(selected._id, e)}
                     className="w-full py-3 rounded-xl text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 transition-all hover:bg-rose-100 active:scale-[0.98] flex items-center justify-center gap-2">
@@ -903,9 +903,9 @@ export default function Verification() {
               ) : (
                 <>
                   <div className="flex gap-2">
-                    <button onClick={() => handleStatusUpdate('verified')} disabled={updating}
+                    <button onClick={() => handleStatusUpdate('dispatch')} disabled={updating}
                       className="flex-1 py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-emerald-900/10 bg-gradient-to-r from-emerald-500 to-emerald-600 disabled:opacity-50">
-                      <VerifyIcon /> Verified
+                      <VerifyIcon /> Dispatch
                     </button>
                     {showOnHoldPicker ? (
                       <div className="flex-[1.5] flex flex-col gap-1.5 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
@@ -930,10 +930,6 @@ export default function Verification() {
                       </button>
                     )}
                   </div>
-                  <button onClick={handleReadyToShipment}
-                    className="w-full py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-amber-900/10 bg-gradient-to-r from-amber-500 to-amber-600">
-                    Ready to Shipment
-                  </button>
                 </>
               )}
             </div>
@@ -1029,25 +1025,26 @@ export default function Verification() {
                   )}
 
                   <div className="flex flex-col gap-3 pt-6 pb-4">
-                    <div className="flex gap-2.5">
-                      <button onClick={() => handleStatusUpdate('verified')}
-                        className="flex-1 py-4 rounded-xl text-[11px] font-bold text-white shadow-lg shadow-emerald-900/10 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                        style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-                        <VerifyIcon className="w-4 h-4" /> VERIFY RECORD
-                      </button>
-                      <button onClick={() => setEditMode(true)}
-                        className="px-6 py-4 rounded-xl text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-100 transition-all active:scale-[0.98]">
-                        EDIT
-                      </button>
-                    </div>
-                    <button onClick={handleReadyToShipment}
-                      className="w-full py-4 rounded-xl text-[11px] font-bold text-white shadow-lg shadow-amber-900/10 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                      style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path d="M5 8h14M5 8a2 2 0 1 0 0-4h14a2 2 0 1 0 0 4M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
-                      </svg>
-                      READY TO SHIPMENT
-                    </button>
+                    {selected?.status === 'on_hold' ? (
+                      <div className="flex gap-2.5 w-full">
+                        <button onClick={() => handleStatusUpdate('pending')}
+                          className="flex-1 py-4 rounded-xl text-[11px] font-bold text-white shadow-lg shadow-blue-900/10 transition-all active:scale-[0.98] flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600">
+                          MOVE TO VERIFICATION
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2.5 w-full">
+                        <button onClick={() => handleStatusUpdate('dispatch')}
+                          className="flex-1 py-4 rounded-xl text-[11px] font-bold text-white shadow-lg shadow-emerald-900/10 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                          style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                          <VerifyIcon className="w-4 h-4" /> DISPATCH
+                        </button>
+                        <button onClick={() => setEditMode(true)}
+                          className="px-6 py-4 rounded-xl text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-100 transition-all active:scale-[0.98]">
+                          EDIT
+                        </button>
+                      </div>
+                    )}
                     <button onClick={(e) => handleDelete(selected._id, e)}
                       className="w-full py-3 mt-2 rounded-xl text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 transition-all hover:bg-rose-100 active:scale-[0.98] flex items-center justify-center gap-2">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

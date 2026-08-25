@@ -7,6 +7,7 @@ export default function UniversalSearch() {
   const [results, setResults] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [integrityStates, setIntegrityStates] = useState({});
   const containerRef = useRef(null);
   const navigate = useNavigate();
 
@@ -43,6 +44,35 @@ export default function UniversalSearch() {
 
     return () => clearTimeout(timer);
   }, [query]);
+
+  // Fetch integrity for each lead in search results in background
+  useEffect(() => {
+    if (!results || results.length === 0) return;
+    
+    // Find all unique lead IDs in search results
+    const leadIds = [];
+    results.forEach(group => {
+      if (group.history) {
+        group.history.forEach(rec => {
+          if (rec.lead_id && !leadIds.includes(String(rec.lead_id))) {
+            leadIds.push(String(rec.lead_id));
+          }
+        });
+      }
+    });
+
+    // Fetch integrity for each leadId in background
+    leadIds.forEach(async (leadId) => {
+      if (integrityStates[leadId]) return; // already loaded or loading
+      setIntegrityStates(prev => ({ ...prev, [leadId]: { loading: true } }));
+      try {
+        const res = await API.get(`/commission/chain/${leadId}/integrity`);
+        setIntegrityStates(prev => ({ ...prev, [leadId]: { loading: false, valid: res.data?.data?.valid } }));
+      } catch (err) {
+        setIntegrityStates(prev => ({ ...prev, [leadId]: { loading: false, valid: false } }));
+      }
+    });
+  }, [results]);
 
   const handleResultClick = (link) => {
     setIsOpen(false);
@@ -261,6 +291,105 @@ export default function UniversalSearch() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* VISUAL ORDER CHAIN TIMELINE */}
+                  {customerGroup.order_chain && customerGroup.order_chain.length > 0 && (
+                    <div className="mt-4 px-2 mb-1 border-t border-gray-100 dark:border-gray-800 pt-4">
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center justify-between gap-2">
+                         <div className="flex items-center gap-2">
+                           <span>Order Chain & Commission Split</span>
+                           {/* Cryptographic verification badge */}
+                           {(() => {
+                             const leadId = customerGroup.history?.find(r => r.lead_id)?.lead_id;
+                             if (!leadId) return null;
+                             const status = integrityStates[String(leadId)];
+                             if (!status) return null;
+                             if (status.loading) return <span className="text-[8px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono animate-pulse uppercase">Verifying...</span>;
+                             if (status.valid) return <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-100 font-black uppercase tracking-wider">🟢 Chain Verified</span>;
+                             return <span className="text-[8px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100 font-black uppercase tracking-wider animate-bounce">🔴 Tampering Detected</span>;
+                           })()}
+                         </div>
+                         <div className="h-px bg-gray-200 dark:bg-gray-700 flex-1"></div>
+                      </div>
+                      
+                      <div className="space-y-3 mt-3 pl-2">
+                        {customerGroup.order_chain.map((entry, entryIdx) => {
+                          const dateStr = entry.order_id?.delivered_at || entry.createdAt;
+                          const subtotal = entry.order_id?.sub_total || entry.order_id?.order_sub_total || 0;
+                          
+                          return (
+                            <div key={entryIdx} className="bg-white dark:bg-gray-900 p-3 rounded-xl border border-gray-100 dark:border-gray-800 flex items-start gap-3 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 flex flex-col items-center justify-center border border-emerald-100 dark:border-emerald-900 shrink-0">
+                                <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400">KIT</span>
+                                <span className="text-xs font-black text-emerald-700 dark:text-emerald-300 leading-none">{entry.chain_seq}</span>
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-black text-gray-800 dark:text-gray-200 uppercase tracking-wide">
+                                      {entry.order_type === 'first' ? 'First Order' : 'Repeat Order'}
+                                    </span>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 font-mono">
+                                      {entry.rule_version}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 font-medium">
+                                    {formatDate(dateStr)}
+                                  </span>
+                                </div>
+                                
+                                <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-gray-400 text-[10px] uppercase font-bold shrink-0">Submitter:</span>
+                                    <span className="font-bold text-gray-800 dark:text-gray-200">
+                                      {entry.submitter_id?.name || '—'} ({entry.submitter_id?.role || 'sales'})
+                                    </span>
+                                    <span className="text-[8px] font-bold bg-green-50 text-green-600 px-1 rounded border border-green-100 shrink-0">LOCKED</span>
+                                  </div>
+                                  
+                                  {entry.order_id?.order_id && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-gray-400 text-[10px] uppercase font-bold shrink-0">Order:</span>
+                                      <span className="font-mono text-purple-600 dark:text-purple-400 font-bold">{entry.order_id.order_id}</span>
+                                      {subtotal > 0 && <span className="text-gray-500">| ₹{subtotal.toLocaleString()}</span>}
+                                      {entry.order_id.status && <span className="text-gray-400">({entry.order_id.status})</span>}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Commissions split detail */}
+                                {entry.commissions && entry.commissions.length > 0 && (
+                                  <div className="mt-2 bg-gray-50 dark:bg-gray-800/40 p-2 rounded-lg border border-gray-100/50 dark:border-gray-700/50">
+                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1.5">Commissions Split</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                      {entry.commissions.map((comm, commIdx) => (
+                                        <div key={commIdx} className="flex items-center justify-between text-[11px] gap-2">
+                                          <span className="text-gray-600 dark:text-gray-400 truncate max-w-[120px]">
+                                            {comm.staff_id?.name || '—'} ({comm.commission_role === 'original' ? 'Staff A' : 'Staff B'})
+                                          </span>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <span className={`font-bold ${comm.commission_amount < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                              {comm.commission_amount < 0 ? '-' : ''}₹{Math.abs(comm.commission_amount || 0)}
+                                            </span>
+                                            <span className={`text-[8px] px-1 rounded uppercase tracking-tighter ${
+                                              comm.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-orange-50 text-orange-600 border border-orange-100'
+                                            }`}>
+                                              {comm.status}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

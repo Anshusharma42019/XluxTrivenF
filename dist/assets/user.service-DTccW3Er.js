@@ -1,1 +1,0 @@
-import{I as e}from"./index-PHX7ojnW.js";var t=t=>e.get(`/users`,{params:t}).then(e=>e.data.data),n=t=>e.post(`/users`,t).then(e=>e.data.data),r=(t,n)=>e.patch(`/users/${t}`,n).then(e=>e.data.data),i=t=>e.delete(`/users/${t}`),a=()=>e.get(`/users/stats/shipment-counts`).then(e=>e.data.data);export{r as a,t as i,i as n,a as r,n as t};

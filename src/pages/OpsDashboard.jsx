@@ -518,7 +518,7 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-              {[(filters.status === 'verified' ? 'Phone' : 'AWB'), 'Customer', 'City/State', 'Courier', 'Status', 'Platform', 'Order Date', 'Status Date', 'Attempts', '₹ Amount'].map(h => (
+              {[(['verified', 'verifiedSales', 'verifiedSupport'].includes(filters.status) ? 'Phone Number' : 'AWB'), 'Customer', 'City/State', (['verified', 'verifiedSales', 'verifiedSupport'].includes(filters.status) ? 'Staff / Verifier' : 'Courier'), 'Status', 'Platform', 'Order Date', 'Status Date', 'Attempts', '₹ Amount'].map(h => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
               {showActionColumn && <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: 11, whiteSpace: 'nowrap' }}>Action</th>}
@@ -561,8 +561,8 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                 <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12, ...textStyle }}>{s.courier_name || '—'}</td>
                 <td style={{ padding: '10px 10px', ...textStyle }}>{statusChip(s.status)}</td>
                 <td style={{ padding: '10px 10px', ...textStyle }}>
-                  <span style={{ background: s.platform === 'shiprocket' ? '#eff6ff' : '#f0fdf4', color: s.platform === 'shiprocket' ? '#2563eb' : '#16a34a', padding: '2px 7px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
-                    {s.platform === 'shiprocket' ? 'SR' : 'SM'}
+                  <span style={{ background: s.platform === 'verification' ? '#e0f2fe' : (s.platform === 'shiprocket' ? '#eff6ff' : '#f0fdf4'), color: s.platform === 'verification' ? '#0369a1' : (s.platform === 'shiprocket' ? '#2563eb' : '#16a34a'), padding: '2px 7px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
+                    {s.platform === 'verification' ? 'VER' : (s.platform === 'shiprocket' ? 'SR' : 'SM')}
                   </span>
                 </td>
                 <td style={{ padding: '10px 10px', color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap', ...textStyle }}>
@@ -989,9 +989,11 @@ export default function OpsDashboard() {
   // KPI cards config — role-based visibility
   const isAdminOrManager = ['admin', 'manager'].includes(user?.role?.toLowerCase());
   const kpiCards = kpis ? [
-    { key: 'verified',     label: 'Verified',           color: STATUS_COLORS.verified,      formatter: fmtNum },
+    { key: 'verified',     label: 'Verified (Total)',   color: STATUS_COLORS.verified,      formatter: fmtNum, subtext: 'Total verified orders sent from Verification to Ready to Ship' },
     { key: 'totalShipments', label: 'Total Shipments',  color: STATUS_COLORS.totalShipments,formatter: fmtNum, subtext: 'Orders created this period — all other cards are subsets of this number' },
     ...(isAdminOrManager ? [
+      { key: 'verifiedSales',   label: 'Verified Sales',   color: '#0284c7', formatter: fmtNum, subtext: 'Sales team verified & sent to Ready to Ship' },
+      { key: 'verifiedSupport', label: 'Verified Support', color: '#06b6d4', formatter: fmtNum, subtext: 'Support team verified & sent to Ready to Ship' },
       { key: 'totalSales',    label: 'Sales Orders',    color: '#7c3aed',                   formatter: fmtNum, subtext: 'Orders created by Sales team' },
       { key: 'totalSupport',  label: 'Support Orders',  color: '#0891b2',                   formatter: fmtNum, subtext: 'Orders created by Support team' },
     ] : []),

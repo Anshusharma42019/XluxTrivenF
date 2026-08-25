@@ -53,6 +53,12 @@ export const updateFollowupCommissionSettings = (body) => api.put('/commission/s
 export const getOrderActivity = (id) => api.get(`${BASE}/orders/${id}/notes`);
 export const sendToVerification = (id, body = {}) => api.post(`${BASE}/orders/${id}/send-to-verification`, body);
 export const getStaffCommissions = (params) => api.get('/commission/reorder', { params });
+export const getCommissionRecords = (params) => api.get('/commission/records', { params });
+export const getStaffCommissionRecordSummary = (params) => api.get('/commission/records/staff-summary', { params });
+export const markStaffCommissionRecordsPaid = (staffId, body) => api.post(`/commission/records/staff/${staffId}/pay-all`, body);
+export const markCommissionRecordPaid = (id) => api.patch(`/commission/records/${id}/pay`);
+export const reverseCommissionRecord = (id, note) => api.post(`/commission/records/${id}/reverse`, { note });
+export const getChainIntegrity = (leadId) => api.get(`/commission/chain/${leadId}/integrity`);
 
 // ── Courier ───────────────────────────────────────────────────────────────────
 export const checkServiceability = (params) => api.get(`${BASE}/courier/serviceability`, { params });

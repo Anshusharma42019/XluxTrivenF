@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 
 const PER_PAGE = 20;
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -61,6 +62,9 @@ function KpiCard({ label, value, colorHex, unit }) {
 }
 
 export default function ReorderCommission() {
+  const { user } = useAuth();
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
+
   // Settings
   const [settings, setSettings] = useState({
     commission_type: 'percent',
@@ -79,7 +83,7 @@ export default function ReorderCommission() {
   // Commission table
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
-  const [summary, setSummary] = useState({ total_amount: 0, pending: 0, paid: 0 });
+  const [summary, setSummary] = useState({ net_amount: 0, pending: 0, paid: 0 });
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth());
@@ -99,7 +103,7 @@ export default function ReorderCommission() {
       const params = {};
       if (filterMonth !== '') params.month = filterMonth;
       if (filterYear !== '') params.year = filterYear;
-      const res = await api.get('/commission/reorder/staff-summary', { params });
+      const res = await api.get('/commission/records/staff-summary', { params });
       setStaffList(res.data?.data || []);
     } catch { /* ignore */ }
   }, [filterMonth, filterYear]);
@@ -111,10 +115,10 @@ export default function ReorderCommission() {
       if (filterMonth !== '') params.month = filterMonth;
       if (filterYear !== '') params.year = filterYear;
       if (filterStatus) params.status = filterStatus;
-      const res = await api.get('/commission/reorder', { params });
+      const res = await api.get('/commission/records', { params });
       setData(res.data?.data?.data || []);
       setTotal(res.data?.data?.total || 0);
-      setSummary(res.data?.data?.summary || { total_amount: 0, pending: 0, paid: 0 });
+      setSummary(res.data?.data?.summary || { net_amount: 0, pending: 0, paid: 0 });
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, [filterMonth, filterYear, filterStatus]);
@@ -165,7 +169,7 @@ export default function ReorderCommission() {
       const body = {};
       if (filterMonth !== '') body.month = Number(filterMonth);
       if (filterYear !== '') body.year = Number(filterYear);
-      await api.post(`/commission/reorder/staff/${staffId}/pay-all`, body);
+      await api.post(`/commission/records/staff/${staffId}/pay-all`, body);
       loadStaff(); loadCommissions(page);
     } catch { /* ignore */ }
     finally { setStaffPayingId(null); }
@@ -174,7 +178,7 @@ export default function ReorderCommission() {
   const markPaid = async (id) => {
     setPayingId(id);
     try {
-      await api.patch(`/commission/reorder/${id}/pay`);
+      await api.patch(`/commission/records/${id}/pay`);
       loadStaff(); loadCommissions(page);
     } catch { /* ignore */ }
     finally { setPayingId(null); }
@@ -210,7 +214,7 @@ export default function ReorderCommission() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <KpiCard label="Total Revenue Generated" value={summary.total_amount} colorHex="#10b981" unit="REVENUE" />
+        <KpiCard label="Total Revenue Generated" value={summary.net_amount || summary.total_amount} colorHex="#10b981" unit="REVENUE" />
         <KpiCard label="Pending Payout" value={summary.pending} colorHex="#f97316" unit="PENDING" />
         <KpiCard label="Paid Commission" value={summary.paid} colorHex="#3b82f6" unit="PAID" />
       </div>
@@ -586,9 +590,11 @@ export default function ReorderCommission() {
                     </td>
                     <td className="py-6 px-4">
                       <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${
+                        row.entry_type === 'reversal' ? 'bg-red-50 text-red-600 border-red-100' :
                         row.commission_role === 'original' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'
                       }`}>
-                        {row.commission_role === 'original' ? '1st Delivery' : 'Re-Order'}
+                        {row.entry_type === 'reversal' ? 'Reversal / Correction' :
+                         row.commission_role === 'original' ? '1st Delivery' : 'Re-Order'}
                       </span>
                     </td>
                     <td className="py-6 px-4">
@@ -599,7 +605,9 @@ export default function ReorderCommission() {
                       <span className="font-black text-gray-900 font-mono">₹{row.order_sub_total?.toLocaleString()}</span>
                     </td>
                     <td className="py-6 px-4 text-right">
-                      <span className="font-black text-emerald-600 text-lg tracking-tighter">₹{(row.commission_amount || 0).toLocaleString()}</span>
+                      <span className={`font-black text-lg tracking-tighter ${row.commission_amount < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                        {row.commission_amount < 0 ? '-' : ''}₹{Math.abs(row.commission_amount || 0).toLocaleString()}
+                      </span>
                       <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-0.5">{row.commission_type}</p>
                     </td>
                     <td className="py-6 px-4 text-center">
@@ -613,18 +621,44 @@ export default function ReorderCommission() {
                       </div>
                     </td>
                     <td className="py-6 px-8 text-right">
-                      {row.status === 'pending' ? (
+                      {row.entry_type === 'reversal' ? (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50 px-2.5 py-1 rounded-md border border-red-100">Adjusted</span>
+                      ) : row.status === 'pending' ? (
                         <button onClick={() => markPaid(row._id)} disabled={payingId === row._id}
                           className="px-6 py-2.5 rounded-xl text-[10px] font-black text-white uppercase tracking-widest disabled:opacity-50 transition-all hover:shadow-xl active:scale-95 hover:scale-105"
                           style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
                           {payingId === row._id ? '...' : 'Payout'}
                         </button>
                       ) : (
-                         <div className="flex items-center justify-end gap-2 text-emerald-500">
-                           <span className="text-[10px] font-black uppercase tracking-widest">Settled</span>
-                           <div className="w-5 h-5 bg-emerald-50 rounded-full flex items-center justify-center">
-                             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={4} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                         <div className="flex items-center justify-end gap-3">
+                           <div className="flex items-center gap-1.5 text-emerald-500">
+                             <span className="text-[10px] font-black uppercase tracking-widest">Settled</span>
+                             <div className="w-5 h-5 bg-emerald-50 rounded-full flex items-center justify-center">
+                               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={4} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                             </div>
                            </div>
+                           {isAdmin && (
+                             <button
+                               onClick={async () => {
+                                 const note = window.prompt("Reason for this reversal (correction):");
+                                 if (note === null) return; // cancelled
+                                 if (!note.trim()) {
+                                   alert("Please provide a reason for the reversal.");
+                                   return;
+                                 }
+                                 try {
+                                   await api.post(`/commission/records/${row._id}/reverse`, { note: note.trim() });
+                                   loadStaff();
+                                   loadCommissions(page);
+                                 } catch (e) {
+                                   alert(e?.response?.data?.message || "Reversal failed");
+                                 }
+                               }}
+                               className="px-3 py-1.5 rounded-lg text-[9px] font-black text-red-600 bg-red-50 border border-red-100 hover:bg-red-500 hover:text-white transition-all active:scale-95 uppercase tracking-widest"
+                             >
+                               Reverse
+                             </button>
+                           )}
                          </div>
                       )}
                     </td>
