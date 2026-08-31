@@ -29,7 +29,6 @@ const PAGE_TITLES = {
   '/staff-activity': 'Staff Activity & Delivery Hub',
   '/commission-settings': 'Commission Settings',
   '/shipmaxx': 'ShipMaxx',
-  '/shipmaxx/ndr': 'ShipMaxx NDR Management',
   '/shipmaxx/followup': 'ShipMaxx Follow Up',
 };
 

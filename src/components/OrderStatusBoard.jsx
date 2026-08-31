@@ -13,7 +13,7 @@ const STATUS_LIST = [
   'RTO_DELIVERED',
   'IN_TRANSIT',
   'NEW',
-  'RTO_IN_TRANSIT',
+  'RTO_INTRANSIT',
   'OUT_FOR_DELIVERY',
   'REACHED_BACK_AT_SELLER_CITY',
   'UNDELIVERED_1ST_ATTEMPT',
@@ -115,14 +115,15 @@ const SMX_MAP = {
   PCN: 'PICKUP_CANCELLED',
   PKD: 'PICKUP_DONE',
   PKF: 'PICKUP_FAILED',
-  RRA: 'RTO_INTRANSIT',
+  RRA: 'RTO_INITIATED',
   RTD: 'RTO_DELIVERED',
   RTO: 'RTO_INITIATED',
-  RUN: 'RTO_UNDELIVERED',
+  RUN: 'RTO_INITIATED',
   SC:  'SHIPMENT_CANCELLED',
   SPB: 'SHIPMENT_BOOKED',
   SPD: 'PICKUP_SCHEDULED',
   UND: 'UNDELIVERED',
+  SHIPMENT_BOOKED: 'SHIPMENT_BOOKED',
 };
 
 const normalizeStatus = (status) => {
@@ -368,7 +369,7 @@ export default function OrderStatusBoard({
 
 
   const listedStatuses = new Set(STATUS_LIST.map(normalizeStatus));
-  const statusCards = allowedStatuses
+  const rawCards = allowedStatuses
     ? allowedStatuses.map(status => ({ status: normalizeStatus(status), count: statusCounts[normalizeStatus(status)] || 0 }))
     : [
         ...STATUS_LIST.map(status => ({ status: normalizeStatus(status), count: statusCounts[normalizeStatus(status)] || 0 })),
@@ -376,6 +377,13 @@ export default function OrderStatusBoard({
           .filter(item => item._id && !listedStatuses.has(normalizeStatus(item._id)))
           .map(item => ({ status: normalizeStatus(item._id), count: item.count })),
       ];
+
+  const seenStatuses = new Set();
+  const statusCards = rawCards.filter(card => {
+    if (seenStatuses.has(card.status)) return false;
+    seenStatuses.add(card.status);
+    return true;
+  });
 
   const orderTotal = deliveredStats.statusBreakdown.reduce((sum, item) => sum + item.count, 0);
 
@@ -627,9 +635,9 @@ export default function OrderStatusBoard({
                   <div className="mt-3" onClick={e => e.stopPropagation()}>
                     <p className="text-[11px] text-gray-400 font-semibold mb-2">Comments</p>
                     {/* Existing comments list */}
-                    {(comments[order._id] || []).filter(c => c.type !== 'followup').length > 0 && (
+                    {(comments[order._id] || []).filter(c => c.type !== 'followup' && !String(c.text || '').toLowerCase().includes('whatsapp reply')).length > 0 && (
                       <div className="mb-2 space-y-1.5 max-h-40 overflow-y-auto">
-                        {(comments[order._id] || []).filter(c => c.type !== 'followup').map((c, i) => (
+                        {(comments[order._id] || []).filter(c => c.type !== 'followup' && !String(c.text || '').toLowerCase().includes('whatsapp reply')).map((c, i) => (
                           <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
                             <div className="flex items-center justify-between gap-2 mb-0.5">
                               <span className="text-[10px] font-bold text-green-700">

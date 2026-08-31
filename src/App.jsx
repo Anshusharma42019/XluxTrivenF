@@ -113,7 +113,7 @@ function AppRoutes() {
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics', 'support']}><Shipmaxx /></ProtectedRoute>
         } />
         <Route path="shipmaxx/ndr" element={
-          <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics', 'support']}><ShipmaxxNdr /></ProtectedRoute>
+          <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics']}><ShipmaxxNdr /></ProtectedRoute>
         } />
         <Route path="shipmaxx/followup" element={
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics', 'support']}><ShipmaxxFollowup /></ProtectedRoute>
