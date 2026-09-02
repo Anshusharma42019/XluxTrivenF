@@ -172,14 +172,14 @@ export default function Tasks() {
   const openCreate = () => { setForm(EMPTY); setError(''); setPincodeData([]); setModal('create'); };
   const openEdit = (task) => {
     // Parse phone from description if task.phone is missing (legacy format: "Phone: xxx | rest")
-    let phone = task.phone || '';
+    let phone = task.phone || task.lead?.phone || '';
     let description = task.description || '';
     if (!phone && description.startsWith('Phone:')) {
       const match = description.match(/^Phone:\s*([^|]+)(?:\|(.*))?$/);
       if (match) { phone = match[1].trim(); description = (match[2] || '').trim(); }
     }
-    setForm({ title: task.title, description, problem: task.problem || '',
-      lead: task.lead?._id || '', assignedTo: task.assignedTo?._id || '',
+    setForm({ title: task.lead?.name || task.title || '', description, problem: task.problem || '',
+      lead: task.lead?._id || task.lead || '', assignedTo: task.assignedTo?._id || task.assignedTo || '',
       dueDate: task.dueDate?.slice(0, 16) || '',
       reminderAt: task.reminderAt?.slice(0, 16) || '',
       cityVillageType: task.cityVillageType || 'city', cityVillage: task.cityVillage || '', houseNo: task.houseNo || '',
@@ -237,7 +237,10 @@ export default function Tasks() {
           if (payload.lead) await updateLead(payload.lead, { cnp: false }).catch(() => {});
         }
       } else {
-        await updateTask(selected._id, payload);
+        const updatedTask = await updateTask(selected._id, payload);
+        if (updatedTask && selected?._id === updatedTask._id) {
+          setSelected(updatedTask);
+        }
       }
 
       const leadId = form.lead || (selected?.lead?._id || selected?.lead);

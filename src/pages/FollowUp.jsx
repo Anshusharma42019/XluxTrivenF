@@ -552,8 +552,20 @@ export default function FollowUp() {
 
   const dueCounts = followupNumbers.reduce((acc, n) => {
     acc[n] = all.filter(o => {
+      const allFUs = (o.followups || []);
+      const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
+      const totalFU = Number(settings.total_followups) || 5;
+      if (completedCount >= totalFU || o.sent_to_verification || o.followup_done) return false;
       const fu = getFollowup(o, n);
-      return fu && !fu.completed && previousFollowupsDone(o, n) && isDue(fu.scheduled_date, filterDelivered);
+      return fu && !fu.completed && previousFollowupsDone(o, n);
+    }).length;
+    return acc;
+  }, {});
+
+  const totalPendingCounts = followupNumbers.reduce((acc, n) => {
+    acc[n] = all.filter(o => {
+      const fu = getFollowup(o, n);
+      return fu && !fu.completed && previousFollowupsDone(o, n);
     }).length;
     return acc;
   }, {});
@@ -576,7 +588,15 @@ export default function FollowUp() {
       if (replyFilter !== 'any_reply' && !matchReply(o.interakt_reply_text, replyFilter)) return false;
     } else if (filterFollowupNum) {
       const fu = getFollowup(o, filterFollowupNum);
-      if (!fu || fu.completed || !previousFollowupsDone(o, filterFollowupNum) || !isDue(fu.scheduled_date, filterDelivered)) return false;
+      if (!fu || fu.completed || !previousFollowupsDone(o, filterFollowupNum)) return false;
+      if (filterFollowupNum === '1' && filterDelivered) {
+        if (!isDue(fu.scheduled_date, filterDelivered)) return false;
+      }
+    } else {
+      if (filterDelivered) {
+        const nextFU = allFUs.find(f => !f.completed);
+        if (!nextFU || !isDue(nextFU.scheduled_date, filterDelivered)) return false;
+      }
     }
     // Patient type filter
     if (filterPatientType === 'old' && !isOldPatient(o)) return false;
@@ -732,13 +752,26 @@ export default function FollowUp() {
           </div>
 
           <div className="flex flex-col sm:flex-row flex-1 items-center gap-3 w-full">
-            <div className="relative group w-full sm:w-auto sm:min-w-[160px]">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <input 
                 type="date" 
                 value={filterDelivered} 
                 onChange={(e) => { setFilterDelivered(e.target.value); setPage(1); }}
-                className="w-full bg-white border border-gray-100 rounded-2xl px-4 py-3 text-xs font-black text-gray-700 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                className="w-full bg-white border border-gray-100 rounded-2xl px-4 py-3 text-xs font-black text-gray-700 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm hover:shadow-md flex-1 sm:flex-none"
               />
+              {filterDelivered ? (
+                <button onClick={() => { setFilterDelivered(''); setPage(1); }}
+                  title="View All Dates (All Pending Followups)"
+                  className="px-3.5 py-3 rounded-2xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black uppercase tracking-wider hover:bg-amber-100 transition-all flex items-center gap-1.5 shadow-sm shrink-0">
+                  <span>🌐</span> All Dates
+                </button>
+              ) : (
+                <button onClick={() => { setFilterDelivered(toDateInputValue(new Date())); setPage(1); }}
+                  title="Filter by Today's Date"
+                  className="px-3.5 py-3 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black uppercase tracking-wider hover:bg-emerald-100 transition-all flex items-center gap-1.5 shadow-sm shrink-0">
+                  <span>📅</span> Today Only
+                </button>
+              )}
             </div>
 
             <div className="relative w-full sm:flex-1 sm:max-w-[300px]">

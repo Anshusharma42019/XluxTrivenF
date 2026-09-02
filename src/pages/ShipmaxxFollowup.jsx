@@ -122,6 +122,43 @@ export default function ShipmaxxFollowup() {
   const [completedPage, setCompletedPage] = useState(1);
   const [completedLoading, setCompletedLoading] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [bookedSearchAll, setBookedSearchAll] = useState([]); // all booked kits for searched phone
+  const [showAddonForm, setShowAddonForm] = useState(false);
+  const [addonFields, setAddonFields] = useState({ medicine: '', price: '', notes: '' });
+  const [addonModalOpen, setAddonModalOpen] = useState(false);
+  const [addonForm, setAddonForm] = useState({ medicine: '', price: '', notes: '', targetOrder: null });
+  const [addonSaving, setAddonSaving] = useState(false);
+
+  const openAddonModal = (order) => {
+    const target = order || selected;
+    if (!target) return;
+    setAddonForm({
+      targetOrder: target,
+      medicine: target.order_items?.[0]?.name || '',
+      price: target.sub_total ?? target.amount ?? '',
+      notes: ''
+    });
+    setAddonModalOpen(true);
+  };
+
+  const handleAddonSubmit = async (e) => {
+    e.preventDefault();
+    if (!addonForm.targetOrder) return;
+    setAddonSaving(true);
+    try {
+      await handleSendToVerification(addonForm.targetOrder._id, {
+        medicine: addonForm.medicine,
+        price: addonForm.price,
+        notes: addonForm.notes,
+        source: 'add_on'
+      });
+      setAddonModalOpen(false);
+    } catch (err) {
+      alert(err?.response?.data?.message || err.message);
+    } finally {
+      setAddonSaving(false);
+    }
+  };
   const [activity, setActivity] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -220,6 +257,43 @@ export default function ShipmaxxFollowup() {
     load(false).then(() => loadCompleted(false, 1));
   }, [load, loadCompleted]);
 
+  // Fetch ALL booked orders for the searched phone (unlimited — Kit 3,4,5,6... all included)
+  useEffect(() => {
+    if (!search) { setBookedSearchAll([]); return; }
+    smxSvc.getCompletedFollowUps({ page: 1, per_page: 500, search })
+      .then(res => setBookedSearchAll(Array.isArray(res.data?.data?.data) ? res.data.data.data : []))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  // Re-fetch completed list when search changes while on Done tab
+  useEffect(() => {
+    if (showCompleted) {
+      setCompletedPage(1);
+      loadCompleted(false, 1, search);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, showCompleted]);
+
+  // Auto-switch to Done tab when active has NO results but bookedSearchAll has matches
+  useEffect(() => {
+    if (!search || showCompleted) return;
+    const activeMatch = all.some(o => {
+      const q = search.toLowerCase();
+      return (
+        o.billing_customer_name?.toLowerCase().includes(q) ||
+        o.billing_phone?.includes(q) ||
+        o.order_id?.toString().includes(q) ||
+        o.awb_code?.toLowerCase().includes(q)
+      );
+    });
+    if (!activeMatch && bookedSearchAll.length > 0) {
+      setShowCompleted(true);
+      setCompletedPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, bookedSearchAll]);
+
   useEffect(() => {
     const openId = searchParams.get('openId');
     if (openId) {
@@ -305,11 +379,15 @@ export default function ShipmaxxFollowup() {
     finally { setDoneLoading(null); }
   };
 
-  const handleSendToVerification = async (oid) => {
-    if (!window.confirm('Send this customer back to Verification for a new cycle?')) return;
+  const handleSendToVerification = async (oid, customPayload = {}) => {
+    const isAddon = customPayload?.source === 'add_on';
+    const confirmMsg = isAddon
+      ? `Send Add-on Order (Amount: ₹${customPayload.price || 'N/A'}) to Verification?`
+      : 'Send this customer back to Verification for a new cycle?';
+    if (!window.confirm(confirmMsg)) return;
     setDoneLoading(String(oid));
     try {
-      await smxSvc.sendToVerification(oid);
+      await smxSvc.sendToVerification(oid, customPayload);
       const orderData = (selected && String(selected._id) === String(oid)) ? selected : all.find(o => String(o._id) === String(oid));
       setAll(prev => prev.filter(o => String(o._id) !== String(oid)));
       if (orderData) {
@@ -441,6 +519,12 @@ export default function ShipmaxxFollowup() {
 
   const handleSelect = (order) => {
     setSelected(order); setNoteText(''); setActivity([]); setEditMode(false); setEditFields({});
+    setShowAddonForm(false);
+    setAddonFields({
+      medicine: order.order_items?.[0]?.name || '',
+      price: order.sub_total || '',
+      notes: ''
+    });
     setActivityLoading(true);
     smxSvc.getOrderActivity(order._id)
       .then(res => setActivity(Array.isArray(res.data?.data) ? res.data.data : []))
@@ -450,8 +534,11 @@ export default function ShipmaxxFollowup() {
 
   const dueCounts = followupNumbers.reduce((acc, n) => {
     acc[n] = all.filter(o => {
+      const allFUs = (o.followups || []);
+      const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
+      if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
       const fu = getFollowup(o, n);
-      return fu && !fu.completed && previousFollowupsDone(o, n) && isDue(fu.scheduled_date, filterDelivered);
+      return fu && !fu.completed && previousFollowupsDone(o, n);
     }).length;
     return acc;
   }, {});
@@ -460,13 +547,8 @@ export default function ShipmaxxFollowup() {
     const allFUs = (o.followups || []);
     const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
     if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
-    if (filterFollowupNum === 'replies') {
-      if (!o.interakt_reply_text || o.interakt_reply_read) return false;
-      if (replyFilter !== 'any_reply' && !matchReply(o.interakt_reply_text, replyFilter)) return false;
-    } else if (filterFollowupNum) {
-      const fu = getFollowup(o, filterFollowupNum);
-      if (!fu || fu.completed || !previousFollowupsDone(o, filterFollowupNum) || !isDue(fu.scheduled_date, filterDelivered)) return false;
-    }
+
+    // When searching: bypass tab/date filter — show ALL matching orders across all followup numbers
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -476,11 +558,42 @@ export default function ShipmaxxFollowup() {
         o.awb_code?.toLowerCase().includes(q)
       );
     }
+
+    if (filterFollowupNum === 'replies') {
+      if (!o.interakt_reply_text || o.interakt_reply_read) return false;
+      if (replyFilter !== 'any_reply' && !matchReply(o.interakt_reply_text, replyFilter)) return false;
+    } else if (filterFollowupNum) {
+      const fu = getFollowup(o, filterFollowupNum);
+      if (!fu || fu.completed || !previousFollowupsDone(o, filterFollowupNum)) return false;
+      if (filterFollowupNum === '1' && filterDelivered) {
+        if (!isDue(fu.scheduled_date, filterDelivered)) return false;
+      }
+    } else {
+      if (filterDelivered) {
+        const nextFU = allFUs.find(f => !f.completed);
+        if (!nextFU || !isDue(nextFU.scheduled_date, filterDelivered)) return false;
+      }
+    }
     return true;
   });
 
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
   const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  // Booked kits matching search — uses bookedSearchAll (fetches up to 500, so Kit 3,4,5,6... all included)
+  const bookedSearchMatches = bookedSearchAll;
+
+  // Filter completedList by search term for Done tab rendering
+  const displayCompletedList = completedList.filter(o => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      o.billing_customer_name?.toLowerCase().includes(q) ||
+      o.billing_phone?.includes(q) ||
+      o.order_id?.toString().includes(q) ||
+      o.awb_code?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="min-h-full bg-glow pb-10 px-3 sm:px-6 lg:px-8 space-y-8 pt-4">
@@ -526,7 +639,7 @@ export default function ShipmaxxFollowup() {
               className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition whitespace-nowrap ${!showCompleted && filterFollowupNum === 'replies' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-500 hover:bg-indigo-50'}`}>
               💬 Replies ({all.filter(o => !!o.interakt_reply_text && !o.interakt_reply_read && !o.sent_to_verification && !o.followup_done && (completedMap[o._id] ?? (o.followups||[]).filter(f=>f.completed).length) < TOTAL_FU).length})
             </button>
-            <button onClick={() => { setShowCompleted(true); setCompletedPage(1); loadCompleted(1, search); }}
+            <button onClick={() => { setShowCompleted(true); setCompletedPage(1); loadCompleted(false, 1, search); }}
               className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition whitespace-nowrap ${showCompleted ? 'bg-gray-800 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}>
               ✅ Done ({completedTotal})
             </button>
@@ -534,14 +647,29 @@ export default function ShipmaxxFollowup() {
 
 
           <div className="flex flex-col sm:flex-row flex-1 items-center gap-3 w-full">
-            <input type="date" value={filterDelivered} onChange={e => { setFilterDelivered(e.target.value); setPage(1); }}
-              className="bg-white border border-gray-100 rounded-2xl px-4 py-3 text-xs font-black text-gray-700 focus:ring-4 focus:ring-emerald-500/10 transition shadow-sm hover:shadow-md w-full sm:w-auto" />
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <input type="date" value={filterDelivered} onChange={e => { setFilterDelivered(e.target.value); setPage(1); }}
+                className="bg-white border border-gray-100 rounded-2xl px-4 py-3 text-xs font-black text-gray-700 focus:ring-4 focus:ring-emerald-500/10 transition shadow-sm hover:shadow-md flex-1 sm:flex-none" />
+              {filterDelivered ? (
+                <button onClick={() => { setFilterDelivered(''); setPage(1); }}
+                  title="View All Dates (All Pending Followups)"
+                  className="px-3.5 py-3 rounded-2xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black uppercase tracking-wider hover:bg-amber-100 transition-all flex items-center gap-1.5 shadow-sm shrink-0">
+                  <span>🌐</span> All Dates
+                </button>
+              ) : (
+                <button onClick={() => { setFilterDelivered(toDateInputValue(new Date())); setPage(1); }}
+                  title="Filter by Today's Date"
+                  className="px-3.5 py-3 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black uppercase tracking-wider hover:bg-emerald-100 transition-all flex items-center gap-1.5 shadow-sm shrink-0">
+                  <span>📅</span> Today Only
+                </button>
+              )}
+            </div>
 
             <div className="relative w-full sm:flex-1 sm:max-w-[300px]">
               <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
               </svg>
-              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search name, phone, awb..."
+              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); setCompletedPage(1); }} placeholder="Search name, phone, awb..."
                 className="w-full pl-11 pr-5 py-3 rounded-2xl border border-gray-100 bg-white text-xs font-bold text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-emerald-400/20 transition shadow-sm" />
             </div>
 
@@ -593,16 +721,16 @@ export default function ShipmaxxFollowup() {
             <div className="flex items-center justify-center h-64 gap-3 text-gray-400">
               <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />Loading completed follow ups...
             </div>
-          ) : completedList.length === 0 ? (
+          ) : displayCompletedList.length === 0 ? (
             <div className="p-20 text-center">
               <div className="w-20 h-20 rounded-[2.5rem] bg-gray-100 flex items-center justify-center mx-auto mb-6 text-gray-300">
                 <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
               </div>
-              <p className="text-xl font-bold text-gray-400">No completed follow-ups yet</p>
+              <p className="text-xl font-bold text-gray-400">{search ? 'No matching completed follow-ups found' : 'No completed follow-ups yet'}</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-50/50">
-              {completedList.map((o, i) => (
+              {displayCompletedList.map((o, i) => (
                 <div key={o._id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/30 transition-colors">
                   <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                     <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${ROLE_GRADIENT[i % 5]} flex items-center justify-center text-white font-black shrink-0 shadow`}>{initials(o.billing_customer_name)}</div>
@@ -637,7 +765,7 @@ export default function ShipmaxxFollowup() {
                       <button onClick={() => !o.sent_to_verification && handleSendToVerification(o._id)}
                         disabled={doneLoading === String(o._id) || !!o.sent_to_verification}
                         className={`flex-1 sm:flex-none px-3 py-2 sm:py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition ${o.sent_to_verification ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white disabled:opacity-50'}`}>
-                        {o.sent_to_verification ? '✓ Sent' : doneLoading === String(o._id) ? '...' : 'Verification'}
+                        {o.sent_to_verification ? '✓ Order Booked' : doneLoading === String(o._id) ? '...' : 'Verification'}
                       </button>
                       <button onClick={() => handleSelect(o)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 text-gray-700 hover:bg-emerald-600 hover:text-white transition-all shadow-sm shrink-0">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
@@ -652,11 +780,11 @@ export default function ShipmaxxFollowup() {
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/50">
               <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Page {completedPage} of {tp}</span>
               <div className="flex items-center gap-2">
-                <button onClick={() => { const p = Math.max(1, completedPage - 1); setCompletedPage(p); loadCompleted(p, search); }} disabled={completedPage === 1}
+                <button onClick={() => { const p = Math.max(1, completedPage - 1); setCompletedPage(p); loadCompleted(false, p, search); }} disabled={completedPage === 1}
                   className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-30 transition-all">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m15 18-6-6 6-6" /></svg>
                 </button>
-                <button onClick={() => { const p = Math.min(tp, completedPage + 1); setCompletedPage(p); loadCompleted(p, search); }} disabled={completedPage === tp}
+                <button onClick={() => { const p = Math.min(tp, completedPage + 1); setCompletedPage(p); loadCompleted(false, p, search); }} disabled={completedPage === tp}
                   className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-30 transition-all">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" /></svg>
                 </button>
@@ -672,12 +800,12 @@ export default function ShipmaxxFollowup() {
               <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />Loading follow ups...
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-20 text-center">
+            <div className="p-14 text-center">
               <div className="w-20 h-20 rounded-[2.5rem] bg-emerald-50 flex items-center justify-center mx-auto mb-6 text-emerald-300">
                 <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </div>
-              <p className="text-xl font-bold text-gray-400">No {filterFollowupNum ? `${ordinal(Number(filterFollowupNum) - 1)} ` : ''}follow-ups found</p>
-              <p className="text-sm text-gray-300 mt-2">{search ? 'Try a different search' : 'Nothing due on selected date'}</p>
+              <p className="text-xl font-bold text-gray-400">No {filterFollowupNum && filterFollowupNum !== 'replies' ? `${ordinal(Number(filterFollowupNum) - 1)} ` : ''}follow-ups found</p>
+              <p className="text-sm text-gray-300 mt-2">{search ? 'Try a different search' : 'No pending calls found in this category'}</p>
             </div>
           ) : (
             <div className="overflow-x-auto no-scrollbar">
@@ -848,6 +976,37 @@ export default function ShipmaxxFollowup() {
               </div>
             </div>
           )}
+          {/* ── Booked orders from same phone (shown inline during search) ── */}
+          {!showCompleted && bookedSearchMatches.length > 0 && (
+            <div className="border-t-2 border-orange-100 mt-2">
+              <div className="px-4 sm:px-6 py-3 bg-orange-50 flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">🔖 Order Booked ({bookedSearchMatches.length})</span>
+                <span className="text-[10px] text-orange-400 font-bold">— Same number, sent to verification</span>
+              </div>
+              <div className="divide-y divide-orange-50">
+                {bookedSearchMatches.map((o, i) => (
+                  <div key={o._id} className="p-4 bg-orange-50/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-black shrink-0 shadow">{initials(o.billing_customer_name)}</div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-800 text-sm truncate">
+                          {o.billing_customer_name}
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-100 text-purple-700 border border-purple-200">Kit {o.kit_number || (i + 1)}</span>
+                          <span className="ml-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest bg-orange-100 text-orange-600 border border-orange-200">✓ Order Booked</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">{o.billing_phone} · {o.awb_code}</p>
+                        <p className="text-[10px] text-orange-500 font-bold mt-0.5">{o.order_items?.[0]?.name} · ₹{o.sub_total} · Delivered: {formatDate(o.delivered_at || o.createdAt, { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => handleSelect(o)}
+                      className="shrink-0 px-4 py-2 rounded-xl bg-gray-900 text-white text-[10px] font-black uppercase tracking-widest shadow active:scale-95 transition-all">
+                      View Details
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -893,7 +1052,7 @@ export default function ShipmaxxFollowup() {
                     <DetailRow label="Medicine" value={selected.order_items?.[0]?.name || '—'} />
                     <DetailRow label="Courier" value={selected.courier_name} />
                     <DetailRow label="Payment" value={selected.payment_method} />
-                    <DetailRow label="Amount" value={`₹${selected.sub_total}`} />
+                    <DetailRow label="Amount" value={selected.sub_total != null ? `₹${selected.sub_total}` : (selected.amount != null ? `₹${selected.amount}` : '—')} />
                     <DetailRow label="Delivered" value={formatDate(selected.delivered_at || selected.createdAt, { day: '2-digit', month: 'short', year: 'numeric' })} />
                     {editMode ? (
                       <div className="flex items-start gap-3 py-2 border-b border-gray-50">
@@ -947,7 +1106,15 @@ export default function ShipmaxxFollowup() {
                     <div className="space-y-2 mt-2">
                       <div className="p-3 bg-red-50/50 rounded-xl border border-red-100 shadow-sm">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-red-400 block mb-1">Reported Problem</span>
-                        <span className="text-sm text-gray-800 font-medium whitespace-pre-wrap">{selected.verification_problem || selected.problem || selected.lead_id?.problem || 'No problem recorded'}</span>
+                        <span className="text-sm text-gray-800 font-medium whitespace-pre-wrap">
+                          {(() => {
+                            const raw = selected.verification_problem || selected.problem || selected.lead_id?.problem || '';
+                            if (raw.startsWith('Add-on Medicine:')) {
+                              return selected.lead_id?.problem || selected.problem || 'No problem recorded';
+                            }
+                            return raw || 'No problem recorded';
+                          })()}
+                        </span>
                       </div>
                       <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 shadow-sm">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400 block mb-1">Order Remarks</span>
@@ -1036,17 +1203,37 @@ export default function ShipmaxxFollowup() {
                   </div>
                 </div>
 
-                {/* Send to Verification */}
-                <div className="mt-6">
+                {/* Send to Verification & Add-on Order Section */}
+                <div className="mt-6 space-y-3">
+                  {/* Add-on Order Popup Trigger Card */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/80 border border-orange-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
+                        ➕
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-orange-950 uppercase tracking-wider">Add-on / Re-Order Verification</h4>
+                        <p className="text-[10px] font-bold text-orange-600">Open popup to enter custom Add-on medicine, price & remarks</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAddonModal(selected)}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 text-white hover:from-orange-600 hover:to-amber-700 text-xs font-black uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
+                      <span>➕</span> OPEN ADD-ON POPUP
+                    </button>
+                  </div>
+
+                  {/* Standard Re-Verification Button */}
                   <button onClick={() => !selected.sent_to_verification && handleSendToVerification(selected._id)}
                     disabled={doneLoading === String(selected._id) || !!selected.sent_to_verification}
-                    className={`w-full py-3 text-xs font-black rounded-xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all uppercase tracking-widest flex items-center justify-center gap-2 ${selected.sent_to_verification ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white disabled:opacity-50'}`}>
+                    className={`w-full py-3 text-xs font-black rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-2 ${selected.sent_to_verification ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg hover:shadow-xl active:scale-[0.98]'}`}>
                     {doneLoading === String(selected._id) ? (
                       <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> SENDING...</>
                     ) : selected.sent_to_verification ? (
-                      <><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> SENT TO VERIFICATION</>
+                      <><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> ✓ ORDER BOOKED</>
                     ) : (
-                      <><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> SEND TO VERIFICATION</>
+                      <><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> QUICK SEND TO VERIFICATION</>
                     )}
                   </button>
                 </div>
@@ -1225,6 +1412,49 @@ export default function ShipmaxxFollowup() {
               <button type="button" onClick={() => setApptModalOpen(false)} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">Cancel</button>
               <button type="submit" form="smx-appt-form" disabled={apptLoading} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-white shadow-md transition-all active:scale-95 disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
                 {apptLoading ? 'Booking...' : 'Book Appointment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add-on Re-Order Verification Popup Modal ── */}
+      {addonModalOpen && addonForm.targetOrder && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-fadeIn">
+            <div className="px-6 py-5 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-orange-500 to-amber-600 text-white">
+              <div>
+                <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                  <span>➕</span> Add-on Re-Order Verification
+                </h3>
+                <p className="text-xs text-orange-100 font-bold mt-0.5">
+                  {addonForm.targetOrder.billing_customer_name} · {addonForm.targetOrder.billing_phone}
+                </p>
+              </div>
+              <button onClick={() => setAddonModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <form id="smx-addon-modal-form" onSubmit={handleAddonSubmit} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-orange-900 mb-1 block">Add-on Product / Medicine *</label>
+                  <input required className={inputCls} value={addonForm.medicine} onChange={e => setAddonForm(p => ({ ...p, medicine: e.target.value }))} placeholder="e.g. Migraine Wellness / Extra Syrup" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-orange-900 mb-1 block">Price / Amount (₹) *</label>
+                  <input required type="number" className={inputCls} value={addonForm.price} onChange={e => setAddonForm(p => ({ ...p, price: e.target.value }))} placeholder="e.g. 700" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-orange-900 mb-1 block">Add-on Remarks / Problem Notes</label>
+                  <textarea className={inputCls + ' resize-none'} rows={3} value={addonForm.notes} onChange={e => setAddonForm(p => ({ ...p, notes: e.target.value }))} placeholder="Enter specific add-on order notes or patient complaint..." />
+                </div>
+              </form>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button type="button" onClick={() => setAddonModalOpen(false)} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button type="submit" form="smx-addon-modal-form" disabled={addonSaving} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-white shadow-md transition-all active:scale-95 disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)' }}>
+                {addonSaving ? 'Saving & Sending...' : '🚀 Save & Send to Verification'}
               </button>
             </div>
           </div>
