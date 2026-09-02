@@ -224,7 +224,13 @@ export default function ShipmaxxFollowup() {
     if (!silent) { setLoading(true); setError(''); }
     try {
       const res = await smxSvc.getOrdersWithFollowUps();
-      setAll(Array.isArray(res.data?.data) ? res.data.data : []);
+      const list = Array.isArray(res.data?.data) ? res.data.data : [];
+      list.sort((a, b) => {
+        const da = new Date(a.delivered_at || a.status_updated_at || a.createdAt || 0).getTime();
+        const db = new Date(b.delivered_at || b.status_updated_at || b.createdAt || 0).getTime();
+        return db - da;
+      });
+      setAll(list);
     } catch (e) { if (!silent) setError(e?.response?.data?.message || e.message); }
     finally { if (!silent) setLoading(false); }
   }, []);
@@ -844,7 +850,7 @@ export default function ShipmaxxFollowup() {
                         <td className="py-3 xl:py-4 px-2 xl:px-4">
                           <p className="text-sm font-bold text-gray-700">{o.billing_phone}</p>
                           <p className="text-[10px] font-bold text-gray-400 uppercase">{o.billing_city}{o.billing_state ? `, ${o.billing_state}` : ''}</p>
-                          {o.interakt_reply_text && !o.interakt_reply_read && (
+                          {filterFollowupNum === 'replies' && o.interakt_reply_text && !o.interakt_reply_read && (
                             <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6">
                               <span>💬</span>
                               <span>{o.interakt_reply_text}</span>
@@ -859,7 +865,7 @@ export default function ShipmaxxFollowup() {
                         </td>
                         <td className="py-3 xl:py-4 px-2 xl:px-4 text-center">
                           <span className="text-xs xl:text-sm font-bold text-gray-600 bg-gray-50 px-2 xl:px-3 py-1 xl:py-1.5 rounded-lg xl:rounded-xl border border-gray-100">
-                            {formatDate(o.delivered_at || o.createdAt, { day: '2-digit', month: 'short' })}
+                            {formatDate(o.delivered_at || o.status_updated_at || o.createdAt, { day: '2-digit', month: 'short' })}
                           </span>
                         </td>
                         <td className="py-3 xl:py-4 px-1 xl:px-4">
@@ -918,7 +924,7 @@ export default function ShipmaxxFollowup() {
                           <div className="min-w-0 flex-1">
                             <p className="font-bold text-gray-900 text-sm truncate">{o.billing_customer_name}</p>
                             <p className="text-[10px] font-bold text-gray-400 truncate">{o.billing_phone} · {o.billing_city}</p>
-                            {o.interakt_reply_text && !o.interakt_reply_read && (
+                            {filterFollowupNum === 'replies' && o.interakt_reply_text && !o.interakt_reply_read && (
                               <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6 max-w-full">
                                 <span className="shrink-0">💬</span>
                                 <span className="break-words line-clamp-2">{o.interakt_reply_text}</span>
