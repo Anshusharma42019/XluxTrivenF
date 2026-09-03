@@ -128,8 +128,17 @@ function NdrList({ onSelectNdr, onUseAwb }) {
     if (f) params.from = f;
     if (t) params.to = t;
     smxSvc.getNdrList(params)
-      .then(r => setNdrs(r.data?.data?.data || r.data?.data || []))
-      .catch(() => {})
+      .then(r => {
+        let rawData = r.data?.data;
+        while (rawData && typeof rawData === 'object' && !Array.isArray(rawData)) {
+          if (Array.isArray(rawData.data)) { rawData = rawData.data; break; }
+          if (Array.isArray(rawData.items)) { rawData = rawData.items; break; }
+          if (rawData.data !== undefined) { rawData = rawData.data; }
+          else { break; }
+        }
+        setNdrs(Array.isArray(rawData) ? rawData : []);
+      })
+      .catch(() => setNdrs([]))
       .finally(() => setLoading(false));
   }, [from, to]);
 
@@ -144,7 +153,8 @@ function NdrList({ onSelectNdr, onUseAwb }) {
     return `https://shipmaxx.in/track/${n.awb_code}`;
   };
 
-  const filtered = ndrs.filter(n => {
+  const safeNdrs = Array.isArray(ndrs) ? ndrs : [];
+  const filtered = safeNdrs.filter(n => {
     if (attempt !== 'all') {
       const a = Number(n.attempts ?? 1);
       if (attempt === '4+' ? a < 4 : a !== Number(attempt)) return false;
