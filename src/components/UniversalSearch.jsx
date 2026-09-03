@@ -37,6 +37,7 @@ export default function UniversalSearch() {
         setIsOpen(true);
       } catch (err) {
         console.error('Search failed', err);
+        setResults([]);
       } finally {
         setLoading(false);
       }
