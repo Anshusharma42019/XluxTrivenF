@@ -15,6 +15,8 @@ const translations = {
     'Ready to Ship': 'Ready to Ship',
     'Shiprocket': 'Shiprocket',
     'NDR': 'NDR',
+    'Account': 'Account',
+    'Delivered Data': 'Delivered Data',
     'Team': 'Team',
     'Appointments': 'Appointments',
     'Attendance': 'Attendance',

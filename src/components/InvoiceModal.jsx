@@ -16,18 +16,13 @@ const fmtCurrency = (n) => {
   return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const getYearMonthPrefix = (order) => {
-  const dateStr = order.delivered_at || order.status_updated_at || order.createdAt || new Date();
-  const date = new Date(dateStr);
-  const yy = date.getFullYear().toString().slice(-2);
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  return `${yy}${mm}`;
-};
-
 const generateBillNumber = (order) => {
-  const prefix = getYearMonthPrefix(order);
-  const idPart = (order.order_id || order._id || '000').toString();
-  return `TW-${prefix}-${idPart}`;
+  if (!order) return 'TW-0001';
+  if (order.bill_seq) return `TW-${String(order.bill_seq).padStart(4, '0')}`;
+  if (order.bill_number && /^TW-\d{4,}$/.test(order.bill_number)) return order.bill_number;
+  if (order.billNumber && /^TW-\d{4,}$/.test(order.billNumber)) return order.billNumber;
+  const idPart = (order.order_id || order._id || '000').toString().replace(/\D/g, '').slice(-4) || '0001';
+  return `TW-${idPart.padStart(4, '0')}`;
 };
 
 const formatDate = (d) => {
@@ -77,16 +72,17 @@ const PRINT_STYLES = `
     }
     
     .invoice-print-area {
-      padding: 0 !important;
+      padding: 12mm 10mm !important;
       margin: 0 !important;
       width: 100% !important;
+      box-sizing: border-box !important;
     }
 
     .invoice-no-print { display: none !important; }
     .invoice-print-only { display: inline-block !important; }
     
     @page {
-      margin: 12mm 10mm;
+      margin: 0;
       size: A4;
     }
   }
@@ -193,32 +189,46 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
 
   const productLineItems = lineItemsState.map((li) => {
     // Adjust totalInclusive by subtracting doctor fee proportionally
-    const adjustedTotal = li.totalInclusive * deductionRatio;
+    const adjustedTotal = Math.round((li.totalInclusive * deductionRatio) * 100) / 100;
     const qty = li.qty;
     const taxPct = li.taxPct;
     const totalInclusive = adjustedTotal;
 
-    const amount = totalInclusive / (1 + (taxPct / 100));
-    const rate = qty > 0 ? amount / qty : 0;
-    const gstAmount = totalInclusive - amount;
+    let amount = 0;
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
 
-    const cgst = isIntraState ? gstAmount / 2 : 0;
-    const sgst = isIntraState ? gstAmount / 2 : 0;
-    const igst = isIntraState ? 0 : gstAmount;
+    if (taxPct > 0) {
+      amount = Math.round((totalInclusive / (1 + (taxPct / 100))) * 100) / 100;
+      const gstAmount = Math.round((totalInclusive - amount) * 100) / 100;
+
+      if (isIntraState) {
+        cgst = Math.round((gstAmount / 2) * 100) / 100;
+        sgst = Math.round((gstAmount - cgst) * 100) / 100;
+      } else {
+        igst = gstAmount;
+      }
+    } else {
+      amount = totalInclusive;
+    }
+
+    const rate = qty > 0 ? Math.round((amount / qty) * 100) / 100 : 0;
+    const itemTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
 
     return {
       id: li.id,
       description: li.description,
       hsn: li.hsn,
       qty,
-      rate: Math.round(rate * 100) / 100,
-      amount: Math.round(amount * 100) / 100,
+      rate,
+      amount,
       gstRate: taxPct > 0 ? `${taxPct}%` : 'Exempt\n(0%)',
       taxPct,
-      cgst: Math.round(cgst * 100) / 100,
-      sgst: Math.round(sgst * 100) / 100,
-      igst: Math.round(igst * 100) / 100,
-      total: Math.round(totalInclusive * 100) / 100,
+      cgst,
+      sgst,
+      igst,
+      total: itemTotal,
       isDoctor: false,
     };
   });
@@ -232,12 +242,12 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
   }));
 
   // Calculations for totals — include doctor fee in taxable value and grand total
-  const totalTaxableValue = productLineItems.reduce((s, li) => s + li.amount, 0) + doctorFeeNum;
-  const totalCGST = productLineItems.reduce((s, li) => s + li.cgst, 0);
-  const totalSGST = productLineItems.reduce((s, li) => s + li.sgst, 0);
-  const totalIGST = productLineItems.reduce((s, li) => s + li.igst, 0);
-  const totalGST = totalCGST + totalSGST + totalIGST;
-  const grandTotal = totalTaxableValue + totalGST;
+  const totalTaxableValue = Math.round((productLineItems.reduce((s, li) => s + li.amount, 0) + doctorFeeNum) * 100) / 100;
+  const totalCGST = Math.round(productLineItems.reduce((s, li) => s + li.cgst, 0) * 100) / 100;
+  const totalSGST = Math.round(productLineItems.reduce((s, li) => s + li.sgst, 0) * 100) / 100;
+  const totalIGST = Math.round(productLineItems.reduce((s, li) => s + li.igst, 0) * 100) / 100;
+  const totalGST = Math.round((totalCGST + totalSGST + totalIGST) * 100) / 100;
+  const grandTotal = Math.round((totalTaxableValue + totalGST) * 100) / 100;
 
   const handlePrint = () => {
     const payload = {
@@ -275,7 +285,10 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
     };
 
     saveInvoiceHistory(payload).catch(err => console.error('Failed to save invoice history:', err));
+    const origTitle = document.title;
+    document.title = '';
     window.print();
+    setTimeout(() => { document.title = origTitle; }, 1000);
   };
 
   // ── Styles ──

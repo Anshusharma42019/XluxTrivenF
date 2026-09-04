@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { fetchShipments, saveInvoiceHistory } from '../services/opsDashboard.service';
+import { saveInvoiceHistory } from '../services/opsDashboard.service';
+import * as smxSvc from '../services/shipmaxx.service';
 
 /* ─── Company Constants ──────────────────────────────────────────────────── */
 const COMPANY = {
@@ -20,18 +21,12 @@ const formatDate = (d) => {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-const getYearMonthPrefix = (order) => {
-  const dateStr = order.delivered_at || order.status_updated_at || order.createdAt || new Date();
-  const date = new Date(dateStr);
-  const yy = date.getFullYear().toString().slice(-2);
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  return `${yy}${mm}`;
-};
-
 const generateBillNumber = (order, idx) => {
-  const prefix = getYearMonthPrefix(order);
-  const seqPart = String(idx).padStart(4, '0');
-  return `TW-${prefix}-${seqPart}`;
+  if (!order) return `TW-${String(idx || 1).padStart(4, '0')}`;
+  if (order.bill_seq) return `TW-${String(order.bill_seq).padStart(4, '0')}`;
+  if (order.bill_number && /^TW-\d{4,}$/.test(order.bill_number)) return order.bill_number;
+  if (order.billNumber && /^TW-\d{4,}$/.test(order.billNumber)) return order.billNumber;
+  return `TW-${String(idx || 1).padStart(4, '0')}`;
 };
 
 /* ─── Month list ─────────────────────────────────────────────────────────── */
@@ -105,39 +100,54 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
   const productLines = initialItems.map((li, i) => {
     const qty = li.qty;
     const taxPct = li.taxPct;
-    const totalInclusive = li.totalInclusive * deductionRatio;
+    const totalInclusive = Math.round((li.totalInclusive * deductionRatio) * 100) / 100;
 
-    const amount = totalInclusive / (1 + taxPct / 100);
-    const rate = qty > 0 ? amount / qty : 0;
-    const gstAmount = totalInclusive - amount;
-    const cgst = isIntraState ? gstAmount / 2 : 0;
-    const sgst = isIntraState ? gstAmount / 2 : 0;
-    const igst = isIntraState ? 0 : gstAmount;
+    let amount = 0;
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    if (taxPct > 0) {
+      amount = Math.round((totalInclusive / (1 + (taxPct / 100))) * 100) / 100;
+      const gstAmount = Math.round((totalInclusive - amount) * 100) / 100;
+
+      if (isIntraState) {
+        cgst = Math.round((gstAmount / 2) * 100) / 100;
+        sgst = Math.round((gstAmount - cgst) * 100) / 100;
+      } else {
+        igst = gstAmount;
+      }
+    } else {
+      amount = totalInclusive;
+    }
+
+    const rate = qty > 0 ? Math.round((amount / qty) * 100) / 100 : 0;
+    const lineTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
 
     return {
       sno: i + 2,
       description: li.description,
       hsn: li.hsn,
       qty,
-      rate: Math.round(rate * 100) / 100,
-      amount: Math.round(amount * 100) / 100,
+      rate,
+      amount,
       gstRate: taxPct > 0 ? `${taxPct}%` : 'Exempt (0%)',
-      cgst: Math.round(cgst * 100) / 100,
-      sgst: Math.round(sgst * 100) / 100,
-      igst: Math.round(igst * 100) / 100,
-      total: Math.round(totalInclusive * 100) / 100,
+      cgst,
+      sgst,
+      igst,
+      total: lineTotal,
       isDoctor: false
     };
   });
 
   const allLines = [doctorConsultation, ...productLines];
 
-  const totalTaxableValue = productLines.reduce((s, li) => s + li.amount, 0) + doctorFeeNum;
-  const totalCGST = productLines.reduce((s, li) => s + li.cgst, 0);
-  const totalSGST = productLines.reduce((s, li) => s + li.sgst, 0);
-  const totalIGST = productLines.reduce((s, li) => s + li.igst, 0);
-  const totalGST = totalCGST + totalSGST + totalIGST;
-  const grandTotal = totalTaxableValue + totalGST;
+  const totalTaxableValue = Math.round((productLines.reduce((s, li) => s + li.amount, 0) + doctorFeeNum) * 100) / 100;
+  const totalCGST = Math.round(productLines.reduce((s, li) => s + li.cgst, 0) * 100) / 100;
+  const totalSGST = Math.round(productLines.reduce((s, li) => s + li.sgst, 0) * 100) / 100;
+  const totalIGST = Math.round(productLines.reduce((s, li) => s + li.igst, 0) * 100) / 100;
+  const totalGST = Math.round((totalCGST + totalSGST + totalIGST) * 100) / 100;
+  const grandTotal = Math.round((totalTaxableValue + totalGST) * 100) / 100;
 
   return {
     billNumber,
@@ -176,10 +186,8 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
   };
 }
 
-
-
 /* ─── Main BulkInvoiceModal Component ───────────────────────────────────── */
-export default function BulkInvoiceModal({ isOpen, onClose }) {
+export default function BulkInvoiceModal({ isOpen, onClose, selectedOrders = [], from = '', to = '' }) {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
@@ -197,44 +205,61 @@ export default function BulkInvoiceModal({ isOpen, onClose }) {
   const effectiveGstRate = gstSelect === 'custom' ? (Number(customGst) || 0) : Number(gstSelect);
 
   const handleDownload = async () => {
+    // Open print window synchronously during user click to bypass browser popup blockers
+    let win = null;
+    try {
+      win = window.open('', '_blank');
+      if (win) {
+        win.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Generating Bulk Invoices...</title></head>
+          <body style="font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f0fdf4; color: #166534;">
+            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+            <h2 style="margin: 0 0 8px 0; font-weight: 800;">Generating Bulk Tax Invoices...</h2>
+            <p style="margin: 0; color: #15803d; font-size: 14px;">Fetching delivered shipments from server. Please wait...</p>
+          </body>
+          </html>
+        `);
+      }
+    } catch (e) {
+      console.warn('Failed to pre-open window:', e);
+    }
+
     setLoading(true);
     setStatus('Fetching delivered shipments...');
     setCount(null);
     try {
-      const fromDate = new Date(selectedYear, selectedMonth, 1);
-      const toDate = new Date(selectedYear, selectedMonth + 1, 0);
-      
-      const fmtLocalDate = (date) => {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-      };
-
       let allShipments = [];
-      let page = 1;
-      let totalPages = 1;
 
-      while (page <= totalPages) {
-        setStatus(`Fetching page ${page}${totalPages > 1 ? ' of ' + totalPages : ''}...`);
-        const data = await fetchShipments({
-          status: 'delivered',
-          preset: 'custom',
-          from: fmtLocalDate(fromDate),
-          to: fmtLocalDate(toDate),
-          page,
-          limit: 100,
+      if (selectedOrders && selectedOrders.length > 0) {
+        allShipments = selectedOrders;
+      } else {
+        let fetchFrom = from;
+        let fetchTo = to;
+
+        if (!fetchFrom || !fetchTo) {
+          const fromDate = new Date(selectedYear, selectedMonth, 1);
+          const toDate = new Date(selectedYear, selectedMonth + 1, 0);
+          const fmtLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          fetchFrom = fmtLocalDate(fromDate);
+          fetchTo = fmtLocalDate(toDate);
+        }
+
+        const res = await smxSvc.getDeliveredOrders({
+          page: 1,
+          per_page: 'all',
+          from: fetchFrom,
+          to: fetchTo,
         });
-        const ships = data?.shipments || [];
-        allShipments = [...allShipments, ...ships];
-        totalPages = data?.pages || 1;
-        page++;
-        if (ships.length === 0) break;
+        const d = res.data?.data || {};
+        allShipments = Array.isArray(d.data) ? d.data : Array.isArray(d) ? d : [];
       }
 
       setCount(allShipments.length);
 
       if (allShipments.length === 0) {
+        if (win && !win.closed) win.close();
         setStatus('❌ No delivered shipments found for this month.');
         setLoading(false);
         return;
@@ -355,14 +380,14 @@ export default function BulkInvoiceModal({ isOpen, onClose }) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Bulk Invoices — ${monthLabel}</title>
+<title>Bulk Tax Invoices - ${monthLabel}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:#fff;font-family:'Inter','Segoe UI',Arial,sans-serif;}
-.invoice-page{page-break-after:always;}
+.invoice-page{page-break-after:always;padding:12mm 10mm;box-sizing:border-box;}
 .invoice-page:last-child{page-break-after:avoid;}
-@page{margin:10mm 8mm;size:A4;}
-@media print{.no-print{display:none!important;}.invoice-page{page-break-after:always;}}
+@page{margin:0;size:A4;}
+@media print{.no-print{display:none!important;page-break-after:avoid!important;height:0!important;margin:0!important;padding:0!important;}.invoice-page:not(.no-print){page-break-after:always;padding:12mm 10mm;box-sizing:border-box;}}
 </style>
 </head>
 <body>
@@ -385,14 +410,22 @@ ${invoicesHTML}
 </body>
 </html>`;
 
-      const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, '_blank');
-      if (!win) {
-        alert('Pop-up blocked! Please allow pop-ups for this site and try again.');
+      if (win && !win.closed) {
+        win.document.open();
+        win.document.write(fullHTML);
+        win.document.close();
+      } else {
+        const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const newWin = window.open(url, '_blank');
+        if (!newWin) {
+          alert('Pop-up blocked! Please allow pop-ups for this site and try again.');
+        }
       }
+
       setStatus(`✅ ${allShipments.length} invoices opened in new tab — use Print → Save as PDF.`);
     } catch (err) {
+      if (win && !win.closed) win.close();
       console.error('Bulk invoice error:', err);
       setStatus('❌ Error fetching shipments. Please try again.');
     } finally {

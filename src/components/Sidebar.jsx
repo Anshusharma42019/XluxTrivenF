@@ -108,6 +108,15 @@ const NAV_GROUPS = [
     ]
   },
   {
+    label: 'Account',
+    items: [
+      {
+        to: '/account', label: 'Delivered Data', roles: ['admin', 'manager', 'sales', 'logistics', 'support'],
+        icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+      },
+    ]
+  },
+  {
     label: 'Team',
     items: [
       {
