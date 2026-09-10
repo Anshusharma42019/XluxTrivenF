@@ -17,7 +17,7 @@ export default defineConfig({
       // and Vite forwards the request server-side (no cross-origin issue).
       // Change target to 'http://localhost:5000' to develop against local backend instead.
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/ping': {
