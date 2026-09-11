@@ -201,10 +201,18 @@ export default function OrderStatusBoard({
   filterParams,
   platform = 'shiprocket',
   allowedStatuses,
+  department: externalDept,
 }) {
   const { t } = useLanguage();
   const svc = platform === 'shipmaxx' ? smxSvc : srSvc;
   const [fastPoll, setFastPoll] = useState(false);
+  const [department, setDepartment] = useState(externalDept || 'all');
+
+  useEffect(() => {
+    if (externalDept !== undefined) {
+      setDepartment(externalDept);
+    }
+  }, [externalDept]);
   const [deliveredStats, setDeliveredStats] = useState({ count: 0, revenue: 0, statusBreakdown: [] });
   const [datePreset, setDatePreset] = useState(defaultPreset);
   const [filterFrom, setFilterFrom] = useState('');
@@ -248,7 +256,7 @@ export default function OrderStatusBoard({
       setStatusError('');
       setStatusOrders([]);
     }
-    svc.getStatusOrders({ ...params, status, limit: 100 }).then(res => {
+    svc.getStatusOrders({ ...params, status, limit: 500 }).then(res => {
       const list = res.data?.data?.data || [];
       setStatusOrders(list);
       const c = {};
@@ -262,8 +270,12 @@ export default function OrderStatusBoard({
 
   // Effective parameters: either passed from prop or generated from local state
   const getParams = useCallback(() => {
-    return filterParams || getDateParams(datePreset, filterFrom, filterTo);
-  }, [filterParams, datePreset, filterFrom, filterTo]);
+    const base = filterParams || getDateParams(datePreset, filterFrom, filterTo);
+    if (department !== 'all') {
+      return { ...base, department };
+    }
+    return base;
+  }, [filterParams, datePreset, filterFrom, filterTo, department]);
 
   // Load delivered stats and status orders whenever params or selected status change
   useEffect(() => {
@@ -309,9 +321,10 @@ export default function OrderStatusBoard({
   const applyDateFilter = useCallback((preset = datePreset, from = filterFrom, to = filterTo) => {
     if (preset === 'custom' && (!from || !to)) return;
     const params = getDateParams(preset, from, to);
+    if (department !== 'all') params.department = department;
     loadDelivered(params);
     if (selectedStatus) loadStatusOrders(selectedStatus, params);
-  }, [datePreset, filterFrom, filterTo, loadDelivered, loadStatusOrders, selectedStatus]);
+  }, [datePreset, filterFrom, filterTo, department, loadDelivered, loadStatusOrders, selectedStatus]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -393,7 +406,7 @@ export default function OrderStatusBoard({
 
   return (
     <div className={cardCls} style={cardStyle}>
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 mb-6">
         <div>
           <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest">{t(title)}</h3>
           <p className="text-[10px] sm:text-[11px] font-bold text-gray-400 mt-1 uppercase">

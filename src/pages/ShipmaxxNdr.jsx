@@ -11,6 +11,8 @@ const Field = ({ label, children }) => (
   </div>
 );
 
+const DEPARTMENTS = ['migraine', 'piles'];
+
 const ATTEMPT_OPTIONS = [
   { value: 'all', label: 'All Attempts' },
   { value: '1',   label: '1st Attempt' },
@@ -113,11 +115,16 @@ function NdrDetailPanel({ ndr, onClose, onUseAwb }) {
 }
 
 // ── NDR List ──────────────────────────────────────────────────────────────────
-function NdrList({ onSelectNdr, onUseAwb }) {
+function NdrList({ department: externalDept, setDepartment: externalSetDept, onSelectNdr, onUseAwb }) {
   const [ndrs, setNdrs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [from, setFrom] = useState(() => new Date().toISOString().split('T')[0]);
   const [to, setTo]     = useState(() => new Date().toISOString().split('T')[0]);
+  const [department, setDepartment] = useState(externalDept || 'all');
+
+  useEffect(() => {
+    if (externalDept !== undefined) setDepartment(externalDept);
+  }, [externalDept]);
   const [attempt, setAttempt] = useState('all');
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState(null);
@@ -153,8 +160,23 @@ function NdrList({ onSelectNdr, onUseAwb }) {
     return `https://shipmaxx.in/track/${n.awb_code}`;
   };
 
+  const getDept = (n) => {
+    if (!n) return 'migraine';
+    const dept = String(n.department || '').toLowerCase();
+    if (dept === 'piles') return 'piles';
+    if (dept === 'migraine') return 'migraine';
+    const rawStr = (typeof n === 'string' ? n : JSON.stringify(n)).toLowerCase();
+    const pilesKeywords = ['piles', 'gastro', 'bawasir', 'bavasir', 'hemorrhoid', 'fissure', 'fistula', 'bhagander'];
+    if (pilesKeywords.some(kw => rawStr.includes(kw))) return 'piles';
+    return 'migraine';
+  };
+
   const safeNdrs = Array.isArray(ndrs) ? ndrs : [];
   const filtered = safeNdrs.filter(n => {
+    if (department !== 'all') {
+      const d = getDept(n);
+      if (department !== d) return false;
+    }
     if (attempt !== 'all') {
       const a = Number(n.attempts ?? 1);
       if (attempt === '4+' ? a < 4 : a !== Number(attempt)) return false;
@@ -170,6 +192,9 @@ function NdrList({ onSelectNdr, onUseAwb }) {
     }
     return true;
   });
+
+  const migraineCount = safeNdrs.filter(n => getDept(n) === 'migraine').length;
+  const pilesCount = safeNdrs.filter(n => getDept(n) === 'piles').length;
 
   if (detail) {
     return (
@@ -190,6 +215,50 @@ function NdrList({ onSelectNdr, onUseAwb }) {
           <span className="font-bold text-gray-700 text-sm">ShipMaxx NDR List</span>
           <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded-full border">{filtered.length} records</span>
         </div>
+
+        {/* Department Filter Buttons */}
+        <div className="flex items-center gap-2 flex-wrap py-1">
+          <span className="text-xs font-bold text-gray-500 uppercase tracking-wide mr-1">Department:</span>
+          <button
+            type="button"
+            onClick={() => setDepartment('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              department === 'all'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            <span>All</span>
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'all' ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-600'}`}>{safeNdrs.length}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDepartment('migraine')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              department === 'migraine'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+            }`}
+          >
+            <span>Migraine</span>
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'migraine' ? 'bg-purple-700 text-white' : 'bg-purple-100 text-purple-800'}`}>{migraineCount}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDepartment('piles')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              department === 'piles'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+            }`}
+          >
+            <span>Piles</span>
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'piles' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>{pilesCount}</span>
+          </button>
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <input placeholder="Search AWB / name / order…" value={search} onChange={e => setSearch(e.target.value)}
             className="flex-1 min-w-[180px] border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white" />
@@ -205,7 +274,7 @@ function NdrList({ onSelectNdr, onUseAwb }) {
             className="px-5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition disabled:opacity-50">
             {loading ? '…' : 'Search'}
           </button>
-          <button onClick={() => { setFrom(''); setTo(''); setSearch(''); fetchNDR('', ''); }}
+          <button onClick={() => { setFrom(''); setTo(''); setSearch(''); setAttempt('all'); setDepartment('all'); fetchNDR('', ''); }}
             className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 text-xs font-bold hover:bg-gray-300 transition">
             Reset
           </button>
@@ -223,7 +292,7 @@ function NdrList({ onSelectNdr, onUseAwb }) {
             <table className="hidden sm:table w-full text-sm">
               <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase tracking-[0.1em] sticky top-0">
                 <tr>
-                  {['AWB', 'Order ID', 'Customer', 'Reason', 'Attempts', 'Raised', 'Actions'].map(h => (
+                  {['AWB', 'Order ID', 'Customer', 'Department', 'Reason', 'Attempts', 'Raised', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left font-bold">{h}</th>
                   ))}
                 </tr>
@@ -239,6 +308,17 @@ function NdrList({ onSelectNdr, onUseAwb }) {
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-gray-600">{n.channel_order_id}</td>
                     <td className="px-4 py-3 font-semibold text-gray-800 text-[13px]">{n.customer_name?.trim() || '—'}</td>
+                    <td className="px-4 py-3">
+                      {getDept(n) === 'piles' ? (
+                        <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
+                          Piles
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 uppercase">
+                          Migraine
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-[11px] text-gray-500 max-w-[200px] truncate" title={n.reason}>{n.reason || '—'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex w-6 h-6 items-center justify-center rounded-lg bg-red-50 text-red-700 font-bold text-[11px] border border-red-100">
@@ -564,6 +644,7 @@ const TABS = [
 
 export default function ShipmaxxNdr() {
   const [tab, setTab] = useState('board');
+  const [department, setDepartment] = useState('all');
   const [actionAwb, setActionAwb] = useState('');
   const [actionType, setActionType] = useState('reattempt');
 
@@ -576,8 +657,18 @@ export default function ShipmaxxNdr() {
 
   return (
     <div className="space-y-4">
-      {/* Tab bar */}
-      <div className="flex justify-start sm:justify-end overflow-x-auto pb-1 scrollbar-hide">
+      {/* Tab bar with Department Filter */}
+      <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 pb-1 scrollbar-hide">
+        <select
+          value={department}
+          onChange={e => setDepartment(e.target.value)}
+          className="h-11 px-3.5 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-700 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer uppercase tracking-wider transition hover:border-gray-300 shrink-0"
+        >
+          <option value="all">ALL DEPARTMENTS</option>
+          <option value="migraine">MIGRAINE</option>
+          <option value="piles">PILES</option>
+        </select>
+
         <div className="inline-flex gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm whitespace-nowrap">
           {TABS.map(t => {
             const active = tab === t.id;
@@ -596,8 +687,8 @@ export default function ShipmaxxNdr() {
         </div>
       </div>
 
-      {tab === 'board'  && <OrderStatusBoard platform="shipmaxx" title="ShipMaxx Undelivered Orders" defaultStatus="UNDELIVERED_1ST_ATTEMPT" allowedStatuses={['NEW', 'PICKUP_SCHEDULED', 'SHIPMENT_BOOKED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'UNDELIVERED_1ST_ATTEMPT', 'UNDELIVERED_2ND_ATTEMPT', 'UNDELIVERED_3RD_ATTEMPT', 'UNDELIVERED']} />}
-      {tab === 'list'   && <NdrList onSelectNdr={() => {}} onUseAwb={handleUseAwb} />}
+      {tab === 'board'  && <OrderStatusBoard platform="shipmaxx" title="ShipMaxx Undelivered Orders" department={department} defaultStatus="UNDELIVERED_1ST_ATTEMPT" allowedStatuses={['NEW', 'PICKUP_SCHEDULED', 'SHIPMENT_BOOKED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'UNDELIVERED_1ST_ATTEMPT', 'UNDELIVERED_2ND_ATTEMPT', 'UNDELIVERED_3RD_ATTEMPT', 'UNDELIVERED']} />}
+      {tab === 'list'   && <NdrList department={department} setDepartment={setDepartment} onSelectNdr={() => {}} onUseAwb={handleUseAwb} />}
       {tab === 'action' && <NdrActionPanel prefillAwb={actionAwb} prefillAction={actionType} />}
       {tab === 'notes'  && <NdrNotesPanel />}
     </div>
