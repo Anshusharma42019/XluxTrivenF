@@ -380,6 +380,17 @@ export default function OrderStatusBoard({
     return acc;
   }, {});
 
+  // Compute total undelivered count across all attempt variants
+  const totalUndelivered = Object.entries(statusCounts).reduce((sum, [k, v]) => {
+    if (k.startsWith('UNDELIVERED') || k === 'DELIVERY_EXCEPTION' || k === 'UND') {
+      return sum + v;
+    }
+    return sum;
+  }, 0);
+  if (totalUndelivered > 0 || statusCounts['UNDELIVERED'] === undefined) {
+    statusCounts['UNDELIVERED'] = totalUndelivered;
+  }
+
 
   const listedStatuses = new Set(STATUS_LIST.map(normalizeStatus));
   const rawCards = allowedStatuses
@@ -508,12 +519,27 @@ export default function OrderStatusBoard({
               <h4 className="text-sm font-semibold text-gray-700">{formatStatusLabel(selectedStatus)} Details</h4>
               <p className="text-xs text-gray-400 mt-1 flex items-center">
                 <span>{statusOrders.length} orders loaded</span>
-                {deliveredStats?.statusBreakdown?.find(b => normalizeStatus(b._id) === normalizeStatus(selectedStatus)) && (
-                  <>
-                    <span className="mx-2">•</span>
-                    <span>Exact Total Amount: <span className="font-bold text-emerald-600">{formatMoney(deliveredStats.statusBreakdown.find(b => normalizeStatus(b._id) === normalizeStatus(selectedStatus)).revenue || 0)}</span></span>
-                  </>
-                )}
+                {(() => {
+                  const selectedBreakdown = deliveredStats?.statusBreakdown?.find(b => normalizeStatus(b._id) === normalizeStatus(selectedStatus));
+                  let rev = selectedBreakdown ? selectedBreakdown.revenue : null;
+                  if (rev === null && normalizeStatus(selectedStatus) === 'UNDELIVERED') {
+                    rev = deliveredStats?.statusBreakdown
+                      ?.filter(b => {
+                        const norm = normalizeStatus(b._id);
+                        return norm.startsWith('UNDELIVERED') || norm === 'DELIVERY_EXCEPTION' || norm === 'UND';
+                      })
+                      .reduce((s, b) => s + (b.revenue || 0), 0);
+                  }
+                  if (rev !== null && rev !== undefined) {
+                    return (
+                      <>
+                        <span className="mx-2">•</span>
+                        <span>Exact Total Amount: <span className="font-bold text-emerald-600">{formatMoney(rev)}</span></span>
+                      </>
+                    );
+                  }
+                  return null;
+                })()}
               </p>
             </div>
             <button onClick={() => { setSelectedStatus(''); setStatusOrders([]); }}
@@ -558,17 +584,10 @@ export default function OrderStatusBoard({
                         {formatStatusLabel(order.status || selectedStatus)}
                       </span>
                       <div className="flex flex-col items-end">
-                        {order.status_updated_at && (
-                          <span className="text-[10px] text-gray-500 font-bold bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                            {new Date(order.status_updated_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                            {', '}
-                            {new Date(order.status_updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                          </span>
-                        )}
                         {(normalizeStatus(order.status).includes('DELIVERY') || normalizeStatus(order.status).includes('UNDELIVERED')) && order.delivery_attempt && (
                           <span className="text-[9px] text-blue-600 font-extrabold mt-0.5 uppercase tracking-tighter bg-blue-50 px-1 rounded">
                             {order.delivery_attempt === 1 ? '1st' : order.delivery_attempt === 2 ? '2nd' : order.delivery_attempt === 3 ? '3rd' : `${order.delivery_attempt}th`} ATTEMPT
-                            {new Date(order.status_updated_at).toDateString() === new Date().toDateString() ? ' - TODAY' : ''}
+                            {order.status_updated_at && new Date(order.status_updated_at).toDateString() === new Date().toDateString() ? ' - TODAY' : ''}
                           </span>
                         )}
                       </div>

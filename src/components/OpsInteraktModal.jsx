@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchInteraktTemplates, sendInteraktMessages } from '../services/opsDashboard.service';
+import { MessageSquare, CheckCircle2, Package, AlertTriangle } from 'lucide-react';
 
 export default function OpsInteraktModal({ isOpen, onClose, targetShipment, filters, totalCount }) {
   const [templates, setTemplates] = useState([]);
@@ -100,9 +101,9 @@ export default function OpsInteraktModal({ isOpen, onClose, targetShipment, filt
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
               width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
-              💬
+              <MessageSquare size={22} style={{ color: '#fff' }} />
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, letterSpacing: '-0.3px' }}>
@@ -124,9 +125,9 @@ export default function OpsInteraktModal({ isOpen, onClose, targetShipment, filt
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{
                 width: 64, height: 64, borderRadius: '50%', background: '#dcfce7', color: '#16a34a',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 16px'
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
               }}>
-                ✓
+                <CheckCircle2 size={36} />
               </div>
               <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
                 Interakt Messaging Complete!
@@ -176,7 +177,7 @@ export default function OpsInteraktModal({ isOpen, onClose, targetShipment, filt
                 background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: 14, marginBottom: 20,
                 display: 'flex', gap: 12, alignItems: 'flex-start'
               }}>
-                <span style={{ fontSize: 20 }}>📦</span>
+                <Package size={22} style={{ color: '#166534', flexShrink: 0, marginTop: 2 }} />
                 <div style={{ fontSize: 13, color: '#166534' }}>
                   <strong>Data-Wise Variable Auto-Mapping:</strong><br />
                   We automatically pass customer & shipment values into your Interakt variables:
@@ -247,9 +248,11 @@ export default function OpsInteraktModal({ isOpen, onClose, targetShipment, filt
               {error && (
                 <div style={{
                   background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
-                  padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 20
+                  padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 20,
+                  display: 'flex', alignItems: 'center', gap: 6
                 }}>
-                  ⚠️ {error}
+                  <AlertTriangle size={15} />
+                  <span>{error}</span>
                 </div>
               )}
 
@@ -265,9 +268,10 @@ export default function OpsInteraktModal({ isOpen, onClose, targetShipment, filt
                   flex: 2, padding: '12px', borderRadius: 12, border: 'none',
                   background: sending ? '#93c5fd' : 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
                   color: '#ffffff', fontSize: 14, fontWeight: 700, cursor: sending ? 'wait' : 'pointer',
-                  boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)'
+                  boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
                 }}>
-                  {sending ? 'Sending via Interakt...' : (isSingle ? 'Send WhatsApp Message Now' : `Send to All (${totalCount || 'Selected'}) Now`)}
+                  <MessageSquare size={16} />
+                  <span>{sending ? 'Sending via Interakt...' : (isSingle ? 'Send WhatsApp Message Now' : `Send to All (${totalCount || 'Selected'}) Now`)}</span>
                 </button>
               </div>
             </>

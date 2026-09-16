@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  Package, User, MessageSquare, CheckCircle2, XCircle, RefreshCw,
+  Save, Edit3, FileText, BarChart3, RotateCcw, Clock, Trophy, Info,
+  Star, AlertTriangle, Zap, Check, X, Truck, Pill, ChevronUp, ChevronDown, ClipboardList
+} from 'lucide-react';
+import {
   fetchKPIs, fetchTrend, fetchFunnel, fetchRtoReasons,
   fetchAging, fetchLeaderboard, fetchShipments, fetchAlerts
 } from '../services/opsDashboard.service';
@@ -338,8 +343,10 @@ function AgingTable({ rows = [], title, color, emptyMsg, onVerifyClick, showVeri
       {rows.length > 5 && (
         <button onClick={() => setExpanded(!expanded)} style={{
           marginTop: 8, background: 'none', border: 'none', color: '#2563eb', fontSize: 12, fontWeight: 600,
-          cursor: 'pointer', padding: '4px 0',
-        }}>{expanded ? 'Show less ↑' : `Show all ${rows.length} ↓`}</button>
+          cursor: 'pointer', padding: '4px 0', display: 'inline-flex', alignItems: 'center', gap: 4
+        }}>
+          {expanded ? <>Show less <ChevronUp size={13} /></> : <>Show all {rows.length} <ChevronDown size={13} /></>}
+        </button>
       )}
     </div>
   );
@@ -359,9 +366,9 @@ function LeaderboardTable({ rows = [], sortKey, sortDir, onSort }) {
   ];
 
   const badge = (rate) => {
-    if (rate >= 80) return { bg: '#dcfce7', color: '#16a34a', label: '⭐ Excellent' };
-    if (rate >= 60) return { bg: '#fef9c3', color: '#ca8a04', label: '⚠ Average' };
-    return { bg: '#fee2e2', color: '#dc2626', label: '✗ Poor' };
+    if (rate >= 80) return { bg: '#dcfce7', color: '#16a34a', label: 'Excellent', icon: <Star size={12} style={{ color: '#16a34a', fill: '#16a34a' }} /> };
+    if (rate >= 60) return { bg: '#fef9c3', color: '#ca8a04', label: 'Average', icon: <AlertTriangle size={12} style={{ color: '#ca8a04' }} /> };
+    return { bg: '#fee2e2', color: '#dc2626', label: 'Poor', icon: <XCircle size={12} style={{ color: '#dc2626' }} /> };
   };
 
   return (
@@ -403,7 +410,9 @@ function LeaderboardTable({ rows = [], sortKey, sortDir, onSort }) {
                 <td style={{ padding: '12px 12px', color: STATUS_COLORS.undelivered }}>{r.undelivered}</td>
                 <td style={{ padding: '12px 12px', color: '#374151' }}>{r.avgTat}d</td>
                 <td style={{ padding: '12px 12px' }}>
-                  <span style={{ background: b.bg, color: b.color, padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{b.label}</span>
+                  <span style={{ background: b.bg, color: b.color, padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {b.icon} {b.label}
+                  </span>
                 </td>
               </tr>
             );
@@ -440,15 +449,17 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
       {/* Quick Switch Filter Pills for WhatsApp Replies */}
       {isUndeliveredView && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginRight: 6 }}>⚡ WhatsApp Quick Filters:</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Zap size={14} style={{ color: '#eab308' }} /> WhatsApp Quick Filters:
+          </span>
           <button onClick={() => onFilterChange('status', filters.status === 'interaktReplies' ? '' : 'interaktReplies')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #16a34a', background: filters.status === 'interaktReplies' ? '#16a34a' : '#f0fdf4', color: filters.status === 'interaktReplies' ? '#fff' : '#15803d', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
-            <span>💬</span> All WhatsApp Replies
+            <MessageSquare size={13} /> All WhatsApp Replies
           </button>
           <button onClick={() => onFilterChange('status', filters.status === 'reply_reattempt' ? '' : 'reply_reattempt')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #2563eb', background: filters.status === 'reply_reattempt' ? '#2563eb' : '#eff6ff', color: filters.status === 'reply_reattempt' ? '#fff' : '#1d4ed8', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
-            <span>🔄</span> Reattempt kar dijiye
+            <RotateCcw size={13} /> Reattempt kar dijiye
           </button>
           <button onClick={() => onFilterChange('status', filters.status === 'reply_dawa' ? '' : 'reply_dawa')} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid #059669', background: filters.status === 'reply_dawa' ? '#059669' : '#ecfdf5', color: filters.status === 'reply_dawa' ? '#fff' : '#047857', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' }}>
-            <span>💊</span> Mujhe apni dawa chahiye
+            <Pill size={13} /> Mujhe apni dawa chahiye
           </button>
         </div>
       )}
@@ -458,9 +469,9 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
         <select value={filters.status || ''} onChange={e => onFilterChange('status', e.target.value)}
           style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#374151', background: '#fff' }}>
           <option value="">All Statuses</option>
-          <option value="interaktReplies">💬 All WhatsApp Replies</option>
-          <option value="reply_reattempt">🔄 Reattempt kar dijiye (Replies)</option>
-          <option value="reply_dawa">💊 Mujhe apni dawa chahiye (Replies)</option>
+          <option value="interaktReplies">All WhatsApp Replies</option>
+          <option value="reply_reattempt">Reattempt kar dijiye (Replies)</option>
+          <option value="reply_dawa">Mujhe apni dawa chahiye (Replies)</option>
           <option value="verified">Verified</option>
           <option value="totalSales">Sales Orders</option>
           <option value="totalSupport">Support Orders</option>
@@ -499,7 +510,7 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
               color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
               boxShadow: '0 2px 6px rgba(22, 163, 74, 0.2)'
             }}>
-              💬 Send Interakt ({filters.status?.toLowerCase().includes('undelivered') ? 'Undelivered Data-Wise' : 'Filtered Data-Wise'})
+              <MessageSquare size={14} /> Send Interakt ({filters.status?.toLowerCase().includes('undelivered') ? 'Undelivered Data-Wise' : 'Filtered Data-Wise'})
             </button>
           )}
           <button onClick={onExportCsv} style={{
@@ -545,17 +556,6 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                 </td>
                 <td style={{ padding: '10px 10px', color: '#374151', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...textStyle }}>
                   <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.billing_customer_name || '—'}</div>
-                  {s.interakt_reply_text && (
-                    <div title={`Reply received: ${s.interakt_reply_text}`} style={{ 
-                      display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '4px', 
-                      padding: '2px 7px', background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac', 
-                      borderRadius: '6px', fontSize: '10px', fontWeight: 800, whiteSpace: 'normal', lineHeight: '1.25',
-                      boxShadow: '0 1px 2px rgba(22, 163, 74, 0.1)' 
-                    }}>
-                      <span>💬</span>
-                      <span>{s.interakt_reply_text}</span>
-                    </div>
-                  )}
                 </td>
                 <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12, ...textStyle }}>{[s.billing_city, s.billing_state].filter(Boolean).join(', ') || '—'}</td>
                 <td style={{ padding: '10px 10px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 12, ...textStyle }}>{s.courier_name || '—'}</td>
@@ -584,12 +584,14 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                           color: '#16a34a', fontSize: 11, fontWeight: 700, cursor: 'pointer', marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4
                         }}
                       >
-                        💬 WhatsApp
+                        <MessageSquare size={12} /> WhatsApp
                       </button>
                     )}
                     {(s.status.toLowerCase().includes('rto')) && (
                       s.rto_verification_action === 'wants_again' ? (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>Verified ✅</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <CheckCircle2 size={12} /> Verified
+                        </span>
                       ) : (
                         <button 
                           onClick={() => onVerifyClick(s)}
@@ -612,7 +614,7 @@ function ShipmentsTable({ data, filters, onFilterChange, onExportCsv, onVerifyCl
                           alignItems: 'center', gap: 4, transition: 'all .15s',
                         }}
                       >
-                        🧾 Invoice
+                        <FileText size={12} /> Invoice
                       </button>
                     )}
                   </td>
@@ -644,7 +646,11 @@ function AlertBanner({ alerts = [] }) {
   const [dismissed, setDismissed] = useState([]);
   const visible = alerts.filter((_, i) => !dismissed.includes(i));
   if (!visible.length) return null;
-  const sevColors = { critical: { bg: '#fee2e2', border: '#fca5a5', text: '#991b1b', icon: '🔴' }, high: { bg: '#fef3c7', border: '#fcd34d', text: '#92400e', icon: '🟡' }, medium: { bg: '#dbeafe', border: '#93c5fd', text: '#1e3a8a', icon: '🔵' } };
+  const sevColors = {
+    critical: { bg: '#fee2e2', border: '#fca5a5', text: '#991b1b', icon: <AlertTriangle size={16} color="#991b1b" /> },
+    high: { bg: '#fef3c7', border: '#fcd34d', text: '#92400e', icon: <AlertTriangle size={16} color="#92400e" /> },
+    medium: { bg: '#dbeafe', border: '#93c5fd', text: '#1e3a8a', icon: <Info size={16} color="#1e3a8a" /> }
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
       {visible.map((a, i) => {
@@ -816,12 +822,12 @@ const kpiIcons = {
 
 /* ─── TABS ────────────────────────────────────────────────────────────────── */
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: '📊' },
-  { id: 'rto', label: 'RTO Reasons', icon: '↩' },
-  { id: 'aging', label: 'Aging', icon: '⏱' },
-  { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
-  { id: 'shipments', label: 'Shipments', icon: '📦' },
-  { id: 'interakt_replies', label: 'WhatsApp Replies', icon: '💬' },
+  { id: 'overview', label: 'Overview', icon: <BarChart3 size={15} /> },
+  { id: 'rto', label: 'RTO Reasons', icon: <RotateCcw size={15} /> },
+  { id: 'aging', label: 'Aging', icon: <Clock size={15} /> },
+  { id: 'leaderboard', label: 'Leaderboard', icon: <Trophy size={15} /> },
+  { id: 'shipments', label: 'Shipments', icon: <Package size={15} /> },
+  { id: 'interakt_replies', label: 'WhatsApp Replies', icon: <MessageSquare size={15} /> },
 ];
 
 /* ─── Main Component ─────────────────────────────────────────────────────── */
@@ -862,19 +868,37 @@ export default function OpsDashboard() {
 
   const setLoad = (key, val) => setLoading(l => ({ ...l, [key]: val }));
 
-  const handleVerifySuccess = (orderId, action) => {
+  const handleVerifySuccess = (orderId, action, updatedOrder) => {
     // Update aging locally
     if (aging) {
       setAging(prev => ({
         ...prev,
-        rto_intersite_stuck: prev.rto_intersite_stuck.map(s => s.order_id === orderId ? { ...s, rto_verification_action: action } : s)
+        rto_intersite_stuck: prev.rto_intersite_stuck.map(s => {
+          if (s.order_id === orderId || s._id === orderId || s.awb_code === orderId) {
+            return {
+              ...s,
+              ...(action ? { rto_verification_action: action } : {}),
+              ...(updatedOrder?.comments ? { comments: updatedOrder.comments } : {})
+            };
+          }
+          return s;
+        })
       }));
     }
     // Update shipments locally
     if (shipments?.shipments) {
       setShipments(prev => ({
         ...prev,
-        shipments: prev.shipments.map(s => s.order_id === orderId ? { ...s, rto_verification_action: action } : s)
+        shipments: prev.shipments.map(s => {
+          if (s.order_id === orderId || s._id === orderId || s.awb_code === orderId) {
+            return {
+              ...s,
+              ...(action ? { rto_verification_action: action } : {}),
+              ...(updatedOrder?.comments ? { comments: updatedOrder.comments } : {})
+            };
+          }
+          return s;
+        })
       }));
     }
   };
@@ -1038,8 +1062,9 @@ export default function OpsDashboard() {
         <div className="no-print" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: '#0f172a', fontFamily: "'Outfit', sans-serif", letterSpacing: -0.5 }}>
-                📦 {['admin', 'manager'].includes(user?.role) ? 'Ops Dashboard' : 'My Ops Dashboard'}
+              <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: '#0f172a', fontFamily: "'Outfit', sans-serif", letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Package size={26} style={{ color: '#16a34a' }} />
+                <span>{['admin', 'manager'].includes(user?.role) ? 'Ops Dashboard' : 'My Ops Dashboard'}</span>
               </h1>
               {!['admin', 'manager'].includes(user?.role) && (
                 <span style={{
@@ -1047,7 +1072,7 @@ export default function OpsDashboard() {
                   borderRadius: 8, fontSize: 11, fontWeight: 700, padding: '3px 10px',
                   display: 'flex', alignItems: 'center', gap: 4,
                 }}>
-                  👤 My Data Only
+                  <User size={12} /> My Data Only
                 </span>
               )}
             </div>
@@ -1090,7 +1115,7 @@ export default function OpsDashboard() {
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(22,163,74,0.4)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(22,163,74,0.3)'; }}
             >
-              🧾 Bulk Invoices
+              <FileText size={15} /> Bulk Invoices
             </button>
           </div>
         </div>
@@ -1194,42 +1219,55 @@ export default function OpsDashboard() {
         {/* ── Aging Tab ── */}
         {activeTab === 'aging' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <SectionCard title="🕐 OFD > 2 Days" subtitle="Shipments stuck out-for-delivery for over 48 hours">
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.ofd_stuck || []} title="OFD Stuck" color={STATUS_COLORS.ofd} emptyMsg="No OFD-stuck shipments 🎉" />}
+            <SectionCard
+              title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Clock size={18} style={{ color: '#2563eb' }} /> OFD &gt; 2 Days</span>}
+              subtitle="Shipments stuck out-for-delivery for over 48 hours"
+            >
+              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.ofd_stuck || []} title="OFD Stuck" color={STATUS_COLORS.ofd} emptyMsg="No OFD-stuck shipments" />}
             </SectionCard>
-            <SectionCard title="🔄 Undelivered — 3+ Attempts" subtitle="Shipments that have failed delivery 3 or more times"
+            <SectionCard
+              title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><RotateCcw size={18} style={{ color: '#d97706' }} /> Undelivered — 3+ Attempts</span>}
+              subtitle="Shipments that have failed delivery 3 or more times"
               action={
                 <button onClick={() => handleOpenInteraktModal(null)} style={{
                   padding: '6px 14px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
                   color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                   boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
                 }}>
-                  💬 Interakt Template Send (Undelivered Data-Wise)
+                  <MessageSquare size={13} /> Interakt Template Send (Undelivered Data-Wise)
                 </button>
               }
             >
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.undelivered_3plus || []} title="3+ Attempts" color={STATUS_COLORS.undelivered} emptyMsg="No high-attempt shipments 🎉" showInterakt={true} onSendInterakt={handleOpenInteraktModal} />}
+              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.undelivered_3plus || []} title="3+ Attempts" color={STATUS_COLORS.undelivered} emptyMsg="No high-attempt shipments" showInterakt={true} onSendInterakt={handleOpenInteraktModal} />}
             </SectionCard>
-            <SectionCard title="🚚 RTO Intersite > 5 Days" subtitle="Return-in-transit shipments stuck for over 5 days">
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.rto_intersite_stuck || []} title="RTO Intersite Stuck" color={STATUS_COLORS.rtoIntersite} emptyMsg="No stuck RTO intersite shipments 🎉" showVerify={true} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />}
+            <SectionCard
+              title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Truck size={18} style={{ color: '#7c3aed' }} /> RTO Intersite &gt; 5 Days</span>}
+              subtitle="Return-in-transit shipments stuck for over 5 days"
+            >
+              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.rto_intersite_stuck || []} title="RTO Intersite Stuck" color={STATUS_COLORS.rtoIntersite} emptyMsg="No stuck RTO intersite shipments" showVerify={true} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />}
             </SectionCard>
           </div>
         )}
 
         {/* ── Leaderboard Tab ── */}
         {activeTab === 'leaderboard' && (
-          <SectionCard title="🏆 Courier Leaderboard" subtitle="Ranked by delivery success rate — click column headers to sort">
+          <SectionCard
+            title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Trophy size={18} style={{ color: '#eab308' }} /> Courier Leaderboard</span>}
+            subtitle="Ranked by delivery success rate — click column headers to sort"
+          >
             {loading.lb ? <Skeleton h={300} /> : <LeaderboardTable rows={sortedLeaderboard} sortKey={lbSort.key} sortDir={lbSort.dir} onSort={handleLbSort} />}
           </SectionCard>
         )}
 
         {/* ── Shipments Tab ── */}
         {activeTab === 'shipments' && (
-          <SectionCard title="📋 Shipment Detail" subtitle="All shipments with full filtering and export"
+          <SectionCard
+            title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ClipboardList size={18} style={{ color: '#2563eb' }} /> Shipment Detail</span>}
+            subtitle="All shipments with full filtering and export"
             action={
               shipmentFilters.status?.toLowerCase().includes('undelivered') ? (
-                <div style={{ background: '#dcfce7', color: '#15803d', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, border: '1px solid #86efac' }}>
-                  ⚡ Undelivered Data-Wise Messaging Active
+                <div style={{ background: '#dcfce7', color: '#15803d', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, border: '1px solid #86efac', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Zap size={14} /> Undelivered Data-Wise Messaging Active
                 </div>
               ) : undefined
             }

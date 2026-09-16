@@ -545,7 +545,7 @@ export default function StaffActivity() {
                 </thead>
                 <tbody>
                   {(() => {
-                    const rolesOrder = ['sales', 'support', 'logistics', 'doctor', 'manager'];
+                    const rolesOrder = ['sales', 'support', 'logistics', 'manager', 'doctor'];
                     const groups = {};
                     filteredStaff.forEach(row => {
                       const r = row.user?.role || 'other';
@@ -570,17 +570,26 @@ export default function StaffActivity() {
 
                       groups[role].forEach((row) => {
                         const u = row.user || {};
-                        const isSupport = u.role === 'support' || u.role === 'logistics';
-                        const newDel = row.newDeliveredCount || 0;
+                        const isSupport = u.role === 'support';
+                        const isLogistics = u.role === 'logistics';
+                        const ofdNotes = row.ofdCommentsCount || 0;
+                        const rtoNotes = row.rtoCommentsCount || 0;
+                        const newDel = isLogistics ? ofdNotes : (row.newDeliveredCount || 0);
                         const oldDel = isSupport 
-                          ? (row.supportOldDeliveredCount || row.oldDeliveredCount || 0) 
-                          : (row.salesOldDeliveredCount || 0);
+                          ? (row.supportOldDeliveredCount || 0) 
+                          : isLogistics 
+                          ? rtoNotes 
+                          : (row.salesOldDeliveredCount || row.oldDeliveredCount || 0);
                         const verif = row.verifiedCount || 0;
                         const rto = row.rtoCount || 0;
                         const totalDel = newDel + oldDel;
                         
                         // Progress percentage relative to maximum deliveries on leaderboard
-                        const maxDel = Math.max(...filteredStaff.map(s => (s.newDeliveredCount || 0) + (s.user?.role === 'support' ? (s.supportOldDeliveredCount || 0) : (s.salesOldDeliveredCount || 0))), 1);
+                        const maxDel = Math.max(...filteredStaff.map(s => {
+                          const r = s.user?.role;
+                          if (r === 'logistics') return (s.ofdCommentsCount || 0) + (s.rtoCommentsCount || 0);
+                          return (s.newDeliveredCount || 0) + (r === 'support' ? (s.supportOldDeliveredCount || 0) : (s.salesOldDeliveredCount || s.oldDeliveredCount || 0));
+                        }), 1);
                         const progRate = Math.round((totalDel / maxDel) * 100);
                         const b = badge(totalDel, verif);
 
@@ -596,8 +605,8 @@ export default function StaffActivity() {
                                 <div style={{
                                   width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                   fontWeight: 800, color: '#fff', fontSize: 14,
-                                  background: isSupport ? 'linear-gradient(135deg, #8b5cf6, #6d28d9)' : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                                  boxShadow: isSupport ? '0 2px 6px rgba(139,92,246,0.3)' : '0 2px 6px rgba(59,130,246,0.3)'
+                                  background: isSupport ? 'linear-gradient(135deg, #8b5cf6, #6d28d9)' : isLogistics ? 'linear-gradient(135deg, #0ea5e9, #0284c7)' : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                                  boxShadow: isSupport ? '0 2px 6px rgba(139,92,246,0.3)' : isLogistics ? '0 2px 6px rgba(14,165,233,0.3)' : '0 2px 6px rgba(59,130,246,0.3)'
                                 }}>
                                   {(u.name?.[0] || '?').toUpperCase()}
                                 </div>
@@ -609,7 +618,7 @@ export default function StaffActivity() {
                             </td>
                             <td style={{ padding: '14px 14px' }}>
                               <span style={{
-                                background: isSupport ? '#f3e8ff' : '#eff6ff', color: isSupport ? '#7e22ce' : '#1d4ed8',
+                                background: isSupport ? '#f3e8ff' : isLogistics ? '#e0f2fe' : '#eff6ff', color: isSupport ? '#7e22ce' : isLogistics ? '#0369a1' : '#1d4ed8',
                                 padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 800, textTransform: 'uppercase'
                               }}>
                                 {u.role}
@@ -623,11 +632,11 @@ export default function StaffActivity() {
                             </td>
                             <td style={{ padding: '14px 14px', textAlign: 'center', background: '#f0fdf4' }}>
                               <div style={{ fontWeight: 900, color: newDel > 0 ? '#16a34a' : '#94a3b8', fontSize: 16 }}>{newDel}</div>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>{isSupport ? <>New Assisted</> : <>{"First Kit "}<Star size={12} className="inline-block ml-1" /></>}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>{isSupport ? <>New Assisted</> : isLogistics ? <>{"OFD Comments "}<Truck size={12} className="inline-block ml-1" /></> : <>{"First Kit "}<Star size={12} className="inline-block ml-1" /></>}</span>
                             </td>
                             <td style={{ padding: '14px 14px', textAlign: 'center', background: '#f5f3ff' }}>
                               <div style={{ fontWeight: 900, color: oldDel > 0 ? '#7c3aed' : '#94a3b8', fontSize: 16 }}>{oldDel}</div>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>{isSupport ? <>{"Re-Verification "}<RefreshCcw size={12} className="inline-block ml-1" /></> : <>{"Old Reorder "}<RefreshCcw size={12} className="inline-block ml-1" /></>}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>{isSupport ? <>{"Re-Verification "}<RefreshCcw size={12} className="inline-block ml-1" /></> : isLogistics ? <>{"RTO Comments "}<Package size={12} className="inline-block ml-1" /></> : <>{"Old Reorder "}<RefreshCcw size={12} className="inline-block ml-1" /></>}</span>
                             </td>
                             <td style={{ padding: '14px 14px', textAlign: 'center', minWidth: 120 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
@@ -674,11 +683,16 @@ export default function StaffActivity() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: 20 }}>
               {filteredStaff.map((row, idx) => {
                 const u = row.user || {};
-                const isSupport = u.role === 'support' || u.role === 'logistics';
-                const newDel = row.newDeliveredCount || 0;
+                const isSupport = u.role === 'support';
+                const isLogistics = u.role === 'logistics';
+                const ofdNotes = row.ofdCommentsCount || 0;
+                const rtoNotes = row.rtoCommentsCount || 0;
+                const newDel = isLogistics ? ofdNotes : (row.newDeliveredCount || 0);
                 const oldDel = isSupport 
-                  ? (row.supportOldDeliveredCount || row.oldDeliveredCount || 0) 
-                  : (row.salesOldDeliveredCount || 0);
+                  ? (row.supportOldDeliveredCount || 0) 
+                  : isLogistics 
+                  ? rtoNotes 
+                  : (row.salesOldDeliveredCount || row.oldDeliveredCount || 0);
                 const verif = row.verifiedCount || 0;
                 const rto = row.rtoCount || 0;
                 const b = badge(newDel + oldDel, verif);
@@ -696,8 +710,8 @@ export default function StaffActivity() {
                           <div style={{
                             width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontWeight: 800, color: '#fff', fontSize: 18,
-                            background: isSupport ? 'linear-gradient(135deg, #8b5cf6, #6d28d9)' : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                            boxShadow: isSupport ? '0 4px 12px rgba(139,92,246,0.25)' : '0 4px 12px rgba(59,130,246,0.25)'
+                            background: isSupport ? 'linear-gradient(135deg, #8b5cf6, #6d28d9)' : isLogistics ? 'linear-gradient(135deg, #0ea5e9, #0284c7)' : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                            boxShadow: isSupport ? '0 4px 12px rgba(139,92,246,0.25)' : isLogistics ? '0 4px 12px rgba(14,165,233,0.25)' : '0 4px 12px rgba(59,130,246,0.25)'
                           }}>
                             {(u.name?.[0] || '?').toUpperCase()}
                           </div>
@@ -736,11 +750,11 @@ export default function StaffActivity() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, textAlign: 'center' }}>
                           <div style={{ background: 'rgba(255,255,255,0.08)', padding: '10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
                             <span style={{ fontSize: 24, fontWeight: 900, color: '#4ade80', display: 'block' }}>{newDel}</span>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' }}>{isSupport ? <>New Assisted</> : <>{"1st Kit (New) "}<Star size={12} className="inline-block ml-1" /></>}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' }}>{isSupport ? <>New Assisted</> : isLogistics ? <>{"OFD Comments "}<Truck size={12} className="inline-block ml-1" /></> : <>{"1st Kit (New) "}<Star size={12} className="inline-block ml-1" /></>}</span>
                           </div>
                           <div style={{ background: 'rgba(255,255,255,0.08)', padding: '10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
                             <span style={{ fontSize: 24, fontWeight: 900, color: '#c084fc', display: 'block' }}>{oldDel}</span>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' }}>{isSupport ? <>{"Re-Verifications "}<RefreshCcw size={12} className="inline-block ml-1" /></> : <>{"2nd+ Kit (Old) "}<RefreshCcw size={12} className="inline-block ml-1" /></>}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' }}>{isSupport ? <>{"Re-Verifications "}<RefreshCcw size={12} className="inline-block ml-1" /></> : isLogistics ? <>{"RTO Comments "}<Package size={12} className="inline-block ml-1" /></> : <>{"2nd+ Kit (Old) "}<RefreshCcw size={12} className="inline-block ml-1" /></>}</span>
                           </div>
                         </div>
 
