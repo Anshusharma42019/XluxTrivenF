@@ -131,7 +131,7 @@ export default function ShipmaxxFollowup() {
   const [manualForm, setManualForm] = useState({
     name: '', phone: '', city: '', state: '', medicine: '',
     delivered_date: '', amount: '', order_id: '', courier_name: '',
-    payment_method: '', pincode: '', address: ''
+    payment_method: '', pincode: '', address: '', kit_number: 1
   });
   const [manualSaving, setManualSaving] = useState(false);
   const [autofilling, setAutofilling] = useState(false);
@@ -239,6 +239,7 @@ export default function ShipmaxxFollowup() {
           payment_method: d.payment_method || p.payment_method,
           pincode: d.billing_pincode || p.pincode,
           address: d.billing_address || p.address,
+          kit_number: d.kit_number || p.kit_number || 1,
         }));
       }).catch(() => {}).finally(() => setAutofilling(false));
     }
@@ -329,7 +330,7 @@ export default function ShipmaxxFollowup() {
     try {
       await smxSvc.createManualFollowup(manualForm);
       setManualModalOpen(false);
-      setManualForm({ name: '', phone: '', city: '', state: '', medicine: '', delivered_date: '', amount: '', order_id: '', courier_name: '', payment_method: '', pincode: '', address: '' });
+      setManualForm({ name: '', phone: '', city: '', state: '', medicine: '', delivered_date: '', amount: '', order_id: '', courier_name: '', payment_method: '', pincode: '', address: '', kit_number: 1 });
       await syncAndLoad();
     } catch (err) { alert(err?.response?.data?.message || err.message); }
     finally { setManualSaving(false); }
@@ -993,6 +994,25 @@ export default function ShipmaxxFollowup() {
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Pincode</label>
                     <input className={inputCls} value={manualForm.pincode} onChange={e => setManualForm(p => ({ ...p, pincode: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Kit Number *</label>
+                    <select
+                      className={inputCls}
+                      value={manualForm.kit_number || 1}
+                      onChange={e => setManualForm(p => ({ ...p, kit_number: Number(e.target.value) }))}
+                    >
+                      <option value={1}>1st Kit</option>
+                      <option value={2}>2nd Kit</option>
+                      <option value={3}>3rd Kit</option>
+                      <option value={4}>4th Kit</option>
+                      <option value={5}>5th Kit</option>
+                      <option value={6}>6th Kit</option>
+                      <option value={7}>7th Kit</option>
+                      <option value={8}>8th Kit</option>
+                      <option value={9}>9th Kit</option>
+                      <option value={10}>10th Kit</option>
+                    </select>
                   </div>
                 </div>
                 <div>

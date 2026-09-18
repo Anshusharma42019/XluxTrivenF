@@ -160,7 +160,7 @@ export default function FollowUp() {
   const [manualForm, setManualForm] = useState({ 
     name: '', phone: '', city: '', state: '', medicine: '', problem: '',
     delivered_date: '', amount: '', order_id: '', courier_name: '', 
-    payment_method: '', pincode: '', address: '' 
+    payment_method: '', pincode: '', address: '', kit_number: 1 
   });
   const [manualSaving, setManualSaving] = useState(false);
   const [autofilling, setAutofilling] = useState(false);
@@ -440,7 +440,7 @@ export default function FollowUp() {
       setManualForm({ 
         name: '', phone: '', city: '', state: '', medicine: '', problem: '',
         delivered_date: '', amount: '', order_id: '', courier_name: '', 
-        payment_method: '', pincode: '', address: '' 
+        payment_method: '', pincode: '', address: '', kit_number: 1 
       });
       await syncAndLoad();
     } catch (err) {
@@ -1623,6 +1623,25 @@ export default function FollowUp() {
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Pincode</label>
                     <input className={inputCls} value={manualForm.pincode} onChange={e => setManualForm({...manualForm, pincode: e.target.value})} placeholder="e.g. 400001" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Kit Number *</label>
+                    <select
+                      className={inputCls}
+                      value={manualForm.kit_number || 1}
+                      onChange={e => setManualForm({...manualForm, kit_number: Number(e.target.value)})}
+                    >
+                      <option value={1}>1st Kit</option>
+                      <option value={2}>2nd Kit</option>
+                      <option value={3}>3rd Kit</option>
+                      <option value={4}>4th Kit</option>
+                      <option value={5}>5th Kit</option>
+                      <option value={6}>6th Kit</option>
+                      <option value={7}>7th Kit</option>
+                      <option value={8}>8th Kit</option>
+                      <option value={9}>9th Kit</option>
+                      <option value={10}>10th Kit</option>
+                    </select>
                   </div>
                 </div>
 

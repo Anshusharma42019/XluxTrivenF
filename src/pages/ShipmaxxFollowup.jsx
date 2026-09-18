@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, Fragment, useMemo } from 'reac
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { useSearchParams } from 'react-router-dom';
 import * as smxSvc from '../services/shipmaxx.service';
+import * as attendanceSvc from '../services/attendance.service';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 
@@ -40,10 +41,83 @@ const toDateInputValue = (value = new Date()) => {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
 
-const getFollowup = (order, n) => (order.followups || []).find(f => f.followup_number === Number(n));
+const getFollowup = (order, n) => {
+  const found = (order.followups || []).find(f => f.followup_number === Number(n));
+  if (found) return found;
+  if (Number(n) === 1 && (!order.followups || order.followups.length === 0)) {
+    return {
+      followup_number: 1,
+      scheduled_date: order.delivered_at || order.status_updated_at || order.createdAt || new Date(),
+      completed: false,
+    };
+  }
+  return undefined;
+};
 
-const previousFollowupsDone = (order, n) =>
-  (order.followups || []).filter(f => f.followup_number < Number(n)).every(f => f.completed);
+const previousFollowupsDone = (order, n) => {
+  if (Number(n) <= 1) return true;
+  return (order.followups || []).filter(f => f.followup_number < Number(n)).every(f => f.completed);
+};
+
+const getPendingDateStr = (order, fuNum, activeDateMode, customD) => {
+  if (fuNum && fuNum !== 'replies') {
+    const fu = getFollowup(order, fuNum);
+    if (fu?.scheduled_date) return toDateInputValue(fu.scheduled_date);
+    if (order.delivered_at) {
+      const base = new Date(order.delivered_at);
+      base.setDate(base.getDate() + ((Number(fuNum) - 1) * GAP_DAYS));
+      return toDateInputValue(base);
+    }
+    return '';
+  }
+  if (activeDateMode === 'custom' && customD) {
+    const matchedFU = (order.followups || []).find(f => !f.completed && toDateInputValue(f.scheduled_date) === customD);
+    if (matchedFU?.scheduled_date) return toDateInputValue(matchedFU.scheduled_date);
+  }
+  const activeFU = (order.followups || []).find(f => !f.completed && previousFollowupsDone(order, f.followup_number)) || (order.followups || []).find(f => !f.completed);
+  if (activeFU?.scheduled_date) return toDateInputValue(activeFU.scheduled_date);
+  if (order.delivered_at) return toDateInputValue(order.delivered_at);
+  if (order.status_updated_at) return toDateInputValue(order.status_updated_at);
+  if (order.createdAt) return toDateInputValue(order.createdAt);
+  return '';
+};
+
+const matchDateFilter = (order, mode, customD, fuNum) => {
+  if (mode === 'all') return true;
+  const todayStr = toDateInputValue(new Date());
+  const yesterdayStr = toDateInputValue(new Date(Date.now() - 86400000));
+
+  if (mode === 'custom') {
+    if (!customD) return true;
+    if (fuNum && fuNum !== 'replies') {
+      const fu = getFollowup(order, fuNum);
+      const d = fu?.scheduled_date ? toDateInputValue(fu.scheduled_date) : (
+        order.delivered_at ? toDateInputValue(new Date(new Date(order.delivered_at).getTime() + (Number(fuNum) - 1) * GAP_DAYS * 86400000)) : ''
+      );
+      return d === customD;
+    }
+    const fus = (order.followups || []);
+    if (fus.length > 0) {
+      return fus.some(f => !f.completed && toDateInputValue(f.scheduled_date) === customD);
+    }
+    const dStr = getPendingDateStr(order, '', mode, customD);
+    return dStr === customD;
+  }
+
+  const dStr = getPendingDateStr(order, fuNum, mode, customD);
+  if (!dStr) return false;
+
+  if (mode === 'today') {
+    return dStr === todayStr;
+  }
+  if (mode === 'yesterday') {
+    return dStr === yesterdayStr;
+  }
+  if (mode === 'overdue') {
+    return dStr < todayStr;
+  }
+  return true;
+};
 
 const isDue = (value, inputDate) => {
   if (!value) return false;
@@ -100,24 +174,31 @@ const SectionHead = ({ label }) => (
 );
 
 export default function ShipmaxxFollowup() {
-  const { user } = useAuth();
-  const canManage = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'support';
+  const { user, updateUser } = useAuth();
+  const isSupportStaff = user?.role === 'support';
+  const canManage = user?.role === 'admin' || user?.role === 'manager';
   const [searchParams, setSearchParams] = useSearchParams();
   const [department, setDepartment] = useState('');
-  const [all, setAll] = useState([]);
+  const [all, setAll] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('smx_fu_all') || '[]'); } catch { return []; }
+  });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
-  const [filterDelivered, setFilterDelivered] = useState(() => toDateInputValue(new Date()));
+  const [dateFilterMode, setDateFilterMode] = useState('all');
+  const [customDate, setCustomDate] = useState(() => toDateInputValue(new Date()));
   const [filterFollowupNum, setFilterFollowupNum] = useState('1');
+  const [filterKit, setFilterKit] = useState('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [noteText, setNoteText] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
   const [completedMap, setCompletedMap] = useState({});
   const [doneLoading, setDoneLoading] = useState(null);
-  const [completedList, setCompletedList] = useState([]);
+  const [completedList, setCompletedList] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('smx_fu_done') || '[]'); } catch { return []; }
+  });
   const [completedTotal, setCompletedTotal] = useState(0);
   const [completedPage, setCompletedPage] = useState(1);
   const [completedLoading, setCompletedLoading] = useState(false);
@@ -168,11 +249,44 @@ export default function ShipmaxxFollowup() {
   const [manualForm, setManualForm] = useState({
     name: '', phone: '', city: '', state: '', medicine: '',
     delivered_date: '', amount: '', order_id: '', courier_name: '',
-    payment_method: '', pincode: '', address: ''
+    payment_method: '', pincode: '', address: '', kit_number: 1
   });
   const [manualSaving, setManualSaving] = useState(false);
   const [autofilling, setAutofilling] = useState(false);
   const [replyFilter, setReplyFilter] = useState('all');
+
+  const [staffFilter, setStaffFilter] = useState(() => {
+    if (user?.role === 'support') return user._id || user.id || 'all';
+    return 'all';
+  });
+  const [supportStaffList, setSupportStaffList] = useState([]);
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const [attStatus, setAttStatus] = useState(null);
+  const [attLoading, setAttLoading] = useState(false);
+
+  useEffect(() => {
+    attendanceSvc.getTodayStatus().then(setAttStatus).catch(() => {});
+  }, []);
+
+  const handleQuickCheckIn = async () => {
+    setAttLoading(true);
+    try {
+      const res = await attendanceSvc.checkIn();
+      setAttStatus(res);
+      await loadSupportStaff();
+      await load(false);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Check-in failed');
+    } finally {
+      setAttLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.role === 'support' && (user._id || user.id)) {
+      setStaffFilter(user._id || user.id);
+    }
+  }, [user]);
 
   // Appointment Booking States
   const [apptModalOpen, setApptModalOpen] = useState(false);
@@ -221,7 +335,7 @@ export default function ShipmaxxFollowup() {
   const followupNumbers = Array.from({ length: TOTAL_FU }, (_, i) => i + 1);
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) { setLoading(true); setError(''); }
+    if (!silent && all.length === 0) { setLoading(true); setError(''); }
     try {
       const res = await smxSvc.getOrdersWithFollowUps();
       const list = Array.isArray(res.data?.data) ? res.data.data : [];
@@ -231,19 +345,24 @@ export default function ShipmaxxFollowup() {
         return db - da;
       });
       setAll(list);
-    } catch (e) { if (!silent) setError(e?.response?.data?.message || e.message); }
-    finally { if (!silent) setLoading(false); }
-  }, []);
+      try { sessionStorage.setItem('smx_fu_all', JSON.stringify(list)); } catch {}
+    } catch (e) { if (!silent && all.length === 0) setError(e?.response?.data?.message || e.message); }
+    finally { setLoading(false); }
+  }, [all.length]);
 
   const loadCompleted = useCallback(async (silent = false, pg = 1, q = '') => {
-    if (!silent) setCompletedLoading(true);
+    if (!silent && completedList.length === 0) setCompletedLoading(true);
     try {
       const res = await smxSvc.getCompletedFollowUps({ page: pg, per_page: PER_PAGE, search: q || undefined });
-      setCompletedList(Array.isArray(res.data?.data?.data) ? res.data.data.data : []);
+      const dataList = Array.isArray(res.data?.data?.data) ? res.data.data.data : [];
+      setCompletedList(dataList);
       setCompletedTotal(res.data?.data?.total || 0);
+      if (pg === 1 && !q) {
+        try { sessionStorage.setItem('smx_fu_done', JSON.stringify(dataList)); } catch {}
+      }
     } catch { }
-    finally { if (!silent) setCompletedLoading(false); }
-  }, []);
+    finally { setCompletedLoading(false); }
+  }, [completedList.length]);
 
   const syncAndLoad = async () => {
     setSyncing(true);
@@ -260,26 +379,54 @@ export default function ShipmaxxFollowup() {
   useAutoRefresh(autoFetch, 15000);
 
   useEffect(() => {
-    load(false).then(() => loadCompleted(false, 1));
-  }, [load, loadCompleted]);
+    // Refresh user profile to ensure latest departments from admin are applied
+    api.get('/users/me').then(res => {
+      if (res.data?.data && updateUser) {
+        updateUser(res.data.data);
+      }
+    }).catch(() => {});
 
-  // Fetch ALL booked orders for the searched phone (unlimited — Kit 3,4,5,6... all included)
-  useEffect(() => {
-    if (!search) { setBookedSearchAll([]); return; }
-    smxSvc.getCompletedFollowUps({ page: 1, per_page: 500, search })
-      .then(res => setBookedSearchAll(Array.isArray(res.data?.data?.data) ? res.data.data.data : []))
+    load(false).then(() => loadCompleted(false, 1));
+    api.get('/shipmaxx/support-staff')
+      .then(res => setSupportStaffList(Array.isArray(res.data?.data) ? res.data.data : []))
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, loadCompleted, updateUser]);
+
+  const handleAutoAssignEqually = async () => {
+    if (!window.confirm('Distribute all unassigned follow-ups equally among active support staff?')) return;
+    setAutoAssigning(true);
+    try {
+      const res = await api.post('/shipmaxx/followups/auto-assign');
+      alert(res.data?.message || 'Follow-ups distributed equally!');
+      await load(true);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to auto-assign');
+    } finally {
+      setAutoAssigning(false);
+    }
+  };
+
+  // Fetch ALL booked orders for the searched phone (unlimited — Kit 3,4,5,6... all included) with debounce
+  useEffect(() => {
+    if (!search || !search.trim()) { setBookedSearchAll([]); return; }
+    const timer = setTimeout(() => {
+      smxSvc.getCompletedFollowUps({ page: 1, per_page: 500, search: search.trim() })
+        .then(res => setBookedSearchAll(Array.isArray(res.data?.data?.data) ? res.data.data.data : []))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
   }, [search]);
 
-  // Re-fetch completed list when search changes while on Done tab
+  // Re-fetch completed list when search changes while on Done tab with debounce
   useEffect(() => {
     if (showCompleted) {
       setCompletedPage(1);
-      loadCompleted(false, 1, search);
+      const timer = setTimeout(() => {
+        loadCompleted(false, 1, search ? search.trim() : '');
+      }, 300);
+      return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, showCompleted]);
+  }, [search, showCompleted, loadCompleted]);
 
   // Auto-switch to Done tab when active has NO results but bookedSearchAll has matches
   useEffect(() => {
@@ -348,6 +495,7 @@ export default function ShipmaxxFollowup() {
           payment_method: d.payment_method || p.payment_method,
           pincode: d.billing_pincode || p.pincode,
           address: d.billing_address || p.address,
+          kit_number: d.kit_number || p.kit_number || 1,
         }));
       }).catch(() => {}).finally(() => setAutofilling(false));
     }
@@ -450,10 +598,23 @@ export default function ShipmaxxFollowup() {
   const handleManualSubmit = async (e) => {
     e.preventDefault();
     setManualSaving(true);
+    const addedKitNum = Number(manualForm.kit_number) || 1;
     try {
-      await smxSvc.createManualFollowup(manualForm);
+      const res = await smxSvc.createManualFollowup(manualForm);
+      const createdOrder = res?.data?.data;
+      if (createdOrder) {
+        setAll(prev => [createdOrder, ...prev.filter(o => String(o._id) !== String(createdOrder._id))]);
+      }
       setManualModalOpen(false);
-      setManualForm({ name: '', phone: '', city: '', state: '', medicine: '', delivered_date: '', amount: '', order_id: '', courier_name: '', payment_method: '', pincode: '', address: '' });
+      setManualForm({ name: '', phone: '', city: '', state: '', medicine: '', delivered_date: '', amount: '', order_id: '', courier_name: '', payment_method: '', pincode: '', address: '', kit_number: 1 });
+      
+      // Auto-switch to the kit section that was added
+      setFilterKit(String(addedKitNum >= 5 ? '5' : addedKitNum));
+      setFilterFollowupNum('1');
+      setShowCompleted(false);
+      setDateFilterMode('all');
+      setPage(1);
+
       await syncAndLoad();
     } catch (err) { alert(err?.response?.data?.message || err.message); }
     finally { setManualSaving(false); }
@@ -538,8 +699,45 @@ export default function ShipmaxxFollowup() {
       .finally(() => setActivityLoading(false));
   };
 
+  const isDeptMatch = (allowedDepts, targetDept) => {
+    if (!allowedDepts || !Array.isArray(allowedDepts) || allowedDepts.length === 0) return false;
+    const normTarget = String(targetDept || 'migraine').toLowerCase().trim();
+    const targetKey = normTarget.startsWith('migrain') ? 'migraine' : (normTarget.includes('pile') || normTarget.includes('gastro') || normTarget.includes('bawasir') ? 'piles' : normTarget);
+    return allowedDepts.some(d => {
+      const normD = String(d).toLowerCase().trim();
+      const key = normD.startsWith('migrain') ? 'migraine' : (normD.includes('pile') || normD.includes('gastro') || normD.includes('bawasir') ? 'piles' : normD);
+      return key === targetKey;
+    });
+  };
+
+  const currentUserId = user?._id || user?.id;
+  const activeStaffFilter = isSupportStaff ? currentUserId : staffFilter;
+
+  // Base list of orders scoped by active staff & allowed disease/departments
+  const staffScopedAll = useMemo(() => {
+    let list = all;
+    if (activeStaffFilter !== 'all') {
+      list = list.filter(o => {
+        const assignedId = o.support_staff?._id || o.support_staff || o.followups?.find(f => !f.completed)?.staff?._id || o.followups?.find(f => !f.completed)?.staff;
+        if (activeStaffFilter === 'unassigned') return !assignedId;
+        return String(assignedId) === String(activeStaffFilter);
+      });
+    }
+    // Support role: strictly enforce assigned department access from user profile (Admin set)
+    if (isSupportStaff) {
+      if (user?.departments && user.departments.length > 0) {
+        list = list.filter(o => isDeptMatch(user.departments, o.department));
+      }
+    }
+    // Admin / Manager department filter
+    if (department && department !== 'all') {
+      list = list.filter(o => isDeptMatch([department], o.department));
+    }
+    return list;
+  }, [all, activeStaffFilter, isSupportStaff, user?.departments, department]);
+
   const dueCounts = followupNumbers.reduce((acc, n) => {
-    acc[n] = all.filter(o => {
+    acc[n] = staffScopedAll.filter(o => {
       const allFUs = (o.followups || []);
       const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
       if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
@@ -549,7 +747,33 @@ export default function ShipmaxxFollowup() {
     return acc;
   }, {});
 
-  const filtered = all.filter(o => {
+  const stageDateCounts = useMemo(() => {
+    return followupNumbers.reduce((acc, n) => {
+      acc[n] = staffScopedAll.filter(o => {
+        const allFUs = (o.followups || []);
+        const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
+        if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
+        const fu = getFollowup(o, n);
+        if (!fu || fu.completed) return false;
+        if (dateFilterMode !== 'custom' && !previousFollowupsDone(o, n)) return false;
+        if (dateFilterMode === 'all') return true;
+        return matchDateFilter(o, dateFilterMode, customDate, String(n));
+      }).length;
+      return acc;
+    }, {});
+  }, [staffScopedAll, completedMap, dateFilterMode, customDate]);
+
+  const allPendingDateCount = useMemo(() => {
+    return staffScopedAll.filter(o => {
+      const allFUs = (o.followups || []);
+      const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
+      if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
+      if (dateFilterMode === 'all') return true;
+      return matchDateFilter(o, dateFilterMode, customDate, '');
+    }).length;
+  }, [staffScopedAll, completedMap, dateFilterMode, customDate]);
+
+  const tabOrders = staffScopedAll.filter(o => {
     const allFUs = (o.followups || []);
     const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
     if (completedCount >= TOTAL_FU || o.sent_to_verification || o.followup_done) return false;
@@ -570,17 +794,26 @@ export default function ShipmaxxFollowup() {
       if (replyFilter !== 'any_reply' && !matchReply(o.interakt_reply_text, replyFilter)) return false;
     } else if (filterFollowupNum) {
       const fu = getFollowup(o, filterFollowupNum);
-      if (!fu || fu.completed || !previousFollowupsDone(o, filterFollowupNum)) return false;
-      if (filterFollowupNum === '1' && filterDelivered) {
-        if (!isDue(fu.scheduled_date, filterDelivered)) return false;
-      }
-    } else {
-      if (filterDelivered) {
-        const nextFU = allFUs.find(f => !f.completed);
-        if (!nextFU || !isDue(nextFU.scheduled_date, filterDelivered)) return false;
-      }
+      if (!fu || fu.completed) return false;
+      if (dateFilterMode !== 'custom' && !previousFollowupsDone(o, filterFollowupNum)) return false;
     }
     return true;
+  });
+
+  const matchKitFilter = (order, mode) => {
+    if (mode === 'all') return true;
+    const k = order.kit_number || 1;
+    if (mode === 'new' || mode === '1') return k === 1;
+    if (mode === 'old') return k >= 2;
+    if (mode === '5') return k >= 5;
+    return k === Number(mode);
+  };
+
+  const kitFilteredOrders = tabOrders.filter(o => matchKitFilter(o, filterKit));
+
+  const filtered = kitFilteredOrders.filter(o => {
+    if (search) return true;
+    return matchDateFilter(o, dateFilterMode, customDate, filterFollowupNum);
   });
 
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
@@ -589,8 +822,14 @@ export default function ShipmaxxFollowup() {
   // Booked kits matching search — uses bookedSearchAll (fetches up to 500, so Kit 3,4,5,6... all included)
   const bookedSearchMatches = bookedSearchAll;
 
-  // Filter completedList by search term for Done tab rendering
-  const displayCompletedList = completedList.filter(o => {
+  // Base completedList filtered by staff department access and search term
+  const baseCompletedList = completedList.filter(o => {
+    if (isSupportStaff) {
+      if (!isDeptMatch(user?.departments, o.department)) return false;
+    }
+    if (department && department !== 'all') {
+      if (!isDeptMatch([department], o.department)) return false;
+    }
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -601,117 +840,467 @@ export default function ShipmaxxFollowup() {
     );
   });
 
-  return (
-    <div className="min-h-full bg-glow pb-10 px-3 sm:px-6 lg:px-8 space-y-8 pt-4">
+  // Filter completedList by kit filter
+  const kitCompletedList = baseCompletedList.filter(o => matchKitFilter(o, filterKit));
 
-      {/* ── Stats Row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-        {followupNumbers.map((n, i) => {
-          const colors = ['from-emerald-400 to-teal-500','from-blue-400 to-indigo-500','from-amber-400 to-orange-500','from-rose-400 to-red-500','from-purple-400 to-violet-500'];
-          const count = dueCounts[n] || 0;
-          return (
-            <div key={n} className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm border border-gray-100/50 hover:shadow-lg transition-all">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className={`w-8 h-8 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br ${colors[i]} flex items-center justify-center text-white font-black text-sm sm:text-base shrink-0 shadow-lg`}>{n}</div>
-                <div>
-                  <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">{ordinal(n - 1)} Call</p>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-lg sm:text-2xl font-black text-gray-900">{count}</span>
-                    <span className="text-[8px] sm:text-[9px] font-bold text-gray-300">DUE</span>
-                  </div>
-                </div>
-              </div>
+  // Filter completedList by date filter for Done tab rendering
+  const displayCompletedList = kitCompletedList.filter(o => {
+    if (search) return true;
+    if (dateFilterMode === 'all') return true;
+    const dStr = o.completed_at ? toDateInputValue(o.completed_at) : (o.delivered_at ? toDateInputValue(o.delivered_at) : (o.createdAt ? toDateInputValue(o.createdAt) : ''));
+    if (!dStr) return true;
+    const todayStr = toDateInputValue(new Date());
+    const yesterdayStr = toDateInputValue(new Date(Date.now() - 86400000));
+    if (dateFilterMode === 'today') return dStr === todayStr;
+    if (dateFilterMode === 'yesterday') return dStr === yesterdayStr;
+    if (dateFilterMode === 'overdue') return dStr < todayStr;
+    if (dateFilterMode === 'custom') return customDate ? dStr === customDate : true;
+    return true;
+  });
+
+  const todayStr = toDateInputValue(new Date());
+  const yesterdayStr = toDateInputValue(new Date(Date.now() - 86400000));
+
+  // Current base list for kit filter pill counts (across all dates in active tab)
+  const currentBaseList = showCompleted ? baseCompletedList : tabOrders;
+
+  // Current list for date filter pill counts (for the active tab and active kit)
+  const dateBaseList = showCompleted ? kitCompletedList : kitFilteredOrders;
+
+  const newKitsCount = currentBaseList.filter(o => (o.kit_number || 1) === 1).length;
+  const oldKitsCount = currentBaseList.filter(o => (o.kit_number || 1) >= 2).length;
+
+  const todayPendingCount = dateBaseList.filter(o => {
+    if (showCompleted) {
+      const d = o.completed_at ? toDateInputValue(o.completed_at) : (o.delivered_at ? toDateInputValue(o.delivered_at) : (o.createdAt ? toDateInputValue(o.createdAt) : ''));
+      return d ? d === todayStr : false;
+    }
+    return matchDateFilter(o, 'today', customDate, filterFollowupNum);
+  }).length;
+
+  const yesterdayPendingCount = dateBaseList.filter(o => {
+    if (showCompleted) {
+      const d = o.completed_at ? toDateInputValue(o.completed_at) : (o.delivered_at ? toDateInputValue(o.delivered_at) : (o.createdAt ? toDateInputValue(o.createdAt) : ''));
+      return d ? d === yesterdayStr : false;
+    }
+    return matchDateFilter(o, 'yesterday', customDate, filterFollowupNum);
+  }).length;
+
+  const overduePendingCount = dateBaseList.filter(o => {
+    if (showCompleted) {
+      const d = o.completed_at ? toDateInputValue(o.completed_at) : (o.delivered_at ? toDateInputValue(o.delivered_at) : (o.createdAt ? toDateInputValue(o.createdAt) : ''));
+      return d && d < todayStr;
+    }
+    return matchDateFilter(o, 'overdue', customDate, filterFollowupNum);
+  }).length;
+
+  const customDatePendingCount = dateBaseList.filter(o => {
+    if (showCompleted) {
+      const d = o.completed_at ? toDateInputValue(o.completed_at) : (o.delivered_at ? toDateInputValue(o.delivered_at) : (o.createdAt ? toDateInputValue(o.createdAt) : ''));
+      return customDate ? d === customDate : false;
+    }
+    return matchDateFilter(o, 'custom', customDate, filterFollowupNum);
+  }).length;
+
+  const allDatesPendingCount = dateBaseList.length;
+
+  const unreadRepliesCount = staffScopedAll.filter(o => !!o.interakt_reply_text && !o.interakt_reply_read && !o.sent_to_verification && !o.followup_done && (completedMap[o._id] ?? (o.followups||[]).filter(f=>f.completed).length) < TOTAL_FU).length;
+
+  return (
+    <div className="min-h-full bg-glow pb-10 px-3 sm:px-6 lg:px-8 space-y-4 pt-3">
+
+      {/* ── Attendance Check-in Banner for Support Staff ── */}
+      {isSupportStaff && (!attStatus || !attStatus.checkIn) && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-2xl p-4 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-up">
+          <div className="flex items-center gap-3 text-center sm:text-left">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
+            <div>
+              <h4 className="font-black text-sm uppercase tracking-wide">Attendance Required for Today's Follow-ups</h4>
+              <p className="text-xs text-white/90">Aapki aaj ki attendance mark nahi hai. Scheduled follow-ups auto-assign hone aur handle karne ke liye check-in karein.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleQuickCheckIn}
+            disabled={attLoading}
+            className="px-5 py-2.5 rounded-xl bg-white text-orange-700 hover:bg-orange-50 font-black text-xs uppercase tracking-wider shadow-md active:scale-95 transition shrink-0 cursor-pointer disabled:opacity-50"
+          >
+            {attLoading ? 'Checking In...' : 'Clock In / Mark Attendance'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Main Stage Navigation Bar ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-1.5 shadow-xs overflow-x-auto no-scrollbar flex items-center gap-1.5">
+        <button
+          onClick={() => { setShowCompleted(false); setFilterFollowupNum(''); setPage(1); }}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            !showCompleted && !filterFollowupNum
+              ? 'bg-gray-900 text-white shadow-sm'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          }`}
+        >
+          <span>All Pending</span>
+          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+            !showCompleted && !filterFollowupNum ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+          }`}>
+            {dateFilterMode === 'all' ? staffScopedAll.length : allPendingDateCount}
+          </span>
+        </button>
+
+        {followupNumbers.map(n => {
+          const isAct = !showCompleted && filterFollowupNum === String(n);
+          const count = dateFilterMode === 'all' ? (dueCounts[n] || 0) : (stageDateCounts[n] || 0);
+          return (
+            <button
+              key={n}
+              onClick={() => { setShowCompleted(false); setFilterFollowupNum(String(n)); setPage(1); }}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                isAct
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <span className={`w-4.5 h-4.5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                isAct ? 'bg-white text-emerald-700' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {n}
+              </span>
+              <span>{ordinal(n - 1)} Call</span>
+              <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                isAct ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {count}
+              </span>
+            </button>
           );
         })}
+
+        <button
+          onClick={() => { setShowCompleted(false); setFilterFollowupNum('replies'); setPage(1); }}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            !showCompleted && filterFollowupNum === 'replies'
+              ? 'bg-sky-600 text-white shadow-sm'
+              : 'text-sky-700 hover:bg-sky-50'
+          }`}
+        >
+          <span>Replies</span>
+          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+            !showCompleted && filterFollowupNum === 'replies' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'
+          }`}>
+            {unreadRepliesCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => { setShowCompleted(true); setCompletedPage(1); loadCompleted(false, 1, search); }}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ml-auto ${
+            showCompleted
+              ? 'bg-gray-800 text-white shadow-sm'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          }`}
+        >
+          <span>Done</span>
+          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+            showCompleted ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+          }`}>
+            {completedTotal}
+          </span>
+        </button>
       </div>
 
-      {/* ── Header / Controls ── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3 w-full">
-          {/* Tab bar */}
-          <div className="flex items-center bg-white rounded-2xl border border-gray-100 p-1 shadow-sm overflow-x-auto no-scrollbar max-w-full">
-            <button onClick={() => { setShowCompleted(false); setFilterFollowupNum(''); setPage(1); }}
-              className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition whitespace-nowrap ${!showCompleted && !filterFollowupNum ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}>
-              All ({all.length})
+      {/* ── Streamlined Unified Sub-Filters & Command Bar ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-2.5 sm:p-3 shadow-xs space-y-2.5">
+        {/* Row 1: Unified Filter Pills & Specific Kit Chips */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Main Filter Pills */}
+          <div className="flex items-center bg-gray-50 rounded-xl p-1 border border-gray-100 overflow-x-auto no-scrollbar">
+            <button
+              onClick={() => { setFilterKit('all'); setDateFilterMode('all'); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                filterKit === 'all' && dateFilterMode === 'all'
+                  ? 'bg-gray-900 text-white shadow-xs'
+                  : 'text-gray-700 hover:bg-gray-200/60'
+              }`}
+            >
+              <span>All Kits</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${filterKit === 'all' && dateFilterMode === 'all' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                {currentBaseList.length}
+              </span>
             </button>
-            {followupNumbers.map(n => (
-              <button key={n} onClick={() => { setShowCompleted(false); setFilterFollowupNum(String(n)); setPage(1); }}
-                className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition whitespace-nowrap ${!showCompleted && filterFollowupNum === String(n) ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}>
-                {ordinal(n - 1)} ({dueCounts[n] || 0})
-              </button>
-            ))}
-            <button onClick={() => { setShowCompleted(false); setFilterFollowupNum('replies'); setPage(1); }}
-              className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition whitespace-nowrap ${!showCompleted && filterFollowupNum === 'replies' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-500 hover:bg-indigo-50'}`}>
-              💬 Replies ({all.filter(o => !!o.interakt_reply_text && !o.interakt_reply_read && !o.sent_to_verification && !o.followup_done && (completedMap[o._id] ?? (o.followups||[]).filter(f=>f.completed).length) < TOTAL_FU).length})
-            </button>
-            <button onClick={() => { setShowCompleted(true); setCompletedPage(1); loadCompleted(false, 1, search); }}
-              className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition whitespace-nowrap ${showCompleted ? 'bg-gray-800 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}>
-              ✅ Done ({completedTotal})
-            </button>
-          </div>
 
+            <button
+              onClick={() => { setFilterKit(filterKit === 'new' || filterKit === '1' ? 'all' : 'new'); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                filterKit === 'new' || filterKit === '1'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-emerald-800 hover:bg-emerald-100/60'
+              }`}
+              title="New Patients (1st Kit)"
+            >
+              <span>New (1st Kit)</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${filterKit === 'new' || filterKit === '1' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                {newKitsCount}
+              </span>
+            </button>
 
-          <div className="flex flex-col sm:flex-row flex-1 items-center gap-3 w-full">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <input type="date" value={filterDelivered} onChange={e => { setFilterDelivered(e.target.value); setPage(1); }}
-                className="bg-white border border-gray-100 rounded-2xl px-4 py-3 text-xs font-black text-gray-700 focus:ring-4 focus:ring-emerald-500/10 transition shadow-sm hover:shadow-md flex-1 sm:flex-none" />
-              {filterDelivered ? (
-                <button onClick={() => { setFilterDelivered(''); setPage(1); }}
-                  title="View All Dates (All Pending Followups)"
-                  className="px-3.5 py-3 rounded-2xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black uppercase tracking-wider hover:bg-amber-100 transition-all flex items-center gap-1.5 shadow-sm shrink-0">
-                  <span>🌐</span> All Dates
-                </button>
-              ) : (
-                <button onClick={() => { setFilterDelivered(toDateInputValue(new Date())); setPage(1); }}
-                  title="Filter by Today's Date"
-                  className="px-3.5 py-3 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black uppercase tracking-wider hover:bg-emerald-100 transition-all flex items-center gap-1.5 shadow-sm shrink-0">
-                  <span>📅</span> Today Only
+            <button
+              onClick={() => { setFilterKit(filterKit === 'old' ? 'all' : 'old'); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                filterKit === 'old'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-indigo-800 hover:bg-indigo-100/60'
+              }`}
+              title="Old / Repeat Patients (2nd+ Kit)"
+            >
+              <span>Old (2nd+ Kit)</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${filterKit === 'old' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>
+                {oldKitsCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setDateFilterMode(dateFilterMode === 'today' ? 'all' : 'today'); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                dateFilterMode === 'today'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : todayPendingCount > 0
+                    ? 'text-emerald-800 hover:bg-emerald-50'
+                    : 'text-gray-500 hover:bg-gray-100'
+              }`}
+              title="Scheduled for Today"
+            >
+              <span>Today</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${dateFilterMode === 'today' ? 'bg-white/20 text-white' : todayPendingCount > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-500'}`}>
+                {todayPendingCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setDateFilterMode(dateFilterMode === 'overdue' ? 'all' : 'overdue'); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                dateFilterMode === 'overdue'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : overduePendingCount > 0
+                    ? 'text-rose-700 hover:bg-rose-50'
+                    : 'text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              <span>Overdue</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${dateFilterMode === 'overdue' ? 'bg-white/20 text-white' : overduePendingCount > 0 ? 'bg-rose-100 text-rose-800' : 'bg-gray-200 text-gray-500'}`}>
+                {overduePendingCount}
+              </span>
+            </button>
+
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg transition ${
+              dateFilterMode === 'custom'
+                ? 'bg-amber-100 border border-amber-300'
+                : 'border border-transparent hover:bg-gray-100/70'
+            }`}>
+              <span className="text-[10px] font-bold text-gray-500 hidden sm:inline">Pick:</span>
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  setCustomDate(e.target.value);
+                  setDateFilterMode('custom');
+                  setPage(1);
+                }}
+                className={`border rounded-md px-1.5 py-0.5 text-xs font-bold transition outline-none cursor-pointer ${
+                  dateFilterMode === 'custom'
+                    ? 'border-amber-400 bg-white text-amber-900 ring-2 ring-amber-400/30'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-amber-300'
+                }`}
+              />
+              <span
+                onClick={() => { setDateFilterMode('custom'); setPage(1); }}
+                title="Follow-ups on selected date"
+                className={`px-1.5 py-0.2 rounded text-[10px] font-bold cursor-pointer transition ${
+                  dateFilterMode === 'custom'
+                    ? 'bg-amber-300 text-amber-950 shadow-xs'
+                    : customDatePendingCount > 0
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                {customDatePendingCount}
+              </span>
+              {dateFilterMode === 'custom' && (
+                <button
+                  type="button"
+                  title="Clear date filter"
+                  onClick={() => { setDateFilterMode('all'); setPage(1); }}
+                  className="w-4 h-4 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center text-[10px] font-black hover:bg-amber-300 transition cursor-pointer"
+                >
+                  ✕
                 </button>
               )}
             </div>
+          </div>
 
-            <div className="relative w-full sm:flex-1 sm:max-w-[300px]">
-              <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
+          {/* Specific Kit Chips (1st Kit, 2nd Kit, 3rd Kit, 4th Kit, 5th+ Kit) */}
+          <div className="flex items-center bg-purple-50/70 rounded-xl p-1 border border-purple-100/70 overflow-x-auto no-scrollbar">
+            {[1, 2, 3, 4, 5].map(k => {
+              const count = currentBaseList.filter(o => k === 5 ? (o.kit_number || 1) >= 5 : (o.kit_number || 1) === k).length;
+              const isSelected = filterKit === String(k) || (k === 1 && filterKit === 'new');
+              return (
+                <button
+                  key={k}
+                  onClick={() => { setFilterKit(isSelected ? 'all' : String(k)); setPage(1); }}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap flex items-center gap-1 cursor-pointer ${
+                    isSelected
+                      ? 'bg-purple-700 text-white shadow-xs'
+                      : count > 0
+                        ? 'text-purple-900 hover:bg-purple-100/60'
+                        : 'text-gray-400 hover:bg-gray-100'
+                  }`}
+                >
+                  <span>{k === 5 ? '5th+' : ordinal(k - 1) + ' Kit'}</span>
+                  <span className={`px-1 py-0.2 rounded text-[9px] font-bold ${isSelected ? 'bg-white/20 text-white' : count > 0 ? 'bg-purple-200/70 text-purple-800' : 'bg-gray-200 text-gray-400'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Row 2: Search, Action Buttons & Dropdowns */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-gray-100/80">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); setCompletedPage(1); }}
+              placeholder="Search name, phone, order, AWB..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setManualModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white shadow-xs hover:shadow hover:-translate-y-0.5 transition active:scale-95 cursor-pointer shrink-0"
+              style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); setCompletedPage(1); }} placeholder="Search name, phone, awb..."
-                className="w-full pl-11 pr-5 py-3 rounded-2xl border border-gray-100 bg-white text-xs font-bold text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-emerald-400/20 transition shadow-sm" />
-            </div>
-
-            <button onClick={() => setManualModalOpen(true)}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-[10px] font-black text-white shadow-xl hover:-translate-y-1 transition-all uppercase tracking-widest active:scale-95"
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-              Manual Add
+              <span>Manual Add</span>
             </button>
 
-            <button onClick={syncAndLoad} disabled={syncing || loading}
-              className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-3 rounded-2xl text-[10px] font-black text-white shadow-xl hover:-translate-y-1 transition-all uppercase tracking-widest active:scale-95 disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-              <svg className={`w-4 h-4 ${syncing || loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <button
+              onClick={syncAndLoad}
+              disabled={syncing || loading}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white shadow-xs hover:shadow hover:-translate-y-0.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+              style={{ background: 'linear-gradient(135deg, #10b981, #047857)' }}
+            >
+              <svg className={`w-3.5 h-3.5 ${syncing || loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
               </svg>
-              {syncing ? 'Syncing...' : 'Sync Data'}
+              <span>{syncing ? 'Syncing...' : 'Sync Live'}</span>
             </button>
 
-            <div className="relative w-full sm:w-auto">
-              <select value={replyFilter} onChange={e => { setReplyFilter(e.target.value); setPage(1); }}
-                className="w-full sm:w-auto appearance-none pl-4 pr-10 py-3 rounded-2xl border border-gray-100 bg-white text-[10px] font-black text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 uppercase tracking-widest cursor-pointer hover:bg-gray-50 transition-colors">
-                <option value="all">ALL ORDERS ({all.filter(o => !o.followup_done && !o.sent_to_verification).length})</option>
+            {/* Department Filter (Admin / Manager) */}
+            {canManage && (
+              <div className="relative">
+                <select
+                  value={department}
+                  onChange={e => { setDepartment(e.target.value); setPage(1); }}
+                  className="appearance-none pl-3 pr-7 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white text-[11px] font-bold text-gray-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 uppercase tracking-wider cursor-pointer transition max-w-[150px] truncate"
+                >
+                  <option value="">ALL DEPTS ({all.filter(o => !o.followup_done && !o.sent_to_verification).length})</option>
+                  <option value="migraine">MIGRAINE ({all.filter(o => !o.followup_done && !o.sent_to_verification && (o.department || 'migraine').toLowerCase() === 'migraine').length})</option>
+                  <option value="piles">PILES ({all.filter(o => !o.followup_done && !o.sent_to_verification && (o.department || '').toLowerCase() === 'piles').length})</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7"/>
+                  </svg>
+                </div>
+              </div>
+            )}
+
+            {/* Support Staff Filter / Assigned Badge */}
+            {isSupportStaff ? (
+              <div className="px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-bold flex items-center gap-1.5 shadow-2xs shrink-0">
+                <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
+                <span>Assigned: {user?.name || 'Me'} ({staffScopedAll.length})</span>
+                {user?.departments?.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-indigo-200 text-indigo-900">
+                    {user.departments.join(', ')}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="relative">
+                <select
+                  value={staffFilter}
+                  onChange={e => { setStaffFilter(e.target.value); setPage(1); }}
+                  className="appearance-none pl-3 pr-7 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white text-[11px] font-bold text-gray-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 uppercase tracking-wider cursor-pointer transition max-w-[170px] truncate"
+                >
+                  <option value="all">ALL STAFF ({all.filter(o => !o.followup_done && !o.sent_to_verification).length})</option>
+                  {supportStaffList.map(s => {
+                    const count = all.filter(o => !o.followup_done && !o.sent_to_verification && (String(o.support_staff?._id || o.support_staff) === String(s._id))).length;
+                    return (
+                      <option key={s._id} value={s._id}>
+                        {s.name.toUpperCase()} {s.isPresentToday ? '• PRESENT' : '(OFFLINE)'} ({count})
+                      </option>
+                    );
+                  })}
+                  <option value="unassigned">
+                    UNASSIGNED ({all.filter(o => !o.followup_done && !o.sent_to_verification && !o.support_staff).length})
+                  </option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7"/>
+                  </svg>
+                </div>
+              </div>
+            )}
+
+            {canManage && (
+              <button
+                onClick={handleAutoAssignEqually}
+                disabled={autoAssigning}
+                title="Distribute unassigned follow-ups equally among active support staff"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 shadow-xs hover:shadow hover:-translate-y-0.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+              >
+                <svg className={`w-3.5 h-3.5 ${autoAssigning ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>{autoAssigning ? 'Distributing...' : 'Auto-Distribute'}</span>
+              </button>
+            )}
+
+            <div className="relative">
+              <select
+                value={replyFilter}
+                onChange={e => { setReplyFilter(e.target.value); setPage(1); }}
+                className="appearance-none pl-3 pr-7 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white text-[11px] font-bold text-gray-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 uppercase tracking-wider cursor-pointer transition max-w-[170px] truncate"
+              >
+                <option value="all">ALL REPLIES ({all.filter(o => !o.followup_done && !o.sent_to_verification).length})</option>
                 {REPLY_OPTIONS.map(opt => {
                   const count = opt.value === 'any_reply' 
                     ? all.filter(o => !!o.interakt_reply_text && !o.interakt_reply_read && !o.followup_done && !o.sent_to_verification).length
                     : all.filter(o => o.interakt_reply_text && !o.interakt_reply_read && matchReply(o.interakt_reply_text, opt.value) && !o.followup_done && !o.sent_to_verification).length;
                   return (
                     <option key={opt.value} value={opt.value}>
-                      {opt.label} ({count})
+                      {opt.label.toUpperCase()} ({count})
                     </option>
                   );
                 })}
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7"/></svg>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7"/>
+                </svg>
               </div>
             </div>
           </div>
@@ -743,12 +1332,17 @@ export default function ShipmaxxFollowup() {
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-gray-800 text-sm truncate">
                         {o.billing_customer_name}
-                        <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-100 text-purple-700 border border-purple-200">Kit {o.kit_number || 1}</span>
+                        <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(o.kit_number || 1) === 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                          {(o.kit_number || 1) === 1 ? 'Kit 1 (New)' : `Kit ${o.kit_number || 1} (Old)`}
+                        </span>
+                        <span className={`ml-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(o.department || 'migraine').toLowerCase() === 'piles' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-sky-50 text-sky-800 border-sky-200'}`}>
+                          {(o.department || 'migraine').toLowerCase() === 'piles' ? 'Piles' : 'Migraine'}
+                        </span>
                       </p>
                       <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{o.billing_phone} · {o.awb_code}</p>
                       {o.interakt_reply_text && !o.interakt_reply_read && (
                         <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6 max-w-full">
-                          <span className="shrink-0">💬</span>
+                          <span className="text-[10px] font-bold">Reply:</span>
                           <span className="break-words line-clamp-2">{o.interakt_reply_text}</span>
                           <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300 shrink-0">
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -839,9 +1433,19 @@ export default function ShipmaxxFollowup() {
                               {initials(o.billing_customer_name)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-gray-800 text-sm truncate">
-                                {o.billing_customer_name || '—'}
-                                <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-100 text-purple-700 border border-purple-200">Kit {o.kit_number || 1}</span>
+                              <p className="font-bold text-gray-800 text-sm truncate flex items-center flex-wrap gap-1">
+                                <span>{o.billing_customer_name || '—'}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(o.kit_number || 1) === 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                                  {(o.kit_number || 1) === 1 ? 'Kit 1 (New)' : `Kit ${o.kit_number || 1} (Old)`}
+                                </span>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(o.department || 'migraine').toLowerCase() === 'piles' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-sky-50 text-sky-800 border-sky-200'}`}>
+                                  {(o.department || 'migraine').toLowerCase() === 'piles' ? 'Piles' : 'Migraine'}
+                                </span>
+                                {o.support_staff?.name && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Assigned Support Staff">
+                                    Support: {o.support_staff.name}
+                                  </span>
+                                )}
                               </p>
                               <p className="text-[10px] text-gray-400 font-mono mt-0.5">{o.awb_code}</p>
                             </div>
@@ -852,7 +1456,7 @@ export default function ShipmaxxFollowup() {
                           <p className="text-[10px] font-bold text-gray-400 uppercase">{o.billing_city}{o.billing_state ? `, ${o.billing_state}` : ''}</p>
                           {filterFollowupNum === 'replies' && o.interakt_reply_text && !o.interakt_reply_read && (
                             <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6">
-                              <span>💬</span>
+                              <span className="text-[10px] font-bold">Reply:</span>
                               <span>{o.interakt_reply_text}</span>
                               <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300">
                                 <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -882,9 +1486,35 @@ export default function ShipmaxxFollowup() {
                           </div>
                         </td>
                         <td className="py-3 xl:py-4 px-1 xl:px-4 text-center">
-                          <span className={`text-[9px] xl:text-[11px] font-black uppercase tracking-widest ${allDone ? 'text-gray-400' : 'text-orange-500'}`}>
-                            {allDone ? 'DONE' : formatDate(activeFU?.scheduled_date, { day: '2-digit', month: 'short' })}
-                          </span>
+                          {allDone ? (
+                            <span className="text-[9px] xl:text-[11px] font-black uppercase tracking-widest text-gray-400">DONE</span>
+                          ) : (
+                            (() => {
+                              const fuNumTarget = filterFollowupNum || activeFU?.followup_number;
+                              const scheduledDateStr = getPendingDateStr(o, fuNumTarget, dateFilterMode, customDate);
+                              const isScheduledToday = scheduledDateStr === todayStr;
+                              const isOverdue = scheduledDateStr && scheduledDateStr < todayStr;
+                              if (isScheduledToday) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-[10px] xl:text-[11px] font-black uppercase tracking-wider border border-emerald-300 shadow-xs" title="Scheduled Today">
+                                    TODAY · {formatDate(scheduledDateStr, { day: '2-digit', month: 'short' })}
+                                  </span>
+                                );
+                              }
+                              if (isOverdue) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 text-rose-700 text-[10px] xl:text-[11px] font-bold uppercase tracking-wider border border-rose-200" title="Overdue Call">
+                                    {formatDate(scheduledDateStr, { day: '2-digit', month: 'short' })}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="text-[10px] xl:text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                                  {formatDate(scheduledDateStr, { day: '2-digit', month: 'short' })}
+                                </span>
+                              );
+                            })()
+                          )}
                         </td>
                         <td className="py-3 xl:py-4 px-1 xl:px-4 text-center">
                           <span className="text-xs xl:text-sm font-black text-gray-700">₹{o.sub_total}</span>
@@ -915,6 +1545,10 @@ export default function ShipmaxxFollowup() {
                   const completedCount = completedMap[o._id] ?? allFUs.filter(f => f.completed).length;
                   const allDone = completedCount >= TOTAL_FU;
                   const activeFU = getFollowup(o, filterFollowupNum) || allFUs[completedCount];
+                  const fuNumTarget = filterFollowupNum || activeFU?.followup_number;
+                  const scheduledDateStr = getPendingDateStr(o, fuNumTarget, dateFilterMode, customDate);
+                  const isScheduledToday = scheduledDateStr === todayStr;
+                  const isOverdue = scheduledDateStr && scheduledDateStr < todayStr;
                   const gradient = ROLE_GRADIENT[i % ROLE_GRADIENT.length];
                   return (
                     <div key={o._id} className="p-4 bg-white hover:bg-gray-50/30 transition-colors">
@@ -922,11 +1556,24 @@ export default function ShipmaxxFollowup() {
                         <div className="flex items-center gap-3 min-w-0 w-full">
                           <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-black shrink-0 shadow-lg`}>{initials(o.billing_customer_name)}</div>
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-gray-900 text-sm truncate">{o.billing_customer_name}</p>
+                            <p className="font-bold text-gray-900 text-sm truncate flex items-center flex-wrap gap-1">
+                              <span>{o.billing_customer_name}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(o.kit_number || 1) === 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                                {(o.kit_number || 1) === 1 ? 'Kit 1 (New)' : `Kit ${o.kit_number || 1} (Old)`}
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(o.department || 'migraine').toLowerCase() === 'piles' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-sky-50 text-sky-800 border-sky-200'}`}>
+                                {(o.department || 'migraine').toLowerCase() === 'piles' ? 'Piles' : 'Migraine'}
+                              </span>
+                              {o.support_staff?.name && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Assigned Support Staff">
+                                  Support: {o.support_staff.name}
+                                </span>
+                              )}
+                            </p>
                             <p className="text-[10px] font-bold text-gray-400 truncate">{o.billing_phone} · {o.billing_city}</p>
                             {filterFollowupNum === 'replies' && o.interakt_reply_text && !o.interakt_reply_read && (
                               <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[9px] font-bold shadow-sm whitespace-normal leading-tight relative pr-6 max-w-full">
-                                <span className="shrink-0">💬</span>
+                                <span className="text-[10px] font-bold">Reply:</span>
                                 <span className="break-words line-clamp-2">{o.interakt_reply_text}</span>
                                 <button onClick={(e) => handleMarkReplyRead(e, o._id)} className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center hover:bg-emerald-300 shrink-0">
                                   <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -937,7 +1584,23 @@ export default function ShipmaxxFollowup() {
                         </div>
                         <div className="text-left sm:text-right shrink-0 w-full sm:w-auto flex items-center sm:block justify-between">
                           <p className="font-black text-gray-900 text-sm">₹{o.sub_total}</p>
-                          <p className="text-[9px] font-bold text-orange-500 uppercase mt-0 sm:mt-1">{allDone ? 'DONE' : `Next: ${formatDate(activeFU?.scheduled_date, { day: '2-digit', month: 'short' })}`}</p>
+                          <div className="mt-0 sm:mt-1">
+                            {allDone ? (
+                              <span className="text-[9px] font-bold text-gray-400 uppercase">DONE</span>
+                            ) : isScheduledToday ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase border border-emerald-300">
+                                TODAY · {formatDate(scheduledDateStr, { day: '2-digit', month: 'short' })}
+                              </span>
+                            ) : isOverdue ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[9px] font-bold uppercase border border-rose-200">
+                                {formatDate(scheduledDateStr, { day: '2-digit', month: 'short' })}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-gray-700 uppercase">
+                                Next: {formatDate(scheduledDateStr, { day: '2-digit', month: 'short' })}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center justify-between bg-gray-50 rounded-[1.25rem] p-3 border border-gray-100 mb-4">
@@ -986,7 +1649,7 @@ export default function ShipmaxxFollowup() {
           {!showCompleted && bookedSearchMatches.length > 0 && (
             <div className="border-t-2 border-orange-100 mt-2">
               <div className="px-4 sm:px-6 py-3 bg-orange-50 flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">🔖 Order Booked ({bookedSearchMatches.length})</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">Order Booked ({bookedSearchMatches.length})</span>
                 <span className="text-[10px] text-orange-400 font-bold">— Same number, sent to verification</span>
               </div>
               <div className="divide-y divide-orange-50">
@@ -1055,6 +1718,35 @@ export default function ShipmaxxFollowup() {
                     <SectionHead label="Order Details" />
                     <DetailRow label="Order ID" value={selected.order_id} />
                     <DetailRow label="Kit Count" value={`Kit ${selected.kit_number || 1}`} />
+                    <div className="flex items-center gap-2 sm:gap-3 py-2 border-b border-gray-50 last:border-0">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 w-20 sm:w-28 shrink-0">Support Staff</span>
+                      {canManage ? (
+                        <select
+                          value={selected.support_staff?._id || selected.support_staff || ''}
+                          onChange={async (e) => {
+                            const newStaffId = e.target.value;
+                            try {
+                              await api.patch(`/shipmaxx/orders/${selected._id}/assign-support`, { staffId: newStaffId });
+                              const staffObj = supportStaffList.find(s => String(s._id) === String(newStaffId)) || null;
+                              setSelected(prev => ({ ...prev, support_staff: staffObj }));
+                              setAll(prev => prev.map(o => String(o._id) === String(selected._id) ? { ...o, support_staff: staffObj } : o));
+                            } catch (err) {
+                              alert('Failed to reassign support staff');
+                            }
+                          }}
+                          className="text-xs font-bold text-gray-800 bg-white border border-gray-200 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-400/20 cursor-pointer"
+                        >
+                          <option value="">Unassigned</option>
+                          {supportStaffList.map(s => (
+                            <option key={s._id} value={s._id}>{s.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                          {selected.support_staff?.name || 'Unassigned'}
+                        </span>
+                      )}
+                    </div>
                     <DetailRow label="Medicine" value={selected.order_items?.[0]?.name || '—'} />
                     <DetailRow label="Courier" value={selected.courier_name} />
                     <DetailRow label="Payment" value={selected.payment_method} />
@@ -1153,7 +1845,7 @@ export default function ShipmaxxFollowup() {
                       <button onClick={openBookAppointment}
                         className="w-full py-3.5 rounded-xl text-[10px] font-black text-white shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 hover:opacity-95 tracking-widest"
                         style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }}>
-                        📅 BOOK DOCTOR APPOINTMENT
+                        BOOK DOCTOR APPOINTMENT
                       </button>
                     </div>
                   </div>
@@ -1215,7 +1907,7 @@ export default function ShipmaxxFollowup() {
                   <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/80 border border-orange-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
-                        ➕
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
                       </div>
                       <div>
                         <h4 className="text-xs font-black text-orange-950 uppercase tracking-wider">Add-on / Re-Order Verification</h4>
@@ -1226,7 +1918,7 @@ export default function ShipmaxxFollowup() {
                       type="button"
                       onClick={() => openAddonModal(selected)}
                       className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 text-white hover:from-orange-600 hover:to-amber-700 text-xs font-black uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
-                      <span>➕</span> OPEN ADD-ON POPUP
+                      OPEN ADD-ON POPUP
                     </button>
                   </div>
 
@@ -1310,6 +2002,25 @@ export default function ShipmaxxFollowup() {
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Pincode</label>
                     <input className={inputCls} value={manualForm.pincode} onChange={e => setManualForm(p => ({ ...p, pincode: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Kit Number *</label>
+                    <select
+                      className={inputCls}
+                      value={manualForm.kit_number || 1}
+                      onChange={e => setManualForm(p => ({ ...p, kit_number: Number(e.target.value) }))}
+                    >
+                      <option value={1}>1st Kit</option>
+                      <option value={2}>2nd Kit</option>
+                      <option value={3}>3rd Kit</option>
+                      <option value={4}>4th Kit</option>
+                      <option value={5}>5th Kit</option>
+                      <option value={6}>6th Kit</option>
+                      <option value={7}>7th Kit</option>
+                      <option value={8}>8th Kit</option>
+                      <option value={9}>9th Kit</option>
+                      <option value={10}>10th Kit</option>
+                    </select>
                   </div>
                 </div>
                 <div>
@@ -1431,7 +2142,7 @@ export default function ShipmaxxFollowup() {
             <div className="px-6 py-5 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-orange-500 to-amber-600 text-white">
               <div>
                 <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
-                  <span>➕</span> Add-on Re-Order Verification
+                  Add-on Re-Order Verification
                 </h3>
                 <p className="text-xs text-orange-100 font-bold mt-0.5">
                   {addonForm.targetOrder.billing_customer_name} · {addonForm.targetOrder.billing_phone}
@@ -1460,7 +2171,7 @@ export default function ShipmaxxFollowup() {
             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
               <button type="button" onClick={() => setAddonModalOpen(false)} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">Cancel</button>
               <button type="submit" form="smx-addon-modal-form" disabled={addonSaving} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-white shadow-md transition-all active:scale-95 disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)' }}>
-                {addonSaving ? 'Saving & Sending...' : '🚀 Save & Send to Verification'}
+                {addonSaving ? 'Saving & Sending...' : 'Save & Send to Verification'}
               </button>
             </div>
           </div>
