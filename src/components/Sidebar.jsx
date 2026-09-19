@@ -149,6 +149,7 @@ export default function Sidebar({ open, onClose, unreadCount = 0, whatsappUnread
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 
   useEffect(() => {
+    import('../pages/Pipeline').then(m => m.prefetchPipeline?.()).catch(() => {});
     const observer = new MutationObserver(() => {
       setTheme(localStorage.getItem('theme') || 'light');
     });

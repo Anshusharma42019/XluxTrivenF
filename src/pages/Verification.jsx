@@ -118,7 +118,7 @@ export default function Verification() {
   const [totalPages, setTotalPages] = useState(1);
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && records.length === 0) setLoading(true);
     setError('');
     try {
       const params = {
@@ -137,11 +137,11 @@ export default function Verification() {
       }
     } catch (e) {
       if (!silent) setError(e?.response?.data?.message || e.message || 'Failed to load');
-    } finally { if (!silent) setLoading(false); }
-  }, [department, currentPage, dayFilter, customDate, search, activeTab]);
+    } finally { setLoading(false); }
+  }, [department, currentPage, dayFilter, customDate, search, activeTab, records.length]);
 
   const loadOnHold = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && onHoldRecords.length === 0) setLoading(true);
     setError('');
     try {
       const params = {
@@ -160,21 +160,13 @@ export default function Verification() {
       }
     } catch (e) {
       if (!silent) setError(e?.response?.data?.message || e.message || 'Failed to load');
-    } finally { if (!silent) setLoading(false); }
-  }, [department, currentPage, ohDayFilter, ohCustomDate, ohSearch, activeTab]);
+    } finally { setLoading(false); }
+  }, [department, currentPage, ohDayFilter, ohCustomDate, ohSearch, activeTab, onHoldRecords.length]);
 
   // Sync fresh records quietly in the background
   const runSync = useCallback(() => {
-    syncVerificationRecords()
-      .then(() => {
-        if (activeTab === 'pending') {
-          load(true);
-        } else {
-          loadOnHold(true);
-        }
-      })
-      .catch(() => {});
-  }, [activeTab, load, loadOnHold]);
+    syncVerificationRecords().catch(() => {});
+  }, []);
 
   // Load correct list on filters or tab change
   useEffect(() => {
@@ -501,7 +493,7 @@ export default function Verification() {
         {/* List */}
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
           <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-            {loading ? (
+            {loading && activeList.length === 0 ? (
               <div className="flex items-center justify-center py-20">
                 <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>

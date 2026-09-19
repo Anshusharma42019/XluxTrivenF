@@ -15,7 +15,7 @@ const Tasks = lazy(() => import('./pages/Tasks'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Users = lazy(() => import('./pages/Users'));
 const CNP = lazy(() => import('./pages/CNP'));
-const Verification = lazy(() => import('./pages/Verification'));
+import Verification from './pages/Verification';
 const ReadyToShipment = lazy(() => import('./pages/ReadyToShipment'));
 const Shiprocket = lazy(() => import('./pages/Shiprocket'));
 const NdrDetail = lazy(() => import('./pages/NdrDetail'));

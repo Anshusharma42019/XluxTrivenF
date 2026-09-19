@@ -148,14 +148,14 @@ export default function StaffActivity() {
   const [activeTab, setActiveTab] = useState('all'); // 'all', 'new', 'old', 'rto'
   const autoRefreshTimer = useRef(null);
 
-  const fetchStaffStats = useCallback(async () => {
+  const fetchStaffStats = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     try {
       const params = {
         preset: period,
         from: period === 'custom' ? fromDate : undefined,
         to: period === 'custom' ? toDate : undefined,
-        _t: Date.now()
+        refresh: forceRefresh ? true : undefined,
       };
 
       const res = await API.get('/dashboard/all-staff-stats', { params });
@@ -210,7 +210,6 @@ export default function StaffActivity() {
           preset: period,
           from: period === 'custom' ? fromDate : undefined,
           to: period === 'custom' ? toDate : undefined,
-          _t: Date.now()
         }
       });
       setStaffOrdersData(res.data?.data || null);
@@ -322,34 +321,32 @@ export default function StaffActivity() {
             </p>
           </div>
           
-          {!loading && (
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', padding: '10px 18px', borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 6px rgba(22,163,74,0.08)' }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.5 }}>New (1st Kit) Share</span>
-                <span style={{ fontSize: 22, fontWeight: 900, color: '#15803d', lineHeight: 1.1 }}>
-                  {summary.totalNewDel} <span style={{ fontSize: 12, fontWeight: 700 }}>Orders <Star size={12} className="inline-block ml-1" /></span>
-                </span>
-              </div>
-              <div style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', border: '1px solid #93c5fd', padding: '10px 18px', borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 6px rgba(37,99,235,0.08)' }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 0.5 }}>Total Delivered 📦</span>
-                <span style={{ fontSize: 22, fontWeight: 900, color: '#1d4ed8', lineHeight: 1.1 }}>
-                  {summary.totalUniqueDelivered} <span style={{ fontSize: 12, fontWeight: 700 }}>Orders</span>
-                </span>
-                {summary.totalUnattributed > 0 && (
-                  <span title={`${summary.totalUnattributed} order(s) not linked to any Sales/Support staff (lead assigned to manager/admin or no phone record)`}
-                    style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                    ⚠ {summary.totalUnattributed} unlinked
-                  </span>
-                )}
-              </div>
-              <div style={{ background: 'linear-gradient(135deg, #fef2f2, #fee2e2)', border: '1px solid #fca5a5', padding: '10px 18px', borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 6px rgba(220,38,38,0.08)' }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5 }}>RTO Impact Rate</span>
-                <span style={{ fontSize: 22, fontWeight: 900, color: '#b91c1c', lineHeight: 1.1 }}>
-                  {summary.rtoRate}%
-                </span>
-              </div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', padding: '10px 18px', borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 6px rgba(22,163,74,0.08)' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.5 }}>New (1st Kit) Share</span>
+              <span style={{ fontSize: 22, fontWeight: 900, color: '#15803d', lineHeight: 1.1 }}>
+                {summary.totalNewDel} <span style={{ fontSize: 12, fontWeight: 700 }}>Orders <Star size={12} className="inline-block ml-1" /></span>
+              </span>
             </div>
-          )}
+            <div style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', border: '1px solid #93c5fd', padding: '10px 18px', borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 6px rgba(37,99,235,0.08)' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 0.5 }}>Total Delivered 📦</span>
+              <span style={{ fontSize: 22, fontWeight: 900, color: '#1d4ed8', lineHeight: 1.1 }}>
+                {summary.totalUniqueDelivered} <span style={{ fontSize: 12, fontWeight: 700 }}>Orders</span>
+              </span>
+              {summary.totalUnattributed > 0 && (
+                <span title={`${summary.totalUnattributed} order(s) not linked to any Sales/Support staff (lead assigned to manager/admin or no phone record)`}
+                  style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                  ⚠ {summary.totalUnattributed} unlinked
+                </span>
+              )}
+            </div>
+            <div style={{ background: 'linear-gradient(135deg, #fef2f2, #fee2e2)', border: '1px solid #fca5a5', padding: '10px 18px', borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', boxShadow: '0 2px 6px rgba(220,38,38,0.08)' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5 }}>RTO Impact Rate</span>
+              <span style={{ fontSize: 22, fontWeight: 900, color: '#b91c1c', lineHeight: 1.1 }}>
+                {summary.rtoRate}%
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Global Filter Bar (OpsDashboard Style) */}
@@ -410,7 +407,7 @@ export default function StaffActivity() {
           {/* Right Controls */}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             {lastUpdated && <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Updated {lastUpdated}</span>}
-            <button onClick={fetchStaffStats} title="Refresh Live Data" style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700 }}>
+            <button onClick={() => fetchStaffStats(true)} title="Refresh Live Data" style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700 }}>
               <svg width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
               <span>Sync</span>
             </button>
@@ -513,12 +510,7 @@ export default function StaffActivity() {
             </div>
           }
         >
-          {loading ? (
-            <div style={{ padding: '60px 0', textAlign: 'center' }}>
-              <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p style={{ color: '#64748b', fontSize: 14, fontWeight: 700 }}>Syncing staff operational throughput...</p>
-            </div>
-          ) : filteredStaff.length === 0 ? (
+          {filteredStaff.length === 0 ? (
             <div style={{ padding: '50px 20px', textAlign: 'center', color: '#94a3b8' }}>
               <div style={{ fontSize: 36, marginBottom: 8 }}><Inbox size={36} className="mx-auto text-slate-400 mb-2" /></div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#475569' }}>No matching team members found</div>
@@ -792,12 +784,7 @@ export default function StaffActivity() {
           title={<><Phone size={20} className="inline-block mr-2" /> Lead Calling & Conversion Monitor (Sales & Follow-Up Tracking)</>}
           subtitle="Comprehensive monitoring of assigned leads, CNP (Could Not Pick) moves, Call Again schedules, Interested markers, and comments added per staff member."
         >
-          {loading ? (
-            <div style={{ padding: '60px 0', textAlign: 'center' }}>
-              <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p style={{ color: '#64748b', fontSize: 14, fontWeight: 700 }}>Loading calling activities and lead conversion metrics...</p>
-            </div>
-          ) : filteredStaff.length === 0 ? (
+          {filteredStaff.length === 0 ? (
             <div style={{ padding: '50px 20px', textAlign: 'center', color: '#94a3b8' }}>
               <div style={{ fontSize: 36, marginBottom: 8 }}><Inbox size={36} className="mx-auto text-slate-400 mb-2" /></div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#475569' }}>No calling activity found for this filter</div>
@@ -961,12 +948,7 @@ export default function StaffActivity() {
 
               {/* Drawer Body - Tabs & Orders */}
               <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-                {ordersLoading ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 260, color: '#64748b' }}>
-                    <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3" />
-                    <p style={{ fontWeight: 700, fontSize: 14 }}>Fetching real-time shipment records...</p>
-                  </div>
-                ) : !staffOrdersData ? (
+                {!staffOrdersData ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 260, color: '#94a3b8' }}>
                     <div style={{ fontSize: 44, marginBottom: 8 }}>📦</div>
                     <p style={{ fontWeight: 700, fontSize: 15 }}>No delivery data found for this period.</p>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLeads, getLead, updateLead, getCallAgains, updateCallAgain, markCNP, createCallAgain, deleteLead } from '../services/lead.service';
@@ -46,17 +46,39 @@ const STAGES = [
   { key: 'closed_lost',    label: 'Not Interested', bar: 'bg-red-400' },
 ];
 
+const globalPipelineCache = {
+  interested: null,
+  on_hold: null,
+  closed_lost: null,
+  cnp: null,
+  call_again: null,
+};
+
+export const prefetchPipeline = async (monthFilter = new Date().getMonth(), department = '') => {
+  if (globalPipelineCache.interested) return;
+  try {
+    const mq = { limit: 100, month: monthFilter };
+    if (department) mq.department = department;
+    const res = await getLeads({ ...mq, status: 'interested' });
+    if (Array.isArray(res?.leads)) {
+      globalPipelineCache.interested = res.leads;
+    }
+  } catch {}
+};
+
 export default function Pipeline() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const [interestedLeads, setInterestedLeads] = useState([]);
-  const [onHoldLeads, setOnHoldLeads] = useState([]);
-  const [closedLostLeads, setClosedLostLeads] = useState([]);
+  const [interestedLeads, setInterestedLeads] = useState(() => globalPipelineCache.interested || []);
+  const [onHoldLeads, setOnHoldLeads] = useState(() => globalPipelineCache.on_hold || []);
+  const [closedLostLeads, setClosedLostLeads] = useState(() => globalPipelineCache.closed_lost || []);
   const [deliveredOrders, setDeliveredOrders] = useState([]);
-  const [cnpLeads, setCnpLeads] = useState([]);
-  const [callAgainLeads, setCallAgainLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [cnpLeads, setCnpLeads] = useState(() => globalPipelineCache.cnp || []);
+  const [callAgainLeads, setCallAgainLeads] = useState(() => globalPipelineCache.call_again || []);
+  const [loading, setLoading] = useState(false);
+  const [tabLoading, setTabLoading] = useState(() => !globalPipelineCache.interested);
+  const loadedTabsRef = useRef(new Set(Object.keys(globalPipelineCache).filter(k => globalPipelineCache[k] !== null)));
   const [updating, setUpdating] = useState(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('interested');
@@ -68,7 +90,7 @@ export default function Pipeline() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchParams, setSearchParams] = useSearchParams();
   const pendingOpenId = searchParams.get('openId');
-  
+
   const canManage = user?.role === 'admin' || user?.role === 'manager';
   const [note, setNote] = useState('');
   const [nextDate, setNextDate] = useState('');
@@ -127,45 +149,41 @@ export default function Pipeline() {
   };
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) {
-      setLoading(true);
+    const isAlreadyLoaded = loadedTabsRef.current.has(filter);
+    if (!silent && !isAlreadyLoaded) {
+      setTabLoading(true);
       setError('');
     }
     try {
-      const q = { limit: 200 };
+      const q = { limit: 100 };
       if (department) q.department = department;
       const mq = { ...q, month: monthFilter };
 
-      // Fetch active tab first for fast render
-      const fetchByFilter = (f) => {
-        if (f === 'cnp') return getCnpRecords(mq);
-        if (f === 'call_again') return getCallAgains(mq);
-        if (f === 'on_hold') return getLeads({ ...mq, status: 'on_hold' });
-        if (f === 'closed_lost') return getLeads({ ...mq, status: 'closed_lost' });
-        return getLeads({ ...mq, status: 'interested' });
-      };
+      let res;
+      if (filter === 'cnp') res = await getCnpRecords(mq);
+      else if (filter === 'call_again') res = await getCallAgains(mq);
+      else if (filter === 'on_hold') res = await getLeads({ ...mq, status: 'on_hold' });
+      else if (filter === 'closed_lost') res = await getLeads({ ...mq, status: 'closed_lost' });
+      else res = await getLeads({ ...mq, status: 'interested' });
 
-      const setByFilter = (f, res) => {
-        if (f === 'cnp') setCnpLeads(Array.isArray(res) ? res : []);
-        else if (f === 'call_again') setCallAgainLeads(Array.isArray(res) ? res : []);
-        else if (f === 'on_hold') setOnHoldLeads(Array.isArray(res?.leads) ? res.leads.filter(l => !l.cnp) : []);
-        else if (f === 'closed_lost') setClosedLostLeads(Array.isArray(res?.leads) ? res.leads : []);
-        else setInterestedLeads(Array.isArray(res?.leads) ? res.leads : []);
-      };
+      let list = [];
+      if (filter === 'cnp' || filter === 'call_again') list = Array.isArray(res) ? res : [];
+      else if (filter === 'on_hold') list = Array.isArray(res?.leads) ? res.leads.filter(l => !l.cnp) : [];
+      else list = Array.isArray(res?.leads) ? res.leads : [];
 
-      // Load active tab immediately
-      const activeRes = await fetchByFilter(filter);
-      setByFilter(filter, activeRes);
-      if (!silent) setLoading(false);
+      globalPipelineCache[filter] = list;
 
-      // Load remaining tabs in background
-      const otherFilters = ['interested', 'closed_lost', 'cnp', 'call_again'].filter(f => f !== filter);
-      const otherResults = await Promise.all(otherFilters.map(f => fetchByFilter(f).catch(() => null)));
-      otherFilters.forEach((f, i) => { if (otherResults[i]) setByFilter(f, otherResults[i]); });
+      if (filter === 'cnp') setCnpLeads(list);
+      else if (filter === 'call_again') setCallAgainLeads(list);
+      else if (filter === 'on_hold') setOnHoldLeads(list);
+      else if (filter === 'closed_lost') setClosedLostLeads(list);
+      else setInterestedLeads(list);
 
+      loadedTabsRef.current.add(filter);
+      setTabLoading(false);
     } catch (err) {
       if (!silent) setError(err.response?.data?.message || err.message || 'Failed to load');
-      if (!silent) setLoading(false);
+      setTabLoading(false);
     }
   }, [department, monthFilter, filter]);
 
@@ -339,12 +357,6 @@ export default function Pipeline() {
     } catch { } finally { setDoneLoading(null); }
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-[3px] border-green-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-
   return (
     <div className="flex gap-4 scroll-container-h overflow-hidden animate-slide-up mobile-p-safe">
       {/* ── LEFT PANEL ── */}
@@ -371,7 +383,7 @@ export default function Pipeline() {
             </div>
             <select
               value={monthFilter}
-              onChange={e => setMonthFilter(Number(e.target.value))}
+              onChange={e => { setMonthFilter(Number(e.target.value)); loadedTabsRef.current = new Set(); }}
               className="px-3 py-2 rounded-xl border border-gray-100 bg-white text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition shadow-sm shrink-0"
             >
               {Array.from({ length: new Date().getMonth() + 1 }, (_, i) => (
@@ -491,7 +503,7 @@ export default function Pipeline() {
             {canManage && (
               <select
                 value={department}
-                onChange={e => setDepartment(e.target.value)}
+                onChange={e => { setDepartment(e.target.value); loadedTabsRef.current = new Set(); }}
                 className="w-full md:w-auto px-4 py-2.5 rounded-2xl border border-gray-100 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition shadow-sm shrink-0"
               >
                 <option value="">All Depts</option>
@@ -537,7 +549,22 @@ export default function Pipeline() {
           )}
 
           <div className="space-y-2 pb-4">
-            {filteredItems.length === 0 && (!deliveredOrders.length || filter !== 'follow_up') ? (
+            {tabLoading && filteredItems.length === 0 ? (
+              <div className="space-y-3 py-2">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <div key={n} className="p-4 bg-white rounded-2xl border border-gray-100 animate-pulse flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gray-200 rounded-xl shrink-0"></div>
+                      <div className="space-y-2">
+                        <div className="w-36 h-4 bg-gray-200 rounded-md"></div>
+                        <div className="w-24 h-3 bg-gray-100 rounded-md"></div>
+                      </div>
+                    </div>
+                    <div className="w-20 h-6 bg-gray-200 rounded-lg shrink-0"></div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredItems.length === 0 && (!deliveredOrders.length || filter !== 'follow_up') ? (
               <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
                 <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-3 text-gray-300">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>

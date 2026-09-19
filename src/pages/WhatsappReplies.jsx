@@ -827,15 +827,17 @@ export default function ShipmaxxFollowup() {
                       ))}
                     </div>
 
-                    <SectionHead label="Problem & Remarks" />
+                    <SectionHead label="Reported Problem" />
                     <div className="space-y-2 mt-2">
                       <div className="p-3 bg-red-50/50 rounded-xl border border-red-100 shadow-sm">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-red-400 block mb-1">Reported Problem</span>
-                        <span className="text-sm text-gray-800 font-medium whitespace-pre-wrap">{selected.verification_problem || selected.problem || selected.lead_id?.problem || 'No problem recorded'}</span>
-                      </div>
-                      <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 shadow-sm">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400 block mb-1">Order Remarks</span>
-                        <span className="text-sm text-gray-800 font-medium whitespace-pre-wrap">{selected.verification_notes || selected.notes || selected.lead_id?.note || 'No remarks added'}</span>
+                        <span className="text-sm text-gray-800 font-medium whitespace-pre-wrap">
+                          {(() => {
+                            const raw = selected.verification_problem || selected.problem || selected.lead_id?.problem || '';
+                            const cleaned = String(raw).split('\n').filter(l => !l.trim().toLowerCase().includes('[interakt message]')).join('\n').trim();
+                            return cleaned || 'No problem recorded';
+                          })()}
+                        </span>
                       </div>
                     </div>
 
@@ -893,25 +895,6 @@ export default function ShipmaxxFollowup() {
                   </div>
                 </div>
 
-                {/* Activity */}
-                <div className="mt-8">
-                  <SectionHead label="Order Activity" />
-                  <div className="mt-3 space-y-2">
-                    {activityLoading ? (
-                      <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 text-xs font-bold text-gray-400">Loading activity...</div>
-                    ) : activity.length === 0 ? (
-                      <div className="bg-white rounded-xl border border-dashed border-gray-200 px-4 py-3 text-xs font-bold text-gray-400">No activity recorded yet</div>
-                    ) : activity.map(item => (
-                      <div key={item._id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <p className="text-xs font-black text-gray-800 uppercase tracking-wider">{item.title}</p>
-                          <span className="text-[10px] font-bold text-gray-400">{formatDate(item.createdAt, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        {item.description && <p className="text-xs text-gray-500 mt-1">{item.description}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
                 {/* Send to Verification */}
                 <div className="mt-6">
