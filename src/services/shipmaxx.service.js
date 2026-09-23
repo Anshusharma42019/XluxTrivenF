@@ -1,5 +1,4 @@
 import api from '../api';
-
 const BASE = '/shipmaxx';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -54,6 +53,7 @@ export const importByIds   = (order_ids) => api.post(`${BASE}/orders/import-by-i
 export const saveOrderNote = (id, text, type = 'general', section = '') => api.post(`${BASE}/orders/${id}/notes`, { text, type, section });
 export const getOrderActivity = (id) => api.get(`${BASE}/orders/${id}/activity`);
 export const updateOrderContact = (id, body) => api.patch(`${BASE}/orders/${id}/contact`, body);
+export const updateDeliveredDate = (id, delivered_at) => api.patch(`${BASE}/orders/${id}/delivered-date`, { delivered_at });
 
 // ── Follow-ups ────────────────────────────────────────────────────────────────
 export const getOrdersWithFollowUps  = (params) => api.get(`${BASE}/orders/with-followups`, { params });

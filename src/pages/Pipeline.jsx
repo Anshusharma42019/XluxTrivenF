@@ -320,6 +320,7 @@ export default function Pipeline() {
       const payload = { ...taskForm };
       if (!payload.assignedTo) delete payload.assignedTo;
       if (!payload.dueDate) payload.dueDate = todayISO();
+      if (taskForm.lead) optimisticRemove(taskForm.lead);
       await createTask(payload);
       if (taskCnpId) {
         await deleteCnpRecord(taskCnpId).catch(() => {});
