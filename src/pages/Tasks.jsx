@@ -143,7 +143,7 @@ export default function Tasks() {
       setForm({
         ...EMPTY,
         lead: location.state.leadId,
-        assignedTo: location.state.assignedTo || ld.assignedTo?._id || '',
+        assignedTo: (user?.role === 'sales') ? (user?._id || '') : (location.state.assignedTo || ld.assignedTo?._id || user?._id || ''),
         title: ld.name || '',
         phone: ld.phone || '',
         problem: ld.problem || '',

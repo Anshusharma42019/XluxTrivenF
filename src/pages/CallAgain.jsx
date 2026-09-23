@@ -227,7 +227,7 @@ export default function CallAgain() {
                     </div>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                  <button disabled={updating === record._id} onClick={() => setTaskModal({ lead: record.lead, assignedTo: record.assignedTo?._id || '', recordId: record._id })}
+                  <button disabled={updating === record._id} onClick={() => setTaskModal({ lead: record.lead, assignedTo: user?.role === 'sales' ? (user?._id || '') : (record.assignedTo?._id || user?._id || ''), recordId: record._id })}
                     className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 transition">
                     + Task
                   </button>

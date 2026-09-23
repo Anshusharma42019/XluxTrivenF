@@ -87,7 +87,8 @@ export default function CNP() {
 
   const openTaskModal = (item) => {
     const lead = item.lead || {};
-    setTaskForm({ title: lead.name || item.title || '', phone: lead.phone || '', problem: lead.problem || '', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', reminderAt: '', dueDate: todayISO(), cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', type: 'task', priority: 'medium', lead: lead._id || '', assignedTo: item.assignedTo?._id || '', cnpRecordId: item._id, isCallAgain: tab === 'callAgain' });
+    const defaultAssignedTo = (user?.role === 'sales' || !item.assignedTo?._id) ? (user?._id || '') : (item.assignedTo?._id || user?._id || '');
+    setTaskForm({ title: lead.name || item.title || '', phone: lead.phone || '', problem: lead.problem || '', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', reminderAt: '', dueDate: todayISO(), cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', type: 'task', priority: 'medium', lead: lead._id || '', assignedTo: defaultAssignedTo, cnpRecordId: item._id, isCallAgain: tab === 'callAgain' });
     setTaskError('');
     setTaskModal(true);
   };

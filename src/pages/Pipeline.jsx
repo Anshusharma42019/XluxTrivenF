@@ -308,7 +308,8 @@ export default function Pipeline() {
 
   const openTaskModal = (lead) => {
     const t = leadTask;
-    setTaskForm({ ...TASK_EMPTY, dueDate: todayISO(), lead: lead._id, assignedTo: lead.assignedTo?._id || user?._id || '', title: lead.name || '', phone: t?.phone || lead.phone || '', problem: t?.problem || lead.problem || '', age: t?.age || '', weight: t?.weight || '', height: t?.height || '', cityVillageType: t?.cityVillageType || 'city', cityVillage: t?.cityVillage || '', houseNo: t?.houseNo || '', postOffice: t?.postOffice || '', district: t?.district || '', landmark: t?.landmark || '', pincode: t?.pincode || '', state: t?.state || '', otherProblems: t?.otherProblems || '', problemDuration: t?.problemDuration || '', price: t?.price || '' });
+    const defaultAssignedTo = (user?.role === 'sales' || !lead.assignedTo?._id) ? (user?._id || '') : (lead.assignedTo?._id || user?._id || '');
+    setTaskForm({ ...TASK_EMPTY, dueDate: todayISO(), lead: lead._id, assignedTo: defaultAssignedTo, title: lead.name || '', phone: t?.phone || lead.phone || '', problem: t?.problem || lead.problem || '', age: t?.age || '', weight: t?.weight || '', height: t?.height || '', cityVillageType: t?.cityVillageType || 'city', cityVillage: t?.cityVillage || '', houseNo: t?.houseNo || '', postOffice: t?.postOffice || '', district: t?.district || '', landmark: t?.landmark || '', pincode: t?.pincode || '', state: t?.state || '', otherProblems: t?.otherProblems || '', problemDuration: t?.problemDuration || '', price: t?.price || '' });
     setTaskCnpId(filter === 'cnp' ? selected?._id : null);
     setTaskError('');
     setTaskModal(true);
