@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getVerificationRecords, syncVerificationRecords, updateVerificationStatus, updateVerificationRecord, updateTask, deleteVerificationRecord, getOnHoldVerificationRecords } from '../services/task.service';
+import { getVerificationRecords, syncVerificationRecords, updateVerificationStatus, updateVerificationRecord, updateTask, deleteVerificationRecord, getOnHoldVerificationRecords, addVerificationNote } from '../services/task.service';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { updateLead, markCNP, createCallAgain } from '../services/lead.service';
 import { getUsers } from '../services/user.service';
@@ -90,6 +90,8 @@ export default function Verification() {
   const [ohCustomDate, setOhCustomDate] = useState('');
   const [ohSearch, setOhSearch] = useState('');
   const [ohSearchText, setOhSearchText] = useState('');
+  const [noteText, setNoteText] = useState('');
+  const [noteLoading, setNoteLoading] = useState(false);
 
   // Debounce search input values
   useEffect(() => {
@@ -216,6 +218,37 @@ export default function Verification() {
     }
   }, [activeTab, load, loadOnHold]);
 
+  const handleAddNote = async () => {
+    const text = noteText.trim();
+    if (!text || !selected || noteLoading) return;
+
+    // Optimistic Note Object
+    const newNoteObj = { text, createdBy: { name: user?.name || 'You' }, createdAt: new Date() };
+    const updatedNotes = [newNoteObj, ...(selected.notes || [])];
+
+    // Instantly update UI and clear input
+    setSelected(prev => prev ? { ...prev, notes: updatedNotes } : null);
+    const updateInList = (list) => list.map(r => r._id === selected._id ? { ...r, notes: updatedNotes } : r);
+    setRecords(updateInList);
+    setOnHoldRecords(updateInList);
+    setNoteText('');
+    setNoteLoading(true);
+
+    try {
+      const updated = await addVerificationNote(selected._id, text);
+      if (updated?.notes) {
+        setSelected(prev => prev ? { ...prev, notes: updated.notes } : null);
+        const updateServerInList = (list) => list.map(r => r._id === selected._id ? { ...r, notes: updated.notes } : r);
+        setRecords(updateServerInList);
+        setOnHoldRecords(updateServerInList);
+      }
+    } catch (err) {
+      console.error('Failed to add verification note:', err);
+    } finally {
+      setNoteLoading(false);
+    }
+  };
+
   useAutoRefresh(refreshActiveTab, 15000);
 
   useEffect(() => {
@@ -242,13 +275,14 @@ export default function Verification() {
     const filteredTaskData = Object.fromEntries(
       Object.entries(taskData).filter(([k, v]) =>
         v !== null && v !== undefined && v !== '' &&
-        !['assignedTo', 'verifiedBy', 'createdBy', '_id', '__v'].includes(k)
+        !['assignedTo', 'verifiedBy', 'createdBy', '_id', '__v', 'notes'].includes(k)
       )
     );
     return {
       ...r,
       ...filteredTaskData,
       _id: r._id,
+      notes: r.notes || [],
       status: r.status,
       lead: r.lead,
       assignedTo: r.assignedTo || r.task?.assignedTo,
@@ -535,6 +569,9 @@ export default function Verification() {
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-gray-50 text-gray-600 border-gray-100">ON HOLD</span>
+                          <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Placed: {new Date(r.onHoldAt || r.updatedAt || r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                          </span>
                           {r.onHoldUntil && (
                             <span className="text-[10px] text-gray-400">
                               Until {new Date(r.onHoldUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
@@ -858,8 +895,9 @@ export default function Verification() {
                 {selected.status === 'on_hold' && (
                   <>
                     <SectionHead label="Hold Info" />
+                    <DetailRow label="Placed On Hold" value={selected.onHoldAt ? new Date(selected.onHoldAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : selected.updatedAt ? new Date(selected.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null} />
                     <DetailRow label="Hold Reason" value={selected.onHoldReason} />
-                    <DetailRow label="Hold Until" value={selected.onHoldUntil ? new Date(selected.onHoldUntil).toLocaleDateString() : null} />
+                    <DetailRow label="Hold Until" value={selected.onHoldUntil ? new Date(selected.onHoldUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null} />
                   </>
                 )}
 
@@ -872,6 +910,56 @@ export default function Verification() {
                   </div>
                 )}
                 <DetailRow label="Call Date" value={selected.reminderAt ? new Date(selected.reminderAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null} />
+
+                <SectionHead label="Activity & Notes" />
+                <div className="space-y-2 mb-3 max-h-48 overflow-y-auto pr-1">
+                  {(() => {
+                    const taskNoteTexts = new Set([
+                      ...(selected.task?.notes || []).map(tn => tn.text?.trim()),
+                      ...(selected.lead?.notes || []).map(ln => ln.text?.trim())
+                    ].filter(Boolean));
+
+                    const verificationOnlyNotes = (selected.notes || []).filter(n => {
+                      if (!n?.text) return false;
+                      return !taskNoteTexts.has(n.text.trim());
+                    });
+
+                    return verificationOnlyNotes.length > 0 ? (
+                      verificationOnlyNotes
+                        .filter((n, idx, arr) => arr.findIndex(t => (t._id && t._id === n._id) || (t.text === n.text && t.createdAt === n.createdAt)) === idx)
+                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                        .map((n, i) => (
+                          <div key={i} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                            <p className="text-gray-700 font-medium whitespace-pre-wrap">{n.text}</p>
+                            <div className="flex justify-between items-center mt-1.5 text-[9px] text-gray-400 font-medium">
+                              <span>{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                              {n.createdBy?.name && <span className="text-green-600 font-bold capitalize">By {n.createdBy.name}</span>}
+                            </div>
+                          </div>
+                        ))
+                    ) : (
+                      <p className="text-xs text-gray-400 italic text-center py-2">No notes yet</p>
+                    );
+                  })()}
+                </div>
+
+                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 mb-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Note</p>
+                  <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={2}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-400 transition mb-2"
+                    placeholder="Type notes or updates here..." />
+                  <button onClick={handleAddNote} disabled={!noteText.trim() || noteLoading}
+                    className="w-full py-2 bg-green-600 text-white text-xs font-bold rounded-xl hover:bg-green-700 disabled:opacity-50 transition shadow-sm flex items-center justify-center gap-2">
+                    {noteLoading ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Saving Note...
+                      </>
+                    ) : (
+                      'Save Note'
+                    )}
+                  </button>
+                </div>
               </>
             )}
           </div>

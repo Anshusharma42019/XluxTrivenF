@@ -5,7 +5,8 @@ import {
   fetchStaffStats,
   fetchStaffMonthlyChart,
   fetchStaffCommission,
-  fetchAllStaffCommissions
+  fetchAllStaffCommissions,
+  fetchAllStaffStats
 } from '../services/dashboard.service';
 import * as attendanceSvc from '../services/attendance.service';
 import { useAuth } from '../context/AuthContext';
@@ -332,6 +333,11 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [autoRefresh, setAutoRefresh] = useState(true);
 
+  // All Staff Performance state
+  const [allStaffData, setAllStaffData] = useState([]);
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [staffRoleFilter, setStaffRoleFilter] = useState('all');
+
   const [datePreset, setDatePreset] = useState('today');
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
@@ -345,10 +351,11 @@ export default function Dashboard() {
     const selectedDate = (datePreset === 'today' || datePreset === 'all' || !from) ? new Date().toISOString().split('T')[0] : from;
 
     try {
-      const [s, personal, att] = await Promise.allSettled([
+      const [s, personal, att, allStaffRes] = await Promise.allSettled([
         fetchStats(selectedDate, from, to, department),
         fetchStaffStats(selectedDate, null, from, to, department),
         attendanceSvc.getTodayStatus(),
+        canManage ? fetchAllStaffStats(selectedDate, from, to) : Promise.resolve(null),
       ]);
 
       if (s.status === 'fulfilled') {
@@ -358,6 +365,12 @@ export default function Dashboard() {
         setStaffStats(personal.value || null);
       }
       if (att.status === 'fulfilled') setAttStatus(att.value);
+
+      if (allStaffRes.status === 'fulfilled' && allStaffRes.value) {
+        const raw = allStaffRes.value?.staffStats || (Array.isArray(allStaffRes.value) ? allStaffRes.value : []);
+        setAllStaffData(raw.filter(item => item.user && ['sales', 'support', 'logistics', 'manager'].includes(item.user.role)));
+      }
+
       setLastUpdated(new Date());
       if (!silent) setLoading(false);
 
@@ -536,11 +549,14 @@ export default function Dashboard() {
     ...(canManage ? [
       { id: 'fulfillment', label: t('Fulfillment & Conversion'), icon: icons.box },
       { id: 'analytics', label: t('Shipment Analytics'), icon: icons.truck },
-    ] : []),
-    ...(user?.role === 'sales' ? [
-      { id: 'my_lists', label: `${t('My Activity Detail')} (${getPeriodLabel()})`, icon: icons.clipboard },
-    ] : []),
-    { id: 'trends', label: t('Earnings & Trend'), icon: icons.chart },
+      { id: 'trends', label: t('Earnings & Trend'), icon: icons.chart },
+      { id: 'staff_performance', label: t('Employee Performance'), icon: icons.users },
+    ] : [
+      ...(user?.role === 'sales' ? [
+        { id: 'my_lists', label: `${t('My Activity Detail')} (${getPeriodLabel()})`, icon: icons.clipboard },
+      ] : []),
+      { id: 'trends', label: t('Earnings & Trend'), icon: icons.chart },
+    ]),
   ];
 
   return (
@@ -1068,7 +1084,7 @@ export default function Dashboard() {
                   unit="RTO RATE"
                   icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>}
                   progressLabel={`${stats?.monthlyShipments?.rto ?? 0} returned to origin out of ${stats?.monthlyShipments?.dispatched ?? 0} dispatched`}
-                  onClick={canManage ? () => navigate('/shiprocket-returns') : undefined}
+                  onClick={canManage ? () => navigate('/shiprocket/returns') : undefined}
                 />
                 <OpsKpiCard
                   label="Active In Transit"
@@ -1466,6 +1482,303 @@ export default function Dashboard() {
               <ShipmentAnalyticsPanel department={department} />
             </div>
           </SectionCard>
+        )}
+
+        {/* ═══ Tab 6: Employee Performance Panel (Admin/Manager Only) ═══ */}
+        {activeTab === 'staff_performance' && canManage && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <SectionCard
+              title={`Employee Performance Matrix (${getPeriodLabel()})`}
+              subtitle="Real-time live performance tracking: Check-in/out attendance, assigned tasks, verifications, CNP, Call Again, and Booked Shipments"
+              icon={icons.users}
+            >
+              {/* Filter & Search Bar */}
+              <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+                <div className="flex items-center gap-3 flex-1 min-w-[240px]">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-2.5 text-slate-400">{icons.search}</span>
+                    <input
+                      type="text"
+                      placeholder="Search employee by name..."
+                      value={staffSearchQuery}
+                      onChange={(e) => setStaffSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <select
+                    value={staffRoleFilter}
+                    onChange={(e) => setStaffRoleFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none border-slate-200"
+                  >
+                    <option value="all">All Roles</option>
+                    <option value="sales">Sales Team</option>
+                    <option value="support">Support Team</option>
+                    <option value="logistics">Logistics Team</option>
+                  </select>
+
+                  <button
+                    onClick={() => load(false)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    Refresh Real Data
+                  </button>
+                </div>
+              </div>
+
+              {/* Employee Performance Table */}
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase tracking-wider">
+                    <tr>
+                      <th className="p-3">Employee</th>
+                      <th className="p-3">Check-in / Out</th>
+                      <th className="p-3 text-center">Tasks Handled</th>
+                      <th className="p-3 text-center text-blue-600">Verification</th>
+                      <th className="p-3 text-center text-amber-600">CNP</th>
+                      <th className="p-3 text-center text-indigo-600">Call Again</th>
+                      <th className="p-3 text-center text-rose-600">Not Interested</th>
+                      <th className="p-3 text-center text-slate-500">On Hold</th>
+                      <th className="p-3 text-center text-emerald-700 font-extrabold bg-emerald-50/80">Shipment Booked</th>
+                      <th className="p-3 text-center">Conversion %</th>
+                    </tr>
+                  </thead>
+                  {(() => {
+                    const filtered = allStaffData.filter((item) => {
+                      const nameMatch = !staffSearchQuery || item.user?.name?.toLowerCase().includes(staffSearchQuery.toLowerCase());
+                      const roleMatch = staffRoleFilter === 'all' || item.user?.role === staffRoleFilter;
+                      return nameMatch && roleMatch;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tbody className="bg-white">
+                          <tr>
+                            <td colSpan={10} className="p-8 text-center text-slate-400 font-semibold">
+                              No employee performance data found for the selected filter.
+                            </td>
+                          </tr>
+                        </tbody>
+                      );
+                    }
+
+                    const departmentGroups = [
+                      { key: 'sales', label: 'Sales Team', icon: '💼', bg: 'bg-emerald-50/90 text-emerald-900 border-y border-emerald-200/80', badgeBg: 'bg-emerald-600 text-white' },
+                      { key: 'support', label: 'Support Team', icon: '🎧', bg: 'bg-blue-50/90 text-blue-900 border-y border-blue-200/80', badgeBg: 'bg-blue-600 text-white' },
+                      { key: 'logistics', label: 'Logistics Team', icon: '🚚', bg: 'bg-amber-50/90 text-amber-900 border-y border-amber-200/80', badgeBg: 'bg-amber-600 text-white' },
+                      { key: 'manager', label: 'Management & Operations', icon: '👑', bg: 'bg-purple-50/90 text-purple-900 border-y border-purple-200/80', badgeBg: 'bg-purple-600 text-white' },
+                    ];
+
+                    return departmentGroups.map((dept) => {
+                      const members = filtered.filter(item => (item.user?.role || 'sales') === dept.key);
+                      if (members.length === 0) return null;
+
+                      // Calculate Department Summary Aggregates
+                      let deptTasks = 0;
+                      let deptVerifications = 0;
+                      let deptCnp = 0;
+                      let deptCallAgain = 0;
+                      let deptNotInterested = 0;
+                      let deptOnHold = 0;
+                      let deptBooked = 0;
+
+                      const isSalesDept = dept.key === 'sales';
+                      const canShowCalls = ['sales', 'support'].includes(dept.key);
+                      const canShowBooked = ['sales', 'support'].includes(dept.key);
+
+                      const preparedMembers = members.map((emp) => {
+                        const isSales = (emp.user?.role || 'sales') === 'sales';
+                        const canDoCalls = ['sales', 'support'].includes(emp.user?.role || dept.key);
+                        const canBook = ['sales', 'support'].includes(emp.user?.role || dept.key);
+
+                        const verifications = canDoCalls ? (emp.todayVerifications || emp.verifiedCount || 0) : 0;
+                        const cnp = canDoCalls ? (emp.todayCnp || 0) : 0;
+                        const callAgain = canDoCalls ? (emp.todayCallAgain || 0) : 0;
+                        const notInterested = canDoCalls ? (emp.todayNotInterested || 0) : 0;
+                        const onHold = canDoCalls ? (emp.onHoldCount || 0) : 0;
+                        const booked = canBook ? (emp.readyToShipmentCount || 0) : 0;
+
+                        // Only Sales team members receive lead/call task assignments
+                        const tasksHandled = isSales ? (emp.tasksAssigned || 0) : 0;
+                        const conversion = isSales && tasksHandled > 0
+                          ? ((booked / tasksHandled) * 100).toFixed(1)
+                          : (isSales && booked > 0 ? '100.0' : '-');
+
+                        deptTasks += tasksHandled;
+                        deptVerifications += verifications;
+                        deptCnp += cnp;
+                        deptCallAgain += callAgain;
+                        deptNotInterested += notInterested;
+                        deptOnHold += onHold;
+                        deptBooked += booked;
+
+                        return { emp, verifications, cnp, callAgain, notInterested, onHold, booked, tasksHandled, conversion, isSales, canBook, canDoCalls };
+                      });
+
+                      const deptConversion = isSalesDept && deptTasks > 0
+                        ? ((deptBooked / deptTasks) * 100).toFixed(1)
+                        : (isSalesDept && deptBooked > 0 ? '100.0' : '-');
+
+                      return (
+                        <tbody key={dept.key} className="divide-y divide-slate-100 bg-white">
+                          {/* Department Summary Sub-Header */}
+                          <tr className={`${dept.bg} font-extrabold text-xs`}>
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base">{dept.icon}</span>
+                                <span className="font-extrabold uppercase tracking-wide">{dept.label}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${dept.badgeBg}`}>
+                                  {members.length} {members.length === 1 ? 'Member' : 'Members'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dept Total</td>
+                            <td className="p-3 text-center font-black text-slate-900 bg-black/5">
+                              {isSalesDept ? deptTasks : '-'}
+                            </td>
+                            <td className="p-3 text-center font-black text-blue-700">{canShowCalls ? deptVerifications : '-'}</td>
+                            <td className="p-3 text-center font-black text-amber-700">{canShowCalls ? deptCnp : '-'}</td>
+                            <td className="p-3 text-center font-black text-indigo-700">{canShowCalls ? deptCallAgain : '-'}</td>
+                            <td className="p-3 text-center font-black text-rose-700">{canShowCalls ? deptNotInterested : '-'}</td>
+                            <td className="p-3 text-center font-black text-slate-600">{canShowCalls ? deptOnHold : '-'}</td>
+                            <td className="p-3 text-center font-black text-emerald-800 bg-emerald-100/80">
+                              {canShowBooked ? deptBooked : '-'}
+                            </td>
+                            <td className="p-3 text-center">
+                              {deptConversion === '-' ? (
+                                <span className="text-slate-400 font-bold">-</span>
+                              ) : (
+                                <span className={`px-2.5 py-1 rounded-full text-[11px] font-black shadow-xs ${
+                                  Number(deptConversion) >= 15
+                                    ? 'bg-emerald-600 text-white'
+                                    : Number(deptConversion) > 0
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-slate-500 text-white'
+                                }`}>
+                                  {deptConversion}%
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+
+                          {/* Member Rows */}
+                          {preparedMembers.map(({ emp, verifications, cnp, callAgain, notInterested, onHold, booked, tasksHandled, conversion, isSales, canBook, canDoCalls }) => {
+                            const checkInTime = emp.checkIn
+                              ? new Date(emp.checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                              : null;
+                            const checkOutTime = emp.checkOut
+                              ? new Date(emp.checkOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                              : null;
+
+                            let statusBadge = (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                ⚪ Not Checked In
+                              </span>
+                            );
+                            if (checkInTime && !checkOutTime) {
+                              statusBadge = (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                                  🟢 Active Now
+                                </span>
+                              );
+                            } else if (checkInTime && checkOutTime) {
+                              statusBadge = (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300">
+                                  🔴 Checked Out
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <tr key={emp.user?._id || emp.user?.id} className="hover:bg-slate-50 transition-colors">
+                                {/* Employee */}
+                                <td className="p-3">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+                                      {emp.user?.name?.charAt(0) || 'U'}
+                                    </div>
+                                    <div>
+                                      <div className="font-extrabold text-slate-900">{emp.user?.name || 'Unknown Staff'}</div>
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className="uppercase text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                                          {emp.user?.role || 'staff'}
+                                        </span>
+                                        {statusBadge}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Check-in / Check-out */}
+                                <td className="p-3 text-slate-600 font-semibold">
+                                  <div><span className="text-emerald-600 font-bold">In:</span> {checkInTime || '--:--'}</div>
+                                  <div><span className="text-slate-400 font-bold">Out:</span> {checkOutTime || '--:--'}</div>
+                                </td>
+
+                                {/* Total Tasks Handled (Sales only) */}
+                                <td className="p-3 text-center font-extrabold text-slate-900 bg-slate-50/50">
+                                  {isSales ? tasksHandled : <span className="text-slate-400 font-semibold">-</span>}
+                                </td>
+
+                                {/* Verification */}
+                                <td className="p-3 text-center font-bold text-blue-600">
+                                  {canDoCalls ? verifications : <span className="text-slate-400 font-semibold">-</span>}
+                                </td>
+
+                                {/* CNP */}
+                                <td className="p-3 text-center font-bold text-amber-600">
+                                  {canDoCalls ? cnp : <span className="text-slate-400 font-semibold">-</span>}
+                                </td>
+
+                                {/* Call Again */}
+                                <td className="p-3 text-center font-bold text-indigo-600">
+                                  {canDoCalls ? callAgain : <span className="text-slate-400 font-semibold">-</span>}
+                                </td>
+
+                                {/* Not Interested */}
+                                <td className="p-3 text-center font-bold text-rose-600">
+                                  {canDoCalls ? notInterested : <span className="text-slate-400 font-semibold">-</span>}
+                                </td>
+
+                                {/* On Hold */}
+                                <td className="p-3 text-center font-bold text-slate-500">
+                                  {canDoCalls ? onHold : <span className="text-slate-400 font-semibold">-</span>}
+                                </td>
+
+                                {/* Shipment Booked */}
+                                <td className="p-3 text-center font-black text-sm text-emerald-700 bg-emerald-50">
+                                  {canBook ? booked : <span className="text-slate-400 font-semibold">-</span>}
+                                </td>
+
+                                {/* Conversion */}
+                                <td className="p-3 text-center">
+                                  {conversion === '-' ? (
+                                    <span className="text-slate-400 font-bold">-</span>
+                                  ) : (
+                                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
+                                      Number(conversion) >= 15
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        : Number(conversion) > 0
+                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                        : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                    }`}>
+                                      {conversion}%
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      );
+                    });
+                  })()}
+                </table>
+              </div>
+            </SectionCard>
+          </div>
         )}
 
         {/* ═══ Tab 5: My Activity Detail Lists (Sales Staff Only) ═══ */}

@@ -17,3 +17,4 @@ export const syncVerificationRecords = () => API.post('/verification/sync').then
 export const updateVerificationStatus = (id, status, onHoldUntil, onHoldReason) => API.patch(`/verification/${id}`, { status, ...(onHoldUntil && { onHoldUntil }), ...(onHoldReason && { onHoldReason }) }).then(r => r.data.data);
 export const updateVerificationRecord = (id, data) => API.patch(`/verification/${id}`, data).then(r => r.data.data);
 export const deleteVerificationRecord = (id) => API.delete(`/verification/${id}`);
+export const addVerificationNote = (id, text) => API.post(`/verification/${id}/notes`, { text }).then(r => r.data.data);

@@ -66,6 +66,7 @@ export default function Tasks() {
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('phone') || '');
   const [noteText, setNoteText] = useState('');
+  const [noteLoading, setNoteLoading] = useState(false);
   const [pincodeData, setPincodeData] = useState([]);
   const [pincodeLoading, setPincodeLoading] = useState(false);
 
@@ -212,13 +213,27 @@ export default function Tasks() {
   };
 
   const handleAddNote = async () => {
-    if (!noteText.trim() || !selected) return;
+    const text = noteText.trim();
+    if (!text || !selected || noteLoading) return;
+    setNoteLoading(true);
     try {
-      const updated = await addTaskNote(selected._id, noteText.trim());
-      setSelected(updated);
+      const updated = await addTaskNote(selected._id, text);
+      const updatedNotes = updated?.notes || [...(selected.notes || []), { text, createdAt: new Date() }];
+      setSelected(prev => prev ? { ...prev, notes: updatedNotes } : null);
+      
+      const updateTaskInList = (list) =>
+        list.map(t => t._id === selected._id ? { ...t, notes: updatedNotes } : t);
+      setDaily(updateTaskInList);
+      setTasks(updateTaskInList);
+      setYesterdayTasks(updateTaskInList);
+
       setNoteText('');
-      load();
-    } catch { /* ignore */ }
+      load(true); // Silent reload so page spinner is not triggered
+    } catch (err) {
+      console.error('Failed to add note:', err);
+    } finally {
+      setNoteLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -668,9 +683,16 @@ export default function Tasks() {
                 <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={2}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 transition mb-2"
                   placeholder="Type updates here..." />
-                <button onClick={handleAddNote} disabled={!noteText.trim()}
-                  className="w-full py-2 bg-emerald-500 text-white text-xs font-bold rounded-xl hover:bg-emerald-600 disabled:opacity-50 transition shadow-sm">
-                  Save Note
+                <button onClick={handleAddNote} disabled={!noteText.trim() || noteLoading}
+                  className="w-full py-2 bg-emerald-500 text-white text-xs font-bold rounded-xl hover:bg-emerald-600 disabled:opacity-50 transition shadow-sm flex items-center justify-center gap-2">
+                  {noteLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving Note...
+                    </>
+                  ) : (
+                    'Save Note'
+                  )}
                 </button>
               </div>
 
