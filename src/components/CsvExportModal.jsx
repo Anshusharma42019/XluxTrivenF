@@ -121,7 +121,7 @@ export default function CsvExportModal({ isOpen, onClose, onExport, totalOrders 
               <span>📋 Included CSV Columns:</span>
             </div>
             <p className="text-teal-800">
-              Bill Number, Sl No, Description, SAC/HSN Code, <strong>Doctor Fee (Rs)</strong>, <strong>Medicine Taxable Value (Rs)</strong>, GST Rate (%), CGST, SGST/UTGST, IGST, <strong>Medicine Charge (Rs)</strong>, GST Amount, Total Amount, <strong>Delivered Date</strong>.
+              Bill Number, Sl No, Description, SAC/HSN Code, <strong>Doctor Fee (Rs)</strong>, <strong>Medicine Taxable Value (Rs)</strong>, <strong>State</strong>, <strong>GST Type</strong>, GST Rate (%), CGST, SGST/UTGST, IGST, <strong>Medicine Charge (Rs)</strong>, GST Amount, Total Amount, <strong>Delivered Date</strong>.
             </p>
           </div>
 

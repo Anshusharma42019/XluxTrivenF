@@ -17,12 +17,15 @@ const fmtCurrency = (n) => {
 };
 
 const generateBillNumber = (order) => {
-  if (!order) return 'TW-0001';
+  if (!order) return '—';
+  const orderDate = new Date(order.delivered_at || order.status_updated_at || order.createdAt);
+  const septCutoff = new Date('2026-09-01T00:00:00.000+05:30');
+  if (isNaN(orderDate.getTime()) || orderDate < septCutoff) return '—';
+
   if (order.bill_seq) return `TW-${String(order.bill_seq).padStart(4, '0')}`;
-  if (order.bill_number && /^TW-\d{4,}$/.test(order.bill_number)) return order.bill_number;
-  if (order.billNumber && /^TW-\d{4,}$/.test(order.billNumber)) return order.billNumber;
-  const idPart = (order.order_id || order._id || '000').toString().replace(/\D/g, '').slice(-4) || '0001';
-  return `TW-${idPart.padStart(4, '0')}`;
+  if (order.bill_number && /^TW-\d+$/.test(order.bill_number)) return order.bill_number;
+  if (order.billNumber && /^TW-\d+$/.test(order.billNumber)) return order.billNumber;
+  return '—';
 };
 
 const formatDate = (d) => {

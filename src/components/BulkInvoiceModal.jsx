@@ -21,12 +21,16 @@ const formatDate = (d) => {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-const generateBillNumber = (order, idx) => {
-  if (!order) return `TW-${String(idx || 1).padStart(4, '0')}`;
+const generateBillNumber = (order) => {
+  if (!order) return '—';
+  const orderDate = new Date(order.delivered_at || order.status_updated_at || order.createdAt);
+  const septCutoff = new Date('2026-09-01T00:00:00.000+05:30');
+  if (isNaN(orderDate.getTime()) || orderDate < septCutoff) return '—';
+
   if (order.bill_seq) return `TW-${String(order.bill_seq).padStart(4, '0')}`;
-  if (order.bill_number && /^TW-\d{4,}$/.test(order.bill_number)) return order.bill_number;
-  if (order.billNumber && /^TW-\d{4,}$/.test(order.billNumber)) return order.billNumber;
-  return `TW-${String(idx || 1).padStart(4, '0')}`;
+  if (order.bill_number && /^TW-\d+$/.test(order.bill_number)) return order.bill_number;
+  if (order.billNumber && /^TW-\d+$/.test(order.billNumber)) return order.billNumber;
+  return '—';
 };
 
 /* ─── Month list ─────────────────────────────────────────────────────────── */

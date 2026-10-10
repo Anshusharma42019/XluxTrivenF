@@ -45,13 +45,51 @@ const getTrackingUrl = (awb, courierName = '') => {
   return `https://shipmaxx.in/track/${awb}`;
 };
 
+const PIN_PREFIX_TO_STATE = {
+  '11': 'Delhi',
+  '12': 'Haryana', '13': 'Haryana',
+  '14': 'Punjab', '15': 'Punjab', '16': 'Chandigarh',
+  '17': 'Himachal Pradesh',
+  '18': 'Jammu & Kashmir', '19': 'Jammu & Kashmir',
+  '20': 'Uttar Pradesh', '21': 'Uttar Pradesh', '22': 'Uttar Pradesh', '23': 'Uttar Pradesh',
+  '24': 'Uttar Pradesh', '25': 'Uttar Pradesh', '26': 'Uttar Pradesh', '27': 'Uttar Pradesh', '28': 'Uttar Pradesh',
+  '30': 'Rajasthan', '31': 'Rajasthan', '32': 'Rajasthan', '33': 'Rajasthan', '34': 'Rajasthan',
+  '36': 'Gujarat', '37': 'Gujarat', '38': 'Gujarat', '39': 'Gujarat',
+  '40': 'Maharashtra', '41': 'Maharashtra', '42': 'Maharashtra', '43': 'Maharashtra', '44': 'Maharashtra',
+  '45': 'Madhya Pradesh', '46': 'Madhya Pradesh', '47': 'Madhya Pradesh', '48': 'Madhya Pradesh', '49': 'Chhattisgarh',
+  '50': 'Telangana',
+  '51': 'Andhra Pradesh', '52': 'Andhra Pradesh', '53': 'Andhra Pradesh',
+  '56': 'Karnataka', '57': 'Karnataka', '58': 'Karnataka', '59': 'Karnataka',
+  '60': 'Tamil Nadu', '61': 'Tamil Nadu', '62': 'Tamil Nadu', '63': 'Tamil Nadu', '64': 'Tamil Nadu',
+  '67': 'Kerala', '68': 'Kerala', '69': 'Kerala',
+  '70': 'West Bengal', '71': 'West Bengal', '72': 'West Bengal', '73': 'West Bengal', '74': 'West Bengal',
+  '75': 'Odisha', '76': 'Odisha', '77': 'Odisha',
+  '78': 'Assam', '79': 'North East',
+  '80': 'Bihar', '81': 'Bihar', '82': 'Bihar', '83': 'Jharkhand', '84': 'Bihar', '85': 'Bihar'
+};
+
+const resolveOrderState = (order) => {
+  let raw = (order?.billing_state || order?.shipping_state || '').trim();
+  if (raw && raw !== '—') {
+    return raw.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+  const pin = String(order?.billing_pincode || order?.shipping_pincode || '').replace(/\D/g, '');
+  if (pin.length >= 2 && PIN_PREFIX_TO_STATE[pin.slice(0, 2)]) {
+    return PIN_PREFIX_TO_STATE[pin.slice(0, 2)];
+  }
+  return '—';
+};
+
 const getOrGenerateBillNumber = (order) => {
-  if (!order) return 'TW-0001';
+  if (!order) return '—';
+  const orderDate = new Date(order.delivered_at || order.status_updated_at || order.createdAt);
+  const septCutoff = new Date('2026-09-01T00:00:00.000+05:30');
+  if (isNaN(orderDate.getTime()) || orderDate < septCutoff) return '—';
+
   if (order.bill_seq) return `TW-${String(order.bill_seq).padStart(4, '0')}`;
-  if (order.bill_number && /^TW-\d{4,}$/.test(order.bill_number)) return order.bill_number;
-  if (order.billNumber && /^TW-\d{4,}$/.test(order.billNumber)) return order.billNumber;
-  const idPart = (order.order_id || order._id || '000').toString().replace(/\D/g, '').slice(-4) || '0001';
-  return `TW-${idPart.padStart(4, '0')}`;
+  if (order.bill_number && /^TW-\d+$/.test(order.bill_number)) return order.bill_number;
+  if (order.billNumber && /^TW-\d+$/.test(order.billNumber)) return order.billNumber;
+  return '—';
 };
 
 export default function Account() {
@@ -75,6 +113,7 @@ export default function Account() {
   const [to, setTo] = useState('');
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState('asc');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
 
@@ -154,7 +193,7 @@ export default function Account() {
   // Fetch Delivered Orders
   const fetchDeliveredOrders = useCallback(() => {
     setLoading(true);
-    const params = { page, per_page: perPage, payment_method: paymentFilter };
+    const params = { page, per_page: perPage, payment_method: paymentFilter, sort: sortOrder };
     if (search.trim()) params.search = search.trim();
     if (from) params.from = from;
     if (to) params.to = to;
@@ -174,7 +213,7 @@ export default function Account() {
         setFilteredRevenue(0);
       })
       .finally(() => setLoading(false));
-  }, [page, perPage, search, from, to, paymentFilter]);
+  }, [page, perPage, search, from, to, paymentFilter, sortOrder]);
 
   useEffect(() => {
     fetchStats();
@@ -219,12 +258,14 @@ export default function Account() {
       if (!exportList.length) return alert('No delivered orders to export.');
 
       const headers = [
-        'Bill Number',
         'Sl. No.',
+        'Bill Number',
         'Description of Goods / Services',
         'SAC / HSN Code',
         'Doctor Fee (Rs)',
         'Medicine Taxable Value (Rs)',
+        'State',
+        'GST Type',
         'GST Rate',
         'CGST (Rs)',
         'SGST/UTGST (Rs)',
@@ -243,8 +284,10 @@ export default function Account() {
         const billNum = getOrGenerateBillNumber(o);
         const dateStr = fmtDate(o.delivered_at || o.status_updated_at || o.createdAt);
 
-        const cleanState = (o.billing_state || '').toLowerCase().replace(/[^a-z]/g, '');
+        const orderState = resolveOrderState(o);
+        const cleanState = orderState.toLowerCase().replace(/[^a-z]/g, '');
         const isIntra = cleanState === 'up' || cleanState === 'uttarpradesh' || cleanState.includes('uttarpradesh');
+        const gstType = isIntra ? 'CGST + SGST (Intra-State)' : 'IGST (Inter-State)';
 
         const orderSubTotal = Number(o.sub_total || 0);
 
@@ -282,12 +325,14 @@ export default function Account() {
         }
 
         rows.push([
-          `"${billNum}"`,
           index + 1,
+          `"${billNum}"`,
           `"${desc.replace(/"/g, '""')}"`,
           `"${hsn}"`,
           doctorFeeNum.toFixed(2),
           medTaxableVal.toFixed(2),
+          `"${orderState.replace(/"/g, '""')}"`,
+          `"${gstType}"`,
           taxPct > 0 ? `"${taxPct}%"` : '"Exempt (0%)"',
           isIntra ? cgst.toFixed(2) : '"-"',
           isIntra ? sgst.toFixed(2) : '"-"',
@@ -335,7 +380,8 @@ export default function Account() {
 
   // Open single invoice modal
   const openSingleInvoice = (order) => {
-    const cleanState = (order.billing_state || '').toLowerCase().replace(/[^a-z]/g, '');
+    const orderState = resolveOrderState(order);
+    const cleanState = (orderState || '').toLowerCase().replace(/[^a-z]/g, '');
     const isIntra = cleanState === 'up' || cleanState === 'uttarpradesh' || cleanState.includes('uttarpradesh');
     setInvoiceTaxMode(isIntra ? 'intra' : 'inter');
     setInvoiceDoctorFee(0);
@@ -599,6 +645,15 @@ export default function Account() {
               <option value="cod">COD Only</option>
               <option value="prepaid">Prepaid Only</option>
             </select>
+
+            <select
+              value={sortOrder}
+              onChange={e => { setSortOrder(e.target.value); setPage(1); }}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-emerald-800 border-emerald-200 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="asc">Bill Sequence (TW-0001 First ↑)</option>
+              <option value="desc">Latest Delivered First (TW-0326 ↓)</option>
+            </select>
           </div>
 
           <div className="text-xs text-gray-500 font-semibold">
@@ -684,7 +739,7 @@ export default function Account() {
                       <td className="px-4 py-3">
                         <div className="font-semibold text-gray-800">{o.courier_name || 'ShipMaxx'}</div>
                         <div className="text-[10px] text-gray-400 truncate max-w-[140px]">
-                          {[o.billing_city, o.billing_state].filter(Boolean).join(', ') || '—'}
+                          {[o.billing_city, resolveOrderState(o)].filter(s => s && s !== '—').join(', ') || '—'}
                         </div>
                       </td>
 

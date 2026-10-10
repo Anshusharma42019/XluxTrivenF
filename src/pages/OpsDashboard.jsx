@@ -43,6 +43,7 @@ function ChangeChip({ value }) {
 
 const STATUS_COLORS = {
   totalShipments: '#0f172a',
+  pickupPending: '#f59e0b',
   inTransit: '#8b5cf6',
   delivered: '#16a34a', oldDelivered: '#059669', ofd: '#2563eb', undelivered: '#d97706',
   rto: '#dc2626', rtoIntersite: '#7c3aed', verified: '#0891b2',
@@ -809,6 +810,7 @@ const kpiIcons = {
   ndrRate: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>,
   fadr: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
   avgTat: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  pickupPending: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 1 1 0-4h14a2 2 0 1 1 0 4M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8m-9 4h4"/></svg>,
   inTransit: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
   blOfd: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/><circle cx="12" cy="12" r="3" fill="currentColor" fillOpacity={0.2}/></svg>,
   blUndelivered: <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/><circle cx="18" cy="18" r="4"/><polyline points="18 16 18 18 19 19"/></svg>,
@@ -860,6 +862,7 @@ export default function OpsDashboard() {
   const [invoiceTaxMode, setInvoiceTaxMode] = useState('inter');
   const [bulkInvoiceModalOpen, setBulkInvoiceModalOpen] = useState(false);
   const autoRefreshTimer = useRef(null);
+  const tabCacheRef = useRef({});
 
   const handleOpenInteraktModal = (shipment = null) => {
     setInteraktTargetShipment(shipment);
@@ -903,8 +906,16 @@ export default function OpsDashboard() {
     }
   };
 
-  const loadOverview = useCallback(async (f) => {
-    setLoad('kpis', true); setLoad('trend', true); setLoad('funnel', true); setLoad('alerts', true);
+  const getCacheKey = (tab, f) => `${tab}:${JSON.stringify(f)}`;
+
+  const loadOverview = useCallback(async (f, force = false) => {
+    const key = getCacheKey('overview', f);
+    if (tabCacheRef.current[key] && !force) {
+      const { k, t, fn, al } = tabCacheRef.current[key];
+      setKpis(k); setTrend(t || []); setFunnel(fn); setAlerts(al?.alerts || []);
+    } else {
+      setLoad('kpis', true); setLoad('trend', true); setLoad('funnel', true); setLoad('alerts', true);
+    }
     try {
       const [k, t, fn, al] = await Promise.all([
         fetchKPIs(f).catch(() => null),
@@ -913,34 +924,67 @@ export default function OpsDashboard() {
         fetchAlerts(f).catch(() => ({ alerts: [] })),
       ]);
       setKpis(k); setTrend(t || []); setFunnel(fn); setAlerts(al?.alerts || []);
+      tabCacheRef.current[key] = { k, t, fn, al };
       setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
     } finally {
       setLoad('kpis', false); setLoad('trend', false); setLoad('funnel', false); setLoad('alerts', false);
     }
   }, []);
 
-  const loadRto = useCallback(async (f) => {
-    setLoad('rto', true);
-    try { const d = await fetchRtoReasons(f).catch(() => []); setRtoReasons(d || []); }
-    finally { setLoad('rto', false); }
+  const loadRto = useCallback(async (f, force = false) => {
+    const key = getCacheKey('rto', f);
+    if (tabCacheRef.current[key] && !force) {
+      setRtoReasons(tabCacheRef.current[key]);
+    } else {
+      setLoad('rto', true);
+    }
+    try {
+      const d = await fetchRtoReasons(f).catch(() => []);
+      setRtoReasons(d || []);
+      tabCacheRef.current[key] = d || [];
+    } finally { setLoad('rto', false); }
   }, []);
 
-  const loadAging = useCallback(async (f) => {
-    setLoad('aging', true);
-    try { const d = await fetchAging(f).catch(() => null); setAging(d); }
-    finally { setLoad('aging', false); }
+  const loadAging = useCallback(async (f, force = false) => {
+    const key = getCacheKey('aging', f);
+    if (tabCacheRef.current[key] && !force) {
+      setAging(tabCacheRef.current[key]);
+    } else {
+      setLoad('aging', true);
+    }
+    try {
+      const d = await fetchAging(f).catch(() => null);
+      setAging(d);
+      tabCacheRef.current[key] = d;
+    } finally { setLoad('aging', false); }
   }, []);
 
-  const loadLeaderboard = useCallback(async (f) => {
-    setLoad('lb', true);
-    try { const d = await fetchLeaderboard(f).catch(() => []); setLeaderboard(d || []); }
-    finally { setLoad('lb', false); }
+  const loadLeaderboard = useCallback(async (f, force = false) => {
+    const key = getCacheKey('lb', f);
+    if (tabCacheRef.current[key] && !force) {
+      setLeaderboard(tabCacheRef.current[key]);
+    } else {
+      setLoad('lb', true);
+    }
+    try {
+      const d = await fetchLeaderboard(f).catch(() => []);
+      setLeaderboard(d || []);
+      tabCacheRef.current[key] = d || [];
+    } finally { setLoad('lb', false); }
   }, []);
 
-  const loadShipments = useCallback(async (f) => {
-    setLoad('ships', true);
-    try { const d = await fetchShipments(f).catch(() => null); setShipments(d); }
-    finally { setLoad('ships', false); }
+  const loadShipments = useCallback(async (f, force = false) => {
+    const key = getCacheKey('ships', f);
+    if (tabCacheRef.current[key] && !force) {
+      setShipments(tabCacheRef.current[key]);
+    } else {
+      setLoad('ships', true);
+    }
+    try {
+      const d = await fetchShipments(f).catch(() => null);
+      setShipments(d);
+      tabCacheRef.current[key] = d;
+    } finally { setLoad('ships', false); }
   }, []);
 
   // Load on tab/filter change
@@ -960,11 +1004,13 @@ export default function OpsDashboard() {
   useEffect(() => {
     if (autoRefresh) {
       autoRefreshTimer.current = setInterval(() => {
-        if (activeTab === 'overview') loadOverview(filters);
-      }, 30000);
+        tabCacheRef.current = {};
+        if (activeTab === 'overview') loadOverview(filters, true);
+        else if (activeTab === 'shipments') loadShipments({ ...filters, ...shipmentFilters }, true);
+      }, 15000);
     }
     return () => clearInterval(autoRefreshTimer.current);
-  }, [autoRefresh, activeTab, filters]);
+  }, [autoRefresh, activeTab, filters, shipmentFilters]);
 
   const handleFilterChange = useCallback((key, val) => {
     setFilters(f => ({ ...f, [key]: val }));
@@ -975,11 +1021,12 @@ export default function OpsDashboard() {
   }, []);
 
   const handleRefresh = () => {
-    if (activeTab === 'overview') loadOverview(filters);
-    else if (activeTab === 'rto') loadRto(filters);
-    else if (activeTab === 'aging') loadAging(filters);
-    else if (activeTab === 'leaderboard') loadLeaderboard(filters);
-    else if (activeTab === 'shipments') loadShipments({ ...filters, ...shipmentFilters });
+    tabCacheRef.current = {};
+    if (activeTab === 'overview') loadOverview(filters, true);
+    else if (activeTab === 'rto') loadRto(filters, true);
+    else if (activeTab === 'aging') loadAging(filters, true);
+    else if (activeTab === 'leaderboard') loadLeaderboard(filters, true);
+    else if (activeTab === 'shipments') loadShipments({ ...filters, ...shipmentFilters }, true);
   };
 
   // Leaderboard sort
@@ -1021,9 +1068,10 @@ export default function OpsDashboard() {
       { key: 'totalSales',    label: 'Sales Orders',    color: '#7c3aed',                   formatter: fmtNum, subtext: 'Orders created by Sales team' },
       { key: 'totalSupport',  label: 'Support Orders',  color: '#0891b2',                   formatter: fmtNum, subtext: 'Orders created by Support team' },
     ] : []),
-    { key: 'inTransit',    label: 'In Transit',         color: STATUS_COLORS.inTransit,     formatter: fmtNum },
+    { key: 'pickupPending', label: 'Pickup Pending', color: STATUS_COLORS.pickupPending, formatter: fmtNum, subtext: 'Orders created or manifested awaiting courier pickup' },
+    { key: 'inTransit',    label: 'In Transit',         color: STATUS_COLORS.inTransit,     formatter: fmtNum, subtext: 'Shipments in transit within courier logistics network' },
     { key: 'ofd',          label: 'Out for Delivery',   color: STATUS_COLORS.ofd,           formatter: fmtNum },
-    { key: 'delivered',    label: 'Delivered',          color: STATUS_COLORS.delivered,     formatter: fmtNum, subtext: 'Orders created this period now delivered. Delivered + OFD + Undelivered + RTO + In Transit = Total Shipments' },
+    { key: 'delivered',    label: 'Delivered',          color: STATUS_COLORS.delivered,     formatter: fmtNum, subtext: 'Total successful deliveries completed during this period' },
     ...(isAdminOrManager ? [
       { key: 'salesDelivered',   label: 'Sales Delivered',   color: '#059669', formatter: fmtNum, subtext: 'Sales team delivered orders' },
       { key: 'supportDelivered', label: 'Support Delivered', color: '#0d9488', formatter: fmtNum, subtext: 'Support team delivered orders' },
@@ -1035,7 +1083,7 @@ export default function OpsDashboard() {
     { key: 'blUndelivered',label: 'Old Undelivered',    color: STATUS_COLORS.blUndelivered, formatter: fmtNum, subtext: 'Backlog orders from prior periods currently undelivered / NDR' },
     { key: 'blRto',        label: 'Old RTO',            color: STATUS_COLORS.blRto,         formatter: fmtNum, subtext: 'Backlog orders from prior periods marked RTO' },
     { key: 'blRtoIntersite',label: 'Old RTO Intersite', color: STATUS_COLORS.blRtoIntersite,formatter: fmtNum, subtext: 'Backlog orders from prior periods returning in transit' },
-    { key: 'deliveredRate',label: 'Delivery Rate',      color: '#16a34a',                   formatter: fmtPct, subtext: 'Delivered ÷ Total Shipments — both from the same cohort' },
+    { key: 'deliveredRate',label: 'Delivery Rate',      color: '#16a34a',                   formatter: fmtPct, subtext: 'Delivered ÷ Total Shipments in this period' },
     { key: 'rtoRate',      label: 'RTO Rate',           color: '#dc2626',                   formatter: fmtPct },
     { key: 'ndrRate',      label: 'NDR Rate',           color: '#f59e0b',                   formatter: fmtPct },
     { key: 'fadr',         label: '1st Attempt Delivery', color: '#10b981',                formatter: fmtPct, subtext: 'Percentage of delivered orders succeeding on 1st attempt' },
@@ -1164,7 +1212,7 @@ export default function OpsDashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* KPI Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-              {loading.kpis
+              {loading.kpis && !kpis
                 ? Array.from({ length: kpiCards.length || (isAdminOrManager ? 22 : 18) }).map((_, i) => <Skeleton key={i} h={130} />)
                 : kpiCards.map(card => (
                   <KpiCard key={card.key} label={card.label} color={card.color} formatter={card.formatter}
@@ -1185,10 +1233,10 @@ export default function OpsDashboard() {
             {/* Trend + Funnel row */}
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
               <SectionCard title="Shipment Trend" subtitle="Daily breakdown over the selected period">
-                {loading.trend ? <Skeleton h={200} /> : <TrendChart data={trend} />}
+                {loading.trend && !trend?.length ? <Skeleton h={200} /> : <TrendChart data={trend} />}
               </SectionCard>
               <SectionCard title="Delivery Funnel" subtitle="Verified ➔ OFD ➔ Outcome">
-                {loading.funnel ? <Skeleton h={200} /> : <FunnelChart data={{ ...funnel, delivered: kpis?.kpis?.delivered?.value ?? funnel?.delivered }} />}
+                {loading.funnel && !funnel ? <Skeleton h={200} /> : <FunnelChart data={{ ...funnel, delivered: kpis?.kpis?.delivered?.value ?? funnel?.delivered }} />}
               </SectionCard>
             </div>
           </div>
@@ -1198,10 +1246,10 @@ export default function OpsDashboard() {
         {activeTab === 'rto' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <SectionCard title="RTO Reason Breakdown" subtitle="Why shipments are being returned">
-              {loading.rto ? <Skeleton h={200} /> : <DonutChart reasons={rtoReasons} />}
+              {loading.rto && !rtoReasons?.length ? <Skeleton h={200} /> : <DonutChart reasons={rtoReasons} />}
             </SectionCard>
             <SectionCard title="Reason Details">
-              {loading.rto ? <Skeleton h={200} /> : (
+              {loading.rto && !rtoReasons?.length ? <Skeleton h={200} /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {rtoReasons.length ? rtoReasons.map((r, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: i < rtoReasons.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
@@ -1223,7 +1271,7 @@ export default function OpsDashboard() {
               title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Clock size={18} style={{ color: '#2563eb' }} /> OFD &gt; 2 Days</span>}
               subtitle="Shipments stuck out-for-delivery for over 48 hours"
             >
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.ofd_stuck || []} title="OFD Stuck" color={STATUS_COLORS.ofd} emptyMsg="No OFD-stuck shipments" />}
+              {loading.aging && !aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.ofd_stuck || []} title="OFD Stuck" color={STATUS_COLORS.ofd} emptyMsg="No OFD-stuck shipments" />}
             </SectionCard>
             <SectionCard
               title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><RotateCcw size={18} style={{ color: '#d97706' }} /> Undelivered — 3+ Attempts</span>}
@@ -1238,13 +1286,13 @@ export default function OpsDashboard() {
                 </button>
               }
             >
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.undelivered_3plus || []} title="3+ Attempts" color={STATUS_COLORS.undelivered} emptyMsg="No high-attempt shipments" showInterakt={true} onSendInterakt={handleOpenInteraktModal} />}
+              {loading.aging && !aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.undelivered_3plus || []} title="3+ Attempts" color={STATUS_COLORS.undelivered} emptyMsg="No high-attempt shipments" showInterakt={true} onSendInterakt={handleOpenInteraktModal} />}
             </SectionCard>
             <SectionCard
               title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Truck size={18} style={{ color: '#7c3aed' }} /> RTO Intersite &gt; 5 Days</span>}
               subtitle="Return-in-transit shipments stuck for over 5 days"
             >
-              {loading.aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.rto_intersite_stuck || []} title="RTO Intersite Stuck" color={STATUS_COLORS.rtoIntersite} emptyMsg="No stuck RTO intersite shipments" showVerify={true} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />}
+              {loading.aging && !aging ? <Skeleton h={120} /> : <AgingTable rows={aging?.rto_intersite_stuck || []} title="RTO Intersite Stuck" color={STATUS_COLORS.rtoIntersite} emptyMsg="No stuck RTO intersite shipments" showVerify={true} onVerifyClick={(r) => { setVerificationShipment(r); setVerificationModalOpen(true); }} />}
             </SectionCard>
           </div>
         )}
@@ -1255,7 +1303,7 @@ export default function OpsDashboard() {
             title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Trophy size={18} style={{ color: '#eab308' }} /> Courier Leaderboard</span>}
             subtitle="Ranked by delivery success rate — click column headers to sort"
           >
-            {loading.lb ? <Skeleton h={300} /> : <LeaderboardTable rows={sortedLeaderboard} sortKey={lbSort.key} sortDir={lbSort.dir} onSort={handleLbSort} />}
+            {loading.lb && !leaderboard?.length ? <Skeleton h={300} /> : <LeaderboardTable rows={sortedLeaderboard} sortKey={lbSort.key} sortDir={lbSort.dir} onSort={handleLbSort} />}
           </SectionCard>
         )}
 

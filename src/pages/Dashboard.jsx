@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   fetchStats,
   fetchStaffTodayLists,
@@ -6,7 +6,11 @@ import {
   fetchStaffMonthlyChart,
   fetchStaffCommission,
   fetchAllStaffCommissions,
-  fetchAllStaffStats
+  fetchAllStaffStats,
+  fetchEmployeePerformanceMatrix,
+  fetchStaffDetailKPIs,
+  fetchTaskDrilldown,
+  clearDashboardCache
 } from '../services/dashboard.service';
 import * as attendanceSvc from '../services/attendance.service';
 import { useAuth } from '../context/AuthContext';
@@ -15,8 +19,19 @@ import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { getLeads, exportLeads } from '../services/lead.service';
 import ShipmentAnalyticsPanel from '../components/ShipmentAnalyticsPanel';
+import { fetchStaffBreakdown, clearOpsDashboardCache } from '../services/opsDashboard.service';
 
-/* ─── Helpers & Constants ─────────────────────────────────────────────────── */
+/* ─── CONFIG & Constants ─────────────────────────────────────────────────── */
+const CONFIG = {
+  API_URL: '/api/v1',
+  STATUS_MAP: {
+    pending: ['pending', 'new', 'old', 'scheduled', 'task'],
+    cnp: ['cnp'],
+    call_again: ['call_again', 'follow_up', 'overdue'],
+    verified: ['verified', 'completed', 'verification', 'ready_to_shipment', 'dispatch', 'dispatched'],
+    not_interested: ['not_interested', 'cancel_call', 'closed_lost', 'cancelled']
+  }
+};
 const DATE_FILTERS = [
   { id: 'today', label: 'Today' },
   { id: 'yesterday', label: 'Yesterday' },
@@ -302,9 +317,712 @@ function DashboardFilterBar({ datePreset, onSelectPreset, filterFrom, setFilterF
           className="hover:shadow-lg active:scale-95"
         >
           {icons.download}
-          {csvLoading === 'filtered' ? `${t('Downloading...')} ` : `${t('Leads CSV')}`}
+          {csvLoading === 'filtered' ? `Downloading... ` : `Leads CSV`}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ─── Employee Performance Upgraded Section Component ─────────────────────── */
+function EmployeePerformanceSection({ allStaffData, staffBreakdownData, datePreset, filterFrom, filterTo, department, getPeriodLabel, icons }) {
+  const [taskScopeMode, setTaskScopeMode] = useState('period'); // 'period' | 'all_open'
+  const [matrixViewMode, setMatrixViewMode] = useState('daily'); // 'daily' | 'weekly' | 'monthly'
+  const [matrixGroupMode, setMatrixGroupMode] = useState('assigned'); // 'assigned' | 'activity'
+  const [matrixMonth, setMatrixMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const [matrixData, setMatrixData] = useState({ columns: [], staffMatrix: [] });
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [cellPopover, setCellPopover] = useState(null); // cell popover split details
+
+  const [drilldownModal, setDrilldownModal] = useState({ open: false, staffId: null, staffName: '', status: null, date: null });
+  const [drilldownList, setDrilldownList] = useState([]);
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+
+  const [staffDrawer, setStaffDrawer] = useState({ open: false, staffId: null, staffName: '' });
+  const [staffKPIs, setStaffKPIs] = useState(null);
+  const [staffKPIsLoading, setStaffKPIsLoading] = useState(false);
+
+  // Load Matrix Heatmap Data
+  const loadMatrix = useCallback(async () => {
+    setMatrixLoading(true);
+    try {
+      const [y, m] = matrixMonth.split('-');
+      const res = await fetchEmployeePerformanceMatrix({
+        viewMode: matrixViewMode,
+        month: Number(m) - 1,
+        year: Number(y),
+        mode: matrixGroupMode,
+        department,
+        from: filterFrom,
+        to: filterTo
+      });
+      setMatrixData(res || { columns: [], staffMatrix: [] });
+    } catch (err) {
+      console.error('Matrix fetch error:', err);
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, [matrixViewMode, matrixGroupMode, matrixMonth, department, filterFrom, filterTo]);
+
+  useEffect(() => {
+    loadMatrix();
+  }, [loadMatrix]);
+
+  // Load Drilldown list when modal opens
+  const openDrilldown = async (staffId, staffName, status = null, date = null) => {
+    setDrilldownModal({ open: true, staffId, staffName, status, date });
+    setDrilldownLoading(true);
+    try {
+      const list = await fetchTaskDrilldown({
+        staffId,
+        status,
+        date,
+        department,
+        from: filterFrom,
+        to: filterTo
+      });
+      setDrilldownList(list || []);
+    } catch (e) {
+      console.error('Drilldown error:', e);
+      setDrilldownList([]);
+    } finally {
+      setDrilldownLoading(false);
+    }
+  };
+
+  // Load Staff Drawer KPIs
+  const openStaffDrawer = async (staffId, staffName) => {
+    setStaffDrawer({ open: true, staffId, staffName });
+    setStaffKPIsLoading(true);
+    try {
+      const res = await fetchStaffDetailKPIs({
+        staffId,
+        department,
+        from: filterFrom,
+        to: filterTo
+      });
+      setStaffKPIs(res);
+    } catch (e) {
+      console.error('Staff detail error:', e);
+    } finally {
+      setStaffKPIsLoading(false);
+    }
+  };
+
+  // Section A Processed Rows (Sales Staff Only)
+  const allPerformanceStaffList = useMemo(() => {
+    let list = [];
+    if (allStaffData && allStaffData.length > 0) {
+      list = allStaffData
+        .filter(item => item.user && item.user.role === 'sales')
+        .map(item => {
+          const isSales = item.user.role === 'sales';
+          const bdMatch = (isSales ? staffBreakdownData.sales || [] : staffBreakdownData.support || []).find(b => String(b.id) === String(item.user._id));
+          const cnp = item.todayCnp !== undefined ? item.todayCnp : (bdMatch?.cnp || 0);
+          const callAgain = item.todayCallAgain !== undefined ? item.todayCallAgain : (bdMatch?.callAgain || 0);
+          const verified = Math.max(item.todayVerifications || 0, item.verifiedCount || 0, bdMatch?.verified || 0);
+          const notInterested = item.todayNotInterested !== undefined ? item.todayNotInterested : (bdMatch?.notInterested || 0);
+
+          const leads = item.leadsAdded !== undefined ? item.leadsAdded : (bdMatch?.leads || 0);
+          const rawTasks = item.tasksAssigned !== undefined ? item.tasksAssigned : (bdMatch?.tasks || 0);
+          const allTimePending = item.pendingTasks !== undefined ? item.pendingTasks : (bdMatch?.pendingTasks !== undefined ? bdMatch.pendingTasks : 0);
+
+          const periodPending = Math.max(0, rawTasks - (cnp + callAgain + verified + notInterested));
+          const displayPending = taskScopeMode === 'all_open' ? (allTimePending || periodPending) : periodPending;
+
+          // Total Tasks equals exact sum of CNP + Call Again + Verified + Not Interested
+          const displayTasks = cnp + callAgain + verified + notInterested;
+
+          const actionPercent = displayTasks > 0 ? Math.round(((displayTasks - displayPending) / displayTasks) * 100) : 0;
+          const verifyPercent = displayTasks > 0 ? Math.round((verified / displayTasks) * 100) : 0;
+          const isHighPending = displayTasks > 0 && (displayPending / displayTasks) > 0.3;
+
+          return {
+            id: String(item.user._id),
+            name: item.user.name,
+            role: item.user.role,
+            leads,
+            tasks: displayTasks,
+            newTodayTasks: item.todayTasks || Math.min(rawTasks, leads),
+            carryForwardTasks: Math.max(0, rawTasks - (item.todayTasks || Math.min(rawTasks, leads))),
+            pending: displayPending,
+            cnp,
+            callAgain,
+            verified,
+            notInterested,
+            afterCheckoutLeads: item.afterCheckoutLeads !== undefined ? item.afterCheckoutLeads : (bdMatch?.afterCheckoutLeads || 0),
+            afterCheckoutTasks: item.afterCheckoutTasks !== undefined ? item.afterCheckoutTasks : (bdMatch?.afterCheckoutTasks || 0),
+            actionPercent: Math.min(100, Math.max(0, actionPercent)),
+            verifyPercent: Math.min(100, Math.max(0, verifyPercent)),
+            isHighPending
+          };
+        });
+    } else {
+      const combined = [...(staffBreakdownData.sales || []), ...(staffBreakdownData.support || [])];
+      list = combined.map(s => ({
+        id: String(s.id),
+        name: s.name,
+        role: s.role,
+        leads: s.leads || 0,
+        tasks: s.tasks || 0,
+        newTodayTasks: s.leads || 0,
+        carryForwardTasks: Math.max(0, (s.tasks || 0) - (s.leads || 0)),
+        pending: Math.max(0, (s.tasks || 0) - ((s.cnp || 0) + (s.callAgain || 0) + (s.verified || 0) + (s.notInterested || 0))),
+        cnp: s.cnp || 0,
+        callAgain: s.callAgain || 0,
+        verified: Math.max(s.todayVerifications || 0, s.verified || 0),
+        notInterested: s.notInterested || 0,
+        afterCheckoutLeads: s.afterCheckoutLeads || 0,
+        afterCheckoutTasks: s.afterCheckoutTasks || 0,
+        actionPercent: 0,
+        verifyPercent: 0,
+        isHighPending: false
+      }));
+    }
+
+    return list.sort((a, b) => b.tasks - a.tasks);
+  }, [allStaffData, staffBreakdownData, taskScopeMode]);
+
+  // Section A Totals
+  const totalsA = useMemo(() => {
+    return allPerformanceStaffList.reduce((acc, curr) => ({
+      leads: acc.leads + curr.leads,
+      tasks: acc.tasks + curr.tasks,
+      pending: acc.pending + curr.pending,
+      cnp: acc.cnp + curr.cnp,
+      callAgain: acc.callAgain + curr.callAgain,
+      verified: acc.verified + curr.verified,
+      notInterested: acc.notInterested + curr.notInterested,
+      afterLeads: acc.afterLeads + curr.afterCheckoutLeads,
+      afterTasks: acc.afterTasks + curr.afterCheckoutTasks,
+    }), { leads: 0, tasks: 0, pending: 0, cnp: 0, callAgain: 0, verified: 0, notInterested: 0, afterLeads: 0, afterTasks: 0 });
+  }, [allPerformanceStaffList]);
+
+  // High Pending Staff Alerts
+  const highPendingStaff = useMemo(() => {
+    return allPerformanceStaffList.filter(s => s.isHighPending || s.pending >= 50);
+  }, [allPerformanceStaffList]);
+
+  // Tab CSV Export
+  const exportPerformanceCSV = () => {
+    const headers = ['#', 'Staff Name', 'Role', 'Total Tasks Assigned', 'Pending (No Action)', 'CNP', 'Call Again', 'Verified', 'Not Interested'];
+    const rows = allPerformanceStaffList.map((s, i) => [
+      i + 1, s.name, s.role, s.tasks, s.pending, s.cnp, s.callAgain, s.verified, s.notInterested
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Employee_Performance_${datePreset}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <SectionCard
+        title={`Employee Performance Breakdown (${getPeriodLabel()})`}
+        subtitle="Live CRM activity breakdown, tasks accounting & status heatmap matrix"
+        icon={icons.users}
+        action={
+          <button
+            onClick={exportPerformanceCSV}
+            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer"
+          >
+            {icons.download} Export Performance CSV
+          </button>
+        }
+      >
+        <div className="flex flex-col gap-8">
+
+          {/* 🚨 HIGH PENDING ALERT LINE */}
+          {highPendingStaff.length > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex items-center justify-between flex-wrap gap-2 text-xs text-amber-900 font-bold shadow-sm animate-pulse">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚠️</span>
+                <span>
+                  <strong className="font-black">Attention Required:</strong> High Pending Tasks detected for:{' '}
+                  {highPendingStaff.map(s => `${s.name} (${s.pending} Pending)`).join(', ')}
+                </span>
+              </div>
+              <span className="bg-amber-200 text-amber-950 px-2.5 py-0.5 rounded-full font-black text-[11px]">
+                {highPendingStaff.length} Staff Affected
+              </span>
+            </div>
+          )}
+
+          {/* ═══ SECTION A: CRM ACTIVITY & CALL BREAKDOWN ═══ */}
+          <div>
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 p-3.5 rounded-xl shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📊</span>
+                <h3 className="text-sm font-black text-purple-950 uppercase tracking-wide">
+                  A. CRM ACTIVITY & CALL BREAKDOWN ({getPeriodLabel()})
+                </h3>
+              </div>
+
+              {/* Controls & Summary Badges */}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Task View Mode Switch */}
+                <div className="flex items-center bg-white border border-slate-300 rounded-lg p-0.5 text-[11px] font-bold">
+                  <button
+                    onClick={() => setTaskScopeMode('period')}
+                    className={`px-2.5 py-1 rounded-md transition-colors ${taskScopeMode === 'period' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Assigned in Period
+                  </button>
+                  <button
+                    onClick={() => setTaskScopeMode('all_open')}
+                    className={`px-2.5 py-1 rounded-md transition-colors ${taskScopeMode === 'all_open' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    All Open Tasks
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="bg-purple-700 text-white font-black text-xs px-3 py-1 rounded-lg shadow-xs">
+                    Total Tasks: {totalsA.tasks}
+                  </span>
+                  <span className="bg-amber-600 text-white font-black text-xs px-3 py-1 rounded-lg shadow-xs">
+                    Pending: {totalsA.pending}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Table A matching user image format */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-900 text-slate-200 font-extrabold uppercase tracking-wider">
+                  <tr>
+                    <th className="p-3 w-10 text-center border-r border-slate-800">#</th>
+                    <th className="p-3 min-w-[140px] border-r border-slate-800">Staff Name</th>
+                    <th className="p-3 text-center w-20 border-r border-slate-800">Role</th>
+                    <th className="p-3 text-center text-purple-300 bg-slate-800 border-r border-slate-800 font-black">Total Tasks Assigned</th>
+                    <th className="p-3 text-center text-amber-400 border-r border-slate-800 font-black">CNP</th>
+                    <th className="p-3 text-center text-purple-300 border-r border-slate-800 font-black">Call Again</th>
+                    <th className="p-3 text-center text-emerald-400 border-r border-slate-800 font-black">Verified</th>
+                    <th className="p-3 text-center text-rose-400 font-black">Not Interested</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {allPerformanceStaffList.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400 font-semibold">
+                        No staff performance records available for this filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    allPerformanceStaffList.map((s, idx) => (
+                      <tr
+                        key={s.id || idx}
+                        className={`transition-colors hover:bg-slate-50 ${s.isHighPending ? 'bg-amber-50/50 border-l-4 border-l-amber-500' : ''}`}
+                      >
+                        <td className="p-3 text-center font-bold text-slate-500 border-r border-slate-100">{idx + 1}</td>
+                        <td className="p-3 font-extrabold text-slate-900 border-r border-slate-100">
+                          <button
+                            onClick={() => openStaffDrawer(s.id, s.name)}
+                            className="text-indigo-600 hover:text-indigo-900 hover:underline text-left cursor-pointer font-black"
+                          >
+                            {s.name}
+                          </button>
+                        </td>
+                        <td className="p-3 text-center border-r border-slate-100">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold capitalize ${
+                            s.role === 'sales' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                          }`}>
+                            {s.role}
+                          </span>
+                        </td>
+
+                        {/* Total Tasks Assigned */}
+                        <td className="p-3 text-center font-black text-slate-900 bg-slate-50/70 border-r border-slate-100">
+                          <button
+                            onClick={() => openDrilldown(s.id, s.name, null)}
+                            className="font-black text-purple-900 hover:underline cursor-pointer text-sm"
+                          >
+                            {s.tasks}
+                          </button>
+                        </td>
+
+                        {/* CNP */}
+                        <td className="p-3 text-center font-extrabold text-amber-700 border-r border-slate-100">
+                          <button onClick={() => openDrilldown(s.id, s.name, 'cnp')} className="hover:underline cursor-pointer">
+                            {s.cnp}
+                          </button>
+                        </td>
+
+                        {/* Call Again */}
+                        <td className="p-3 text-center font-extrabold text-purple-700 border-r border-slate-100">
+                          <button onClick={() => openDrilldown(s.id, s.name, 'call_again')} className="hover:underline cursor-pointer">
+                            {s.callAgain}
+                          </button>
+                        </td>
+
+                        {/* Verified */}
+                        <td className="p-3 text-center font-black text-emerald-700 border-r border-slate-100">
+                          <button onClick={() => openDrilldown(s.id, s.name, 'verified')} className="hover:underline cursor-pointer">
+                            {s.verified}
+                          </button>
+                        </td>
+
+                        {/* Not Interested */}
+                        <td className="p-3 text-center font-extrabold text-rose-700">
+                          <button onClick={() => openDrilldown(s.id, s.name, 'not_interested')} className="hover:underline cursor-pointer">
+                            {s.notInterested}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+
+                {/* ══ Σ GRAND TOTAL ROW ══ */}
+                {allPerformanceStaffList.length > 0 && (
+                  <tfoot className="bg-slate-900 text-white font-black uppercase text-xs">
+                    <tr>
+                      <td className="p-3 text-center text-slate-400 font-extrabold">Σ</td>
+                      <td className="p-3 text-slate-100 font-black">GRAND TOTAL</td>
+                      <td className="p-3 text-center text-slate-400 font-bold">—</td>
+                      <td className="p-3 text-center text-purple-300 font-black text-sm">{totalsA.tasks}</td>
+                      <td className="p-3 text-center text-amber-400 font-black">{totalsA.cnp}</td>
+                      <td className="p-3 text-center text-purple-300 font-black">{totalsA.callAgain}</td>
+                      <td className="p-3 text-center text-emerald-400 font-black">{totalsA.verified}</td>
+                      <td className="p-3 text-center text-rose-400 font-black">{totalsA.notInterested}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+
+
+
+          {/* ═══ SECTION B: SHIPMENT & LOGISTICS BREAKDOWN (PRESERVED) ═══ */}
+          <div className="flex flex-col gap-6">
+            {/* 1. SALES TEAM MEMBERS */}
+            <div>
+              <div className="flex items-center gap-2 mb-3 bg-emerald-50 border border-emerald-200 p-3 rounded-xl">
+                <span className="text-lg">💼</span>
+                <h3 className="text-sm font-black text-emerald-950 uppercase tracking-wide">
+                  B.1 SALES TEAM MEMBERS (Shipment Breakdown)
+                </h3>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider">
+                    <tr>
+                      <th className="p-3 w-12 text-center">#</th>
+                      <th className="p-3">Staff Name</th>
+                      <th className="p-3 text-center">Role</th>
+                      <th className="p-3 text-center text-slate-900 bg-slate-200/50">Total Shipments</th>
+                      <th className="p-3 text-center text-blue-600 font-bold bg-blue-50/50">Verified</th>
+                      <th className="p-3 text-center text-emerald-600 bg-emerald-50">Delivered</th>
+                      <th className="p-3 text-center text-indigo-600">In Transit</th>
+                      <th className="p-3 text-center text-amber-600">OFD</th>
+                      <th className="p-3 text-center text-rose-600">RTO / NDR</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {staffBreakdownData.sales && staffBreakdownData.sales.length > 0 ? (
+                      staffBreakdownData.sales.map((s, idx) => (
+                        <tr key={s.id || idx} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3 text-center font-bold text-slate-500">{idx + 1}</td>
+                          <td className="p-3 font-extrabold text-slate-900">{s.name}</td>
+                          <td className="p-3 text-center font-bold text-emerald-700 capitalize">
+                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px]">
+                              {s.role}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center font-black text-slate-900 bg-slate-50">{s.totalShipments}</td>
+                          <td className="p-3 text-center font-extrabold text-blue-700 bg-blue-50/30">{s.verified || 0}</td>
+                          <td className="p-3 text-center font-black text-emerald-700 bg-emerald-50/60">{s.delivered}</td>
+                          <td className="p-3 text-center font-extrabold text-indigo-700">{s.inTransit}</td>
+                          <td className="p-3 text-center font-extrabold text-amber-700">{s.ofd}</td>
+                          <td className="p-3 text-center font-extrabold text-rose-700">{s.rtoNdr}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={9} className="p-6 text-center text-slate-400 font-semibold">
+                          No Sales staff records found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 2. SUPPORT TEAM MEMBERS */}
+            <div>
+              <div className="flex items-center gap-2 mb-3 bg-blue-50 border border-blue-200 p-3 rounded-xl">
+                <span className="text-lg">🎧</span>
+                <h3 className="text-sm font-black text-blue-950 uppercase tracking-wide">
+                  B.2 SUPPORT TEAM MEMBERS (Shipment Breakdown)
+                </h3>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider">
+                    <tr>
+                      <th className="p-3 w-12 text-center">#</th>
+                      <th className="p-3">Staff Name</th>
+                      <th className="p-3 text-center">Role</th>
+                      <th className="p-3 text-center text-slate-900 bg-slate-200/50">Total Shipments</th>
+                      <th className="p-3 text-center text-blue-600 font-bold bg-blue-50/50">Verified</th>
+                      <th className="p-3 text-center text-emerald-600 bg-emerald-50">Delivered</th>
+                      <th className="p-3 text-center text-indigo-600">In Transit</th>
+                      <th className="p-3 text-center text-amber-600">OFD</th>
+                      <th className="p-3 text-center text-rose-600">RTO / NDR</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {staffBreakdownData.support && staffBreakdownData.support.length > 0 ? (
+                      staffBreakdownData.support.map((s, idx) => (
+                        <tr key={s.id || idx} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3 text-center font-bold text-slate-500">{idx + 1}</td>
+                          <td className="p-3 font-extrabold text-slate-900">{s.name}</td>
+                          <td className="p-3 text-center font-bold text-blue-700 capitalize">
+                            <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-[10px]">
+                              {s.role}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center font-black text-slate-900 bg-slate-50">{s.totalShipments}</td>
+                          <td className="p-3 text-center font-extrabold text-blue-700 bg-blue-50/30">{s.verified || 0}</td>
+                          <td className="p-3 text-center font-black text-emerald-700 bg-emerald-50/60">{s.delivered}</td>
+                          <td className="p-3 text-center font-extrabold text-indigo-700">{s.inTransit}</td>
+                          <td className="p-3 text-center font-extrabold text-amber-700">{s.ofd}</td>
+                          <td className="p-3 text-center font-extrabold text-rose-700">{s.rtoNdr}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={9} className="p-6 text-center text-slate-400 font-semibold">
+                          No Support staff records found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </SectionCard>
+
+      {/* ═══ TASK DRILLDOWN MODAL ═══ */}
+      {drilldownModal.open && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-sm uppercase tracking-wide">
+                  Task Drilldown: {drilldownModal.staffName}
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  {drilldownModal.status ? `Filtering by status: ${drilldownModal.status.toUpperCase()}` : 'All Assigned Tasks'}
+                </p>
+              </div>
+              <button
+                onClick={() => setDrilldownModal({ open: false, staffId: null, staffName: '', status: null, date: null })}
+                className="text-slate-400 hover:text-white text-xl font-bold px-2 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+              {drilldownLoading ? (
+                <div className="py-12 text-center text-slate-400 font-bold animate-pulse text-xs">
+                  Fetching exact task records...
+                </div>
+              ) : drilldownList.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 font-semibold text-xs">
+                  No task records found for this status.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase">
+                    <tr>
+                      <th className="p-2.5">#</th>
+                      <th className="p-2.5">Lead Name</th>
+                      <th className="p-2.5">Phone</th>
+                      <th className="p-2.5 text-center">Status</th>
+                      <th className="p-2.5 text-center">Assigned Date</th>
+                      <th className="p-2.5 text-center">Last Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {drilldownList.map((t, i) => (
+                      <tr key={t._id || i} className="hover:bg-slate-50">
+                        <td className="p-2.5 font-bold text-slate-500">{i + 1}</td>
+                        <td className="p-2.5 font-black text-slate-900">{t.leadName}</td>
+                        <td className="p-2.5 font-bold text-blue-700">{t.phone}</td>
+                        <td className="p-2.5 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black capitalize ${
+                            t.status === 'verified' ? 'bg-emerald-100 text-emerald-800' :
+                            t.status === 'pending' ? 'bg-amber-100 text-amber-900' :
+                            t.status === 'cnp' ? 'bg-amber-100 text-amber-800' :
+                            t.status === 'call_again' ? 'bg-purple-100 text-purple-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {t.status}
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-center text-slate-600 font-medium">
+                          {new Date(t.assignedDate).toLocaleDateString('en-IN')}
+                        </td>
+                        <td className="p-2.5 text-center text-slate-600 font-medium">
+                          {t.lastActionAt ? new Date(t.lastActionAt).toLocaleDateString('en-IN') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ CELL POPOVER MODAL ═══ */}
+      {cellPopover && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-5 w-full max-w-sm flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div>
+                <h4 className="font-extrabold text-sm text-slate-900">{cellPopover.staffName}</h4>
+                <p className="text-[11px] text-slate-500 font-bold">{cellPopover.colLabel} Status Split</p>
+              </div>
+              <button onClick={() => setCellPopover(null)} className="text-slate-400 hover:text-slate-900 font-bold">✕</button>
+            </div>
+            <div className="flex flex-col gap-2 text-xs font-bold pt-1">
+              <div className="flex justify-between p-2 rounded bg-amber-50 text-amber-900">
+                <span>Pending (No Action):</span>
+                <span>{cellPopover.cell.pending}</span>
+              </div>
+              <div className="flex justify-between p-2 rounded bg-amber-100/70 text-amber-800">
+                <span>CNP:</span>
+                <span>{cellPopover.cell.cnp}</span>
+              </div>
+              <div className="flex justify-between p-2 rounded bg-purple-50 text-purple-900">
+                <span>Call Again:</span>
+                <span>{cellPopover.cell.call_again}</span>
+              </div>
+              <div className="flex justify-between p-2 rounded bg-emerald-50 text-emerald-900">
+                <span>Verified:</span>
+                <span>{cellPopover.cell.verified}</span>
+              </div>
+              <div className="flex justify-between p-2 rounded bg-rose-50 text-rose-900">
+                <span>Not Interested:</span>
+                <span>{cellPopover.cell.not_interested}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ STAFF DETAIL DRAWER ═══ */}
+      {staffDrawer.open && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex justify-end z-50 animate-fade-in">
+          <div className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col overflow-hidden border-l border-slate-200">
+            <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-base">{staffDrawer.staffName}</h3>
+                <p className="text-xs text-slate-400 font-medium">Performance Metrics & Action Aging Breakdown</p>
+              </div>
+              <button
+                onClick={() => setStaffDrawer({ open: false, staffId: null, staffName: '' })}
+                className="text-slate-400 hover:text-white text-xl font-bold px-2 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+              {staffKPIsLoading ? (
+                <div className="py-20 text-center text-slate-400 font-bold animate-pulse text-xs">
+                  Loading Staff Detailed Performance KPIs...
+                </div>
+              ) : staffKPIs ? (
+                <>
+                  {/* Aging & Alerts */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-center">
+                      <div className="text-[10px] font-extrabold text-emerald-700 uppercase">0-1 Day Pending</div>
+                      <div className="text-xl font-black text-emerald-950 mt-1">{staffKPIs.aging?.pending0to1 || 0}</div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-center">
+                      <div className="text-[10px] font-extrabold text-amber-700 uppercase">2-3 Days Pending</div>
+                      <div className="text-xl font-black text-amber-950 mt-1">{staffKPIs.aging?.pending2to3 || 0}</div>
+                    </div>
+                    <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl text-center">
+                      <div className="text-[10px] font-extrabold text-rose-700 uppercase">3+ Days Pending</div>
+                      <div className="text-xl font-black text-rose-950 mt-1">{staffKPIs.aging?.pending3plus || 0}</div>
+                    </div>
+                  </div>
+
+                  {/* Overdue & Review Alerts */}
+                  <div className="flex flex-col gap-2">
+                    {staffKPIs.overdueCount > 0 && (
+                      <div className="bg-rose-50 border border-rose-300 p-3 rounded-xl flex items-center justify-between text-xs font-bold text-rose-900">
+                        <span>⚠️ Call Again Overdue:</span>
+                        <span className="bg-rose-600 text-white px-2 py-0.5 rounded-full font-black text-[10px]">
+                          {staffKPIs.overdueCount} Overdue
+                        </span>
+                      </div>
+                    )}
+                    {staffKPIs.cnpReviewCount > 0 && (
+                      <div className="bg-amber-50 border border-amber-300 p-3 rounded-xl flex items-center justify-between text-xs font-bold text-amber-900">
+                        <span>🔍 Flagged CNP Retry (&ge;3 attempts):</span>
+                        <span className="bg-amber-600 text-white px-2 py-0.5 rounded-full font-black text-[10px]">
+                          {staffKPIs.cnpReviewCount} Flagged
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Attendance & Work Summary */}
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex justify-between items-center text-xs font-bold text-slate-800">
+                    <div>
+                      <span className="text-slate-500">Days Active Worked:</span>{' '}
+                      <strong className="text-emerald-700 font-black">{staffKPIs.daysWorked} Days</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Zero-Action Days:</span>{' '}
+                      <strong className="text-rose-700 font-black">{staffKPIs.zeroActionDays} Days</strong>
+                    </div>
+                  </div>
+
+                  {/* Daily Trend List */}
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase mb-3">Daily Task Activity Trend</h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar border border-slate-100 p-2 rounded-xl">
+                      {staffKPIs.dailyTrend?.length > 0 ? staffKPIs.dailyTrend.map((d, i) => (
+                        <div key={i} className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded-lg">
+                          <span className="font-bold text-slate-700">{d.date}</span>
+                          <div className="flex gap-3">
+                            <span className="text-indigo-600 font-extrabold">Assigned: {d.assigned}</span>
+                            <span className="text-emerald-600 font-extrabold">Completed: {d.completed}</span>
+                          </div>
+                        </div>
+                      )) : <p className="text-xs text-slate-400 text-center py-4">No daily activity trend logged.</p>}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -335,6 +1053,7 @@ export default function Dashboard() {
 
   // All Staff Performance state
   const [allStaffData, setAllStaffData] = useState([]);
+  const [staffBreakdownData, setStaffBreakdownData] = useState({ sales: [], support: [] });
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [staffRoleFilter, setStaffRoleFilter] = useState('all');
 
@@ -344,44 +1063,88 @@ export default function Dashboard() {
   const [department, setDepartment] = useState('');
   const canManage = user?.role === 'admin' || user?.role === 'manager';
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  const loadIdRef = useRef(0);
+
+  const load = useCallback(async (silent = false, refreshBypass = false) => {
+    const currentLoadId = ++loadIdRef.current;
+    // Only show full-screen loader on initial cold start before any data exists
+    if (!silent && !stats) setLoading(true);
     const params = getDateParams(datePreset, filterFrom, filterTo);
     const { from, to } = params;
     const selectedDate = (datePreset === 'today' || datePreset === 'all' || !from) ? new Date().toISOString().split('T')[0] : from;
 
     try {
-      const [s, personal, att, allStaffRes] = await Promise.allSettled([
-        fetchStats(selectedDate, from, to, department),
-        fetchStaffStats(selectedDate, null, from, to, department),
+      // Primary batch: Overview metrics, personal counters & attendance
+      const primaryPromises = [
+        fetchStats(selectedDate, from, to, department, refreshBypass),
+        fetchStaffStats(selectedDate, null, from, to, department, refreshBypass),
         attendanceSvc.getTodayStatus(),
-        canManage ? fetchAllStaffStats(selectedDate, from, to) : Promise.resolve(null),
-      ]);
+      ];
 
-      if (s.status === 'fulfilled') {
+      // If manager is currently looking at employee performance, fetch staff data in primary batch
+      if (canManage && activeTab === 'staff_performance') {
+        primaryPromises.push(fetchAllStaffStats(selectedDate, from, to, datePreset, refreshBypass));
+        primaryPromises.push(fetchStaffBreakdown({ preset: datePreset, from, to }, refreshBypass));
+      }
+
+      const results = await Promise.allSettled(primaryPromises);
+      if (currentLoadId !== loadIdRef.current) return;
+
+      const [s, personal, att, allStaffRes, breakdownRes] = results;
+
+      if (s?.status === 'fulfilled') {
         setStats(s.value);
       }
-      if (personal.status === 'fulfilled') {
+      if (personal?.status === 'fulfilled') {
         setStaffStats(personal.value || null);
       }
-      if (att.status === 'fulfilled') setAttStatus(att.value);
+      if (att?.status === 'fulfilled') setAttStatus(att.value);
 
-      if (allStaffRes.status === 'fulfilled' && allStaffRes.value) {
+      if (allStaffRes?.status === 'fulfilled' && allStaffRes.value) {
         const raw = allStaffRes.value?.staffStats || (Array.isArray(allStaffRes.value) ? allStaffRes.value : []);
         setAllStaffData(raw.filter(item => item.user && ['sales', 'support', 'logistics', 'manager'].includes(item.user.role)));
       }
 
+      if (breakdownRes?.status === 'fulfilled' && breakdownRes.value) {
+        const bdData = breakdownRes.value?.data || breakdownRes.value;
+        if (bdData && (bdData.sales || bdData.support)) {
+          setStaffBreakdownData(bdData);
+        }
+      }
+
       setLastUpdated(new Date());
+      // Instant render
       if (!silent) setLoading(false);
+
+      // Pre-fetch staff data in background if not already on staff_performance tab
+      if (canManage && activeTab !== 'staff_performance') {
+        Promise.allSettled([
+          fetchAllStaffStats(selectedDate, from, to, datePreset, refreshBypass),
+          fetchStaffBreakdown({ preset: datePreset, from, to }, refreshBypass),
+        ]).then(([staffRes, bdRes]) => {
+          if (currentLoadId !== loadIdRef.current) return;
+          if (staffRes.status === 'fulfilled' && staffRes.value) {
+            const raw = staffRes.value?.staffStats || (Array.isArray(staffRes.value) ? staffRes.value : []);
+            setAllStaffData(raw.filter(item => item.user && ['sales', 'support', 'logistics', 'manager'].includes(item.user.role)));
+          }
+          if (bdRes.status === 'fulfilled' && bdRes.value) {
+            const bdData = bdRes.value?.data || bdRes.value;
+            if (bdData && (bdData.sales || bdData.support)) {
+              setStaffBreakdownData(bdData);
+            }
+          }
+        }).catch(e => console.error('Staff background pre-fetch error:', e));
+      }
 
       if (silent) return;
 
       Promise.allSettled([
         user?.role === 'sales'
-          ? fetchStaffTodayLists(selectedDate, null, from, to, department)
+          ? fetchStaffTodayLists(selectedDate, null, from, to, department, refreshBypass)
           : Promise.resolve(null),
-        fetchStaffMonthlyChart(),
+        fetchStaffMonthlyChart(refreshBypass),
       ]).then(([lists, chart]) => {
+        if (currentLoadId !== loadIdRef.current) return;
         if (lists.status === 'fulfilled' && lists.value) {
           const val = lists.value || { cnpList: [], callAgainList: [], interestedList: [], notInterestedList: [], onHoldList: [] };
           setTodayLists(val);
@@ -395,15 +1158,15 @@ export default function Dashboard() {
       console.error('Dashboard load error:', e);
       if (!silent) setLoading(false);
     }
-  }, [datePreset, filterFrom, filterTo, department, user?.role]);
+  }, [datePreset, filterFrom, filterTo, department, user?.role, canManage, activeTab]);
 
-  // Auto-refresh interval with toggle
+  // Auto-refresh interval with toggle (15 seconds live update)
   useEffect(() => {
     let timer;
     if (autoRefresh) {
       timer = setInterval(() => {
         load(true);
-      }, 300000); // 5 mins
+      }, 15000); // 15s live update
     }
     return () => { if (timer) clearInterval(timer); };
   }, [autoRefresh, load]);
@@ -411,7 +1174,30 @@ export default function Dashboard() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datePreset, filterFrom, filterTo, department, user?.role]);
+  }, [datePreset, filterFrom, filterTo, department, user?.role, activeTab]);
+
+  // Pre-warm common date & department filters into SWR memory in background (enables true 0.1ms filter switching)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const presetsToWarm = ['yesterday', 'last7', 'month', 'all'];
+      presetsToWarm.forEach(preset => {
+        if (preset === datePreset) return;
+        const p = getDateParams(preset, '', '');
+        const selDate = (preset === 'today' || preset === 'all' || !p.from) ? new Date().toISOString().split('T')[0] : p.from;
+        fetchStats(selDate, p.from, p.to, department).catch(() => {});
+        fetchStaffStats(selDate, null, p.from, p.to, department).catch(() => {});
+      });
+
+      if (canManage && !department) {
+        DEPARTMENTS.forEach(dept => {
+          fetchStats(new Date().toISOString().split('T')[0], '', '', dept).catch(() => {});
+          fetchStaffStats(new Date().toISOString().split('T')[0], null, '', '', dept).catch(() => {});
+        });
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [department, canManage, datePreset]);
 
   useEffect(() => {
     let cancelled = false;
@@ -515,6 +1301,9 @@ export default function Dashboard() {
       const to = formatDateInput(today);
       setFilterFrom(from);
       setFilterTo(to);
+    } else {
+      setFilterFrom('');
+      setFilterTo('');
     }
   };
 
@@ -640,7 +1429,11 @@ export default function Dashboard() {
           setDepartment={setDepartment}
           canManage={canManage}
           lastUpdated={lastUpdated}
-          onRefresh={() => load(false)}
+          onRefresh={() => {
+            clearDashboardCache();
+            clearOpsDashboardCache();
+            load(false, true);
+          }}
           autoRefresh={autoRefresh}
           onToggleAutoRefresh={() => setAutoRefresh(v => !v)}
           onDownloadCSV={downloadLeadsCSV}
@@ -1484,301 +2277,18 @@ export default function Dashboard() {
           </SectionCard>
         )}
 
-        {/* ═══ Tab 6: Employee Performance Panel (Admin/Manager Only) ═══ */}
+        {/* ═══ Tab 6: Employee Performance Breakdown (Admin/Manager Only) ═══ */}
         {activeTab === 'staff_performance' && canManage && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <SectionCard
-              title={`Employee Performance Matrix (${getPeriodLabel()})`}
-              subtitle="Real-time live performance tracking: Check-in/out attendance, assigned tasks, verifications, CNP, Call Again, and Booked Shipments"
-              icon={icons.users}
-            >
-              {/* Filter & Search Bar */}
-              <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-                <div className="flex items-center gap-3 flex-1 min-w-[240px]">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-2.5 text-slate-400">{icons.search}</span>
-                    <input
-                      type="text"
-                      placeholder="Search employee by name..."
-                      value={staffSearchQuery}
-                      onChange={(e) => setStaffSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <select
-                    value={staffRoleFilter}
-                    onChange={(e) => setStaffRoleFilter(e.target.value)}
-                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none border-slate-200"
-                  >
-                    <option value="all">All Roles</option>
-                    <option value="sales">Sales Team</option>
-                    <option value="support">Support Team</option>
-                    <option value="logistics">Logistics Team</option>
-                  </select>
-
-                  <button
-                    onClick={() => load(false)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
-                  >
-                    Refresh Real Data
-                  </button>
-                </div>
-              </div>
-
-              {/* Employee Performance Table */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase tracking-wider">
-                    <tr>
-                      <th className="p-3">Employee</th>
-                      <th className="p-3">Check-in / Out</th>
-                      <th className="p-3 text-center">Tasks Handled</th>
-                      <th className="p-3 text-center text-blue-600">Verification</th>
-                      <th className="p-3 text-center text-amber-600">CNP</th>
-                      <th className="p-3 text-center text-indigo-600">Call Again</th>
-                      <th className="p-3 text-center text-rose-600">Not Interested</th>
-                      <th className="p-3 text-center text-slate-500">On Hold</th>
-                      <th className="p-3 text-center text-emerald-700 font-extrabold bg-emerald-50/80">Shipment Booked</th>
-                      <th className="p-3 text-center">Conversion %</th>
-                    </tr>
-                  </thead>
-                  {(() => {
-                    const filtered = allStaffData.filter((item) => {
-                      const nameMatch = !staffSearchQuery || item.user?.name?.toLowerCase().includes(staffSearchQuery.toLowerCase());
-                      const roleMatch = staffRoleFilter === 'all' || item.user?.role === staffRoleFilter;
-                      return nameMatch && roleMatch;
-                    });
-
-                    if (filtered.length === 0) {
-                      return (
-                        <tbody className="bg-white">
-                          <tr>
-                            <td colSpan={10} className="p-8 text-center text-slate-400 font-semibold">
-                              No employee performance data found for the selected filter.
-                            </td>
-                          </tr>
-                        </tbody>
-                      );
-                    }
-
-                    const departmentGroups = [
-                      { key: 'sales', label: 'Sales Team', icon: '💼', bg: 'bg-emerald-50/90 text-emerald-900 border-y border-emerald-200/80', badgeBg: 'bg-emerald-600 text-white' },
-                      { key: 'support', label: 'Support Team', icon: '🎧', bg: 'bg-blue-50/90 text-blue-900 border-y border-blue-200/80', badgeBg: 'bg-blue-600 text-white' },
-                      { key: 'logistics', label: 'Logistics Team', icon: '🚚', bg: 'bg-amber-50/90 text-amber-900 border-y border-amber-200/80', badgeBg: 'bg-amber-600 text-white' },
-                      { key: 'manager', label: 'Management & Operations', icon: '👑', bg: 'bg-purple-50/90 text-purple-900 border-y border-purple-200/80', badgeBg: 'bg-purple-600 text-white' },
-                    ];
-
-                    return departmentGroups.map((dept) => {
-                      const members = filtered.filter(item => (item.user?.role || 'sales') === dept.key);
-                      if (members.length === 0) return null;
-
-                      // Calculate Department Summary Aggregates
-                      let deptTasks = 0;
-                      let deptVerifications = 0;
-                      let deptCnp = 0;
-                      let deptCallAgain = 0;
-                      let deptNotInterested = 0;
-                      let deptOnHold = 0;
-                      let deptBooked = 0;
-
-                      const isSalesDept = dept.key === 'sales';
-                      const canShowCalls = ['sales', 'support'].includes(dept.key);
-                      const canShowBooked = ['sales', 'support'].includes(dept.key);
-
-                      const preparedMembers = members.map((emp) => {
-                        const isSales = (emp.user?.role || 'sales') === 'sales';
-                        const canDoCalls = ['sales', 'support'].includes(emp.user?.role || dept.key);
-                        const canBook = ['sales', 'support'].includes(emp.user?.role || dept.key);
-
-                        const verifications = canDoCalls ? (emp.todayVerifications || emp.verifiedCount || 0) : 0;
-                        const cnp = canDoCalls ? (emp.todayCnp || 0) : 0;
-                        const callAgain = canDoCalls ? (emp.todayCallAgain || 0) : 0;
-                        const notInterested = canDoCalls ? (emp.todayNotInterested || 0) : 0;
-                        const onHold = canDoCalls ? (emp.onHoldCount || 0) : 0;
-                        const booked = canBook ? (emp.readyToShipmentCount || 0) : 0;
-
-                        // Only Sales team members receive lead/call task assignments
-                        const tasksHandled = isSales ? (emp.tasksAssigned || 0) : 0;
-                        const conversion = isSales && tasksHandled > 0
-                          ? ((booked / tasksHandled) * 100).toFixed(1)
-                          : (isSales && booked > 0 ? '100.0' : '-');
-
-                        deptTasks += tasksHandled;
-                        deptVerifications += verifications;
-                        deptCnp += cnp;
-                        deptCallAgain += callAgain;
-                        deptNotInterested += notInterested;
-                        deptOnHold += onHold;
-                        deptBooked += booked;
-
-                        return { emp, verifications, cnp, callAgain, notInterested, onHold, booked, tasksHandled, conversion, isSales, canBook, canDoCalls };
-                      });
-
-                      const deptConversion = isSalesDept && deptTasks > 0
-                        ? ((deptBooked / deptTasks) * 100).toFixed(1)
-                        : (isSalesDept && deptBooked > 0 ? '100.0' : '-');
-
-                      return (
-                        <tbody key={dept.key} className="divide-y divide-slate-100 bg-white">
-                          {/* Department Summary Sub-Header */}
-                          <tr className={`${dept.bg} font-extrabold text-xs`}>
-                            <td className="p-3">
-                              <div className="flex items-center gap-2">
-                                <span className="text-base">{dept.icon}</span>
-                                <span className="font-extrabold uppercase tracking-wide">{dept.label}</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${dept.badgeBg}`}>
-                                  {members.length} {members.length === 1 ? 'Member' : 'Members'}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="p-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dept Total</td>
-                            <td className="p-3 text-center font-black text-slate-900 bg-black/5">
-                              {isSalesDept ? deptTasks : '-'}
-                            </td>
-                            <td className="p-3 text-center font-black text-blue-700">{canShowCalls ? deptVerifications : '-'}</td>
-                            <td className="p-3 text-center font-black text-amber-700">{canShowCalls ? deptCnp : '-'}</td>
-                            <td className="p-3 text-center font-black text-indigo-700">{canShowCalls ? deptCallAgain : '-'}</td>
-                            <td className="p-3 text-center font-black text-rose-700">{canShowCalls ? deptNotInterested : '-'}</td>
-                            <td className="p-3 text-center font-black text-slate-600">{canShowCalls ? deptOnHold : '-'}</td>
-                            <td className="p-3 text-center font-black text-emerald-800 bg-emerald-100/80">
-                              {canShowBooked ? deptBooked : '-'}
-                            </td>
-                            <td className="p-3 text-center">
-                              {deptConversion === '-' ? (
-                                <span className="text-slate-400 font-bold">-</span>
-                              ) : (
-                                <span className={`px-2.5 py-1 rounded-full text-[11px] font-black shadow-xs ${
-                                  Number(deptConversion) >= 15
-                                    ? 'bg-emerald-600 text-white'
-                                    : Number(deptConversion) > 0
-                                    ? 'bg-amber-500 text-white'
-                                    : 'bg-slate-500 text-white'
-                                }`}>
-                                  {deptConversion}%
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-
-                          {/* Member Rows */}
-                          {preparedMembers.map(({ emp, verifications, cnp, callAgain, notInterested, onHold, booked, tasksHandled, conversion, isSales, canBook, canDoCalls }) => {
-                            const checkInTime = emp.checkIn
-                              ? new Date(emp.checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                              : null;
-                            const checkOutTime = emp.checkOut
-                              ? new Date(emp.checkOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                              : null;
-
-                            let statusBadge = (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
-                                ⚪ Not Checked In
-                              </span>
-                            );
-                            if (checkInTime && !checkOutTime) {
-                              statusBadge = (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
-                                  🟢 Active Now
-                                </span>
-                              );
-                            } else if (checkInTime && checkOutTime) {
-                              statusBadge = (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300">
-                                  🔴 Checked Out
-                                </span>
-                              );
-                            }
-
-                            return (
-                              <tr key={emp.user?._id || emp.user?.id} className="hover:bg-slate-50 transition-colors">
-                                {/* Employee */}
-                                <td className="p-3">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
-                                      {emp.user?.name?.charAt(0) || 'U'}
-                                    </div>
-                                    <div>
-                                      <div className="font-extrabold text-slate-900">{emp.user?.name || 'Unknown Staff'}</div>
-                                      <div className="flex items-center gap-1.5 mt-0.5">
-                                        <span className="uppercase text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                                          {emp.user?.role || 'staff'}
-                                        </span>
-                                        {statusBadge}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* Check-in / Check-out */}
-                                <td className="p-3 text-slate-600 font-semibold">
-                                  <div><span className="text-emerald-600 font-bold">In:</span> {checkInTime || '--:--'}</div>
-                                  <div><span className="text-slate-400 font-bold">Out:</span> {checkOutTime || '--:--'}</div>
-                                </td>
-
-                                {/* Total Tasks Handled (Sales only) */}
-                                <td className="p-3 text-center font-extrabold text-slate-900 bg-slate-50/50">
-                                  {isSales ? tasksHandled : <span className="text-slate-400 font-semibold">-</span>}
-                                </td>
-
-                                {/* Verification */}
-                                <td className="p-3 text-center font-bold text-blue-600">
-                                  {canDoCalls ? verifications : <span className="text-slate-400 font-semibold">-</span>}
-                                </td>
-
-                                {/* CNP */}
-                                <td className="p-3 text-center font-bold text-amber-600">
-                                  {canDoCalls ? cnp : <span className="text-slate-400 font-semibold">-</span>}
-                                </td>
-
-                                {/* Call Again */}
-                                <td className="p-3 text-center font-bold text-indigo-600">
-                                  {canDoCalls ? callAgain : <span className="text-slate-400 font-semibold">-</span>}
-                                </td>
-
-                                {/* Not Interested */}
-                                <td className="p-3 text-center font-bold text-rose-600">
-                                  {canDoCalls ? notInterested : <span className="text-slate-400 font-semibold">-</span>}
-                                </td>
-
-                                {/* On Hold */}
-                                <td className="p-3 text-center font-bold text-slate-500">
-                                  {canDoCalls ? onHold : <span className="text-slate-400 font-semibold">-</span>}
-                                </td>
-
-                                {/* Shipment Booked */}
-                                <td className="p-3 text-center font-black text-sm text-emerald-700 bg-emerald-50">
-                                  {canBook ? booked : <span className="text-slate-400 font-semibold">-</span>}
-                                </td>
-
-                                {/* Conversion */}
-                                <td className="p-3 text-center">
-                                  {conversion === '-' ? (
-                                    <span className="text-slate-400 font-bold">-</span>
-                                  ) : (
-                                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
-                                      Number(conversion) >= 15
-                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                        : Number(conversion) > 0
-                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                        : 'bg-slate-100 text-slate-500 border border-slate-200'
-                                    }`}>
-                                      {conversion}%
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      );
-                    });
-                  })()}
-                </table>
-              </div>
-            </SectionCard>
-          </div>
+          <EmployeePerformanceSection
+            allStaffData={allStaffData}
+            staffBreakdownData={staffBreakdownData}
+            datePreset={datePreset}
+            filterFrom={filterFrom}
+            filterTo={filterTo}
+            department={department}
+            getPeriodLabel={getPeriodLabel}
+            icons={icons}
+          />
         )}
 
         {/* ═══ Tab 5: My Activity Detail Lists (Sales Staff Only) ═══ */}

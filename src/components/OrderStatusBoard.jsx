@@ -148,6 +148,8 @@ const resolveOrder = (order) => {
     payment_method:        order.payment_method        || r.payment_method || r.payment || '',
     sub_total:             order.sub_total > 0 ? order.sub_total : Number(r.total_amount || r.sub_total || r.amount || r.total_price || 0),
     order_items:           (order.order_items?.length > 0 ? order.order_items : r.order_items) || [],
+    delivered_at:          order.delivered_at || r.delivered_at || r.delivered_date || (normalizeStatus(order.status) === 'DELIVERED' ? (order.status_updated_at || r.status_updated_at) : null),
+    status_updated_at:     order.status_updated_at || r.status_updated_at || r.updated_at || null,
   };
 };
 
@@ -158,6 +160,24 @@ const formatDateTime = (value) => {
     month: 'short',
     year: 'numeric',
   });
+};
+
+const formatFullDateTime = (value) => {
+  if (!value) return '-';
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return String(value);
+  }
 };
 
 const getDateParams = (preset, customFrom, customTo) => {
@@ -584,7 +604,25 @@ export default function OrderStatusBoard({
                         {formatStatusLabel(order.status || selectedStatus)}
                       </span>
                       <div className="flex flex-col items-end">
-                        {(normalizeStatus(order.status).includes('DELIVERY') || normalizeStatus(order.status).includes('UNDELIVERED')) && order.delivery_attempt && (
+                        {normalizeStatus(order.status) === 'DELIVERED' && (order.delivered_at || order.status_updated_at) && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg mt-0.5 flex items-center gap-1 shadow-xs">
+                            <svg className="w-3 h-3 text-emerald-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10"/>
+                              <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <span>{formatFullDateTime(order.delivered_at || order.status_updated_at)}</span>
+                          </span>
+                        )}
+                        {normalizeStatus(order.status) === 'RTO_DELIVERED' && (order.delivered_at || order.status_updated_at) && (
+                          <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg mt-0.5 flex items-center gap-1 shadow-xs">
+                            <svg className="w-3 h-3 text-blue-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10"/>
+                              <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <span>{formatFullDateTime(order.delivered_at || order.status_updated_at)}</span>
+                          </span>
+                        )}
+                        {(normalizeStatus(order.status).includes('DELIVERY') || normalizeStatus(order.status).includes('UNDELIVERED')) && normalizeStatus(order.status) !== 'DELIVERED' && order.delivery_attempt && (
                           <span className="text-[9px] text-blue-600 font-extrabold mt-0.5 uppercase tracking-tighter bg-blue-50 px-1 rounded">
                             {order.delivery_attempt === 1 ? '1st' : order.delivery_attempt === 2 ? '2nd' : order.delivery_attempt === 3 ? '3rd' : `${order.delivery_attempt}th`} ATTEMPT
                             {order.status_updated_at && new Date(order.status_updated_at).toDateString() === new Date().toDateString() ? ' - TODAY' : ''}
@@ -616,6 +654,22 @@ export default function OrderStatusBoard({
                       <p className="text-gray-400 font-semibold">Order Date</p>
                       <p className="font-semibold text-gray-700">{formatDateTime(order.createdAt)}</p>
                     </div>
+                    {(order.delivered_at || (normalizeStatus(order.status) === 'DELIVERED' && order.status_updated_at)) ? (
+                      <div>
+                        <p className="text-emerald-700 font-semibold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                          <span>Delivered Date & Time</span>
+                        </p>
+                        <p className="font-bold text-emerald-800">
+                          {formatFullDateTime(order.delivered_at || order.status_updated_at)}
+                        </p>
+                      </div>
+                    ) : order.status_updated_at && normalizeStatus(order.status) !== 'NEW' ? (
+                      <div>
+                        <p className="text-gray-400 font-semibold">Status Updated</p>
+                        <p className="font-semibold text-gray-700">{formatFullDateTime(order.status_updated_at)}</p>
+                      </div>
+                    ) : null}
                     <div onClick={e => e.stopPropagation()}>
                       <p className="text-gray-400 font-semibold">AWB</p>
                       {order.awb_code

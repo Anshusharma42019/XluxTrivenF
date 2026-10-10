@@ -303,7 +303,7 @@ export default function StaffDashboard() {
   const motiveLine = MOTIVATIONS[new Date().getDay()];
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && !stats) setLoading(true);
     try {
       // Sync fresh user profile from DB to dynamically reflect any department changes by Admin in real-time
       API.get('/users/me').then(res => {
