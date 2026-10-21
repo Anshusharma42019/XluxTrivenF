@@ -16,6 +16,8 @@ import {
 import { markCNP } from '../services/lead.service';
 import { useToast } from '../context/ToastContext';
 import * as attendanceSvc from '../services/attendance.service';
+import { sendToVerification as smSendToVerification } from '../services/shipmaxx.service';
+import { sendToVerification as srSendToVerification } from '../services/shiprocket.service';
 
 /* ─── Live Working Timer Hook ──────────────────────────────────── */
 function useLiveTimer(checkInTime) {
@@ -64,10 +66,49 @@ function RtoReasonBadge({ reason }) {
   );
 }
 
-function MyDeliveryScoreCard({ user, myDelivery, deliveryMonth, setDeliveryMonth, selectedStaffFilter, setSelectedStaffFilter, deliveryLoading, cardCls, cardStyle, onRefresh }) {
+function MyDeliveryScoreCard({ user, myDelivery, setMyDelivery, deliveryMonth, setDeliveryMonth, selectedStaffFilter, setSelectedStaffFilter, deliveryLoading, cardCls, cardStyle, onRefresh }) {
+  const { success, error } = useToast();
   const [openList, setOpenList] = useState(null);
   const [search, setSearch] = useState('');
+  const [reAttemptingId, setReAttemptingId] = useState(null);
   const navigate = useNavigate();
+
+  const handleSendToVerification = async (order) => {
+    if (!order?._id) return;
+    if (!window.confirm(`Kya aap "${order.name || 'is patient'}" ka order (${order.awb || order._id}) Verification me bhejna chahte hain?`)) return;
+
+    setReAttemptingId(String(order._id));
+    try {
+      const isSmx = order.platform === 'shipmaxx' || (!order.platform && order.courier !== 'Shiprocket');
+      if (isSmx) {
+        await smSendToVerification(order._id, { source: 'rto' });
+      } else {
+        await srSendToVerification(order._id, { source: 'rto' });
+      }
+
+      success('Order verification me bhej diya gaya hai aur RTO se hata diya gaya');
+
+      if (setMyDelivery) {
+        setMyDelivery(prev => {
+          if (!prev) return prev;
+          const filteredRtos = (prev.rtoOrders || []).filter(item => String(item._id) !== String(order._id));
+          return {
+            ...prev,
+            rto: Math.max(0, (prev.rto || 1) - 1),
+            totalRto: Math.max(0, (prev.totalRto || 1) - 1),
+            rtoOrders: filteredRtos
+          };
+        });
+      }
+
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error(err);
+      error(err.response?.data?.message || 'Verification me bhejne me error aaya');
+    } finally {
+      setReAttemptingId(null);
+    }
+  };
 
   const [expandedRemarks, setExpandedRemarks] = useState({});
 
@@ -443,8 +484,16 @@ function MyDeliveryScoreCard({ user, myDelivery, deliveryMonth, setDeliveryMonth
                             </button>
                           </>
                         )}
-                        <button onClick={() => navigate('/verification')} className="px-2.5 py-1 rounded-lg bg-gray-900 text-white hover:bg-gray-800 text-[10px] font-black transition cursor-pointer shadow-2xs">
-                          Re-Attempt
+                        <button
+                          disabled={reAttemptingId === String(o._id)}
+                          onClick={() => handleSendToVerification(o)}
+                          title="Send this RTO order back to Verification team"
+                          className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white disabled:opacity-50 text-[10px] font-black transition cursor-pointer shadow-xs flex items-center gap-1.5 uppercase tracking-wider"
+                        >
+                          <svg className={`w-3.5 h-3.5 ${reAttemptingId === String(o._id) ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          {reAttemptingId === String(o._id) ? 'Sending...' : 'Send to Verification'}
                         </button>
                       </div>
                     </div>
@@ -1747,6 +1796,7 @@ export default function StaffDashboard() {
         <MyDeliveryScoreCard
           user={user}
           myDelivery={myDelivery}
+          setMyDelivery={setMyDelivery}
           deliveryMonth={deliveryMonth}
           setDeliveryMonth={setDeliveryMonth}
           selectedStaffFilter={selectedStaffFilter}

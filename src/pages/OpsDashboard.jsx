@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import {
   fetchKPIs, fetchTrend, fetchFunnel, fetchRtoReasons,
-  fetchAging, fetchLeaderboard, fetchShipments, fetchAlerts
+  fetchAging, fetchLeaderboard, fetchShipments, fetchAlerts, clearOpsDashboardCache
 } from '../services/opsDashboard.service';
 import RtoVerificationModal from '../components/RtoVerificationModal';
 import OpsInteraktModal from '../components/OpsInteraktModal';
@@ -872,7 +872,68 @@ export default function OpsDashboard() {
   const setLoad = (key, val) => setLoading(l => ({ ...l, [key]: val }));
 
   const handleVerifySuccess = (orderId, action, updatedOrder) => {
-    // Update aging locally
+    // When sent to verification, permanently remove from RTO list and decrement counts immediately
+    if (action === 'send_to_verification') {
+      // 1. Remove from aging RTO intersite stuck list
+      if (aging) {
+        setAging(prev => ({
+          ...prev,
+          rto_intersite_stuck: (prev?.rto_intersite_stuck || []).filter(s =>
+            String(s.order_id) !== String(orderId) &&
+            String(s._id) !== String(orderId) &&
+            String(s.awb_code) !== String(orderId)
+          )
+        }));
+      }
+
+      // 2. Remove from shipments list & decrement total count
+      if (shipments?.shipments) {
+        setShipments(prev => {
+          const prevList = prev?.shipments || [];
+          const remaining = prevList.filter(s =>
+            String(s.order_id) !== String(orderId) &&
+            String(s._id) !== String(orderId) &&
+            String(s.awb_code) !== String(orderId)
+          );
+          const removedCount = prevList.length - remaining.length;
+          return {
+            ...prev,
+            shipments: remaining,
+            total: Math.max(0, (prev?.total || 0) - (removedCount || 1))
+          };
+        });
+      }
+
+      // 3. Decrement KPI card count immediately
+      if (kpis?.kpis) {
+        setKpis(prev => {
+          if (!prev?.kpis) return prev;
+          const newKpis = { ...prev.kpis };
+          const statusKey = shipmentFilters.status;
+          if (statusKey && newKpis[statusKey] && typeof newKpis[statusKey].value === 'number') {
+            newKpis[statusKey] = {
+              ...newKpis[statusKey],
+              value: Math.max(0, newKpis[statusKey].value - 1)
+            };
+          } else {
+            ['blRto', 'blRtoIntersite', 'rto', 'rtoIntersite'].forEach(k => {
+              if (shipmentFilters.status === k && newKpis[k] && typeof newKpis[k].value === 'number') {
+                newKpis[k] = { ...newKpis[k], value: Math.max(0, newKpis[k].value - 1) };
+              }
+            });
+          }
+          return { ...prev, kpis: newKpis };
+        });
+      }
+
+      // 4. Invalidate cache and reload overview in background
+      clearOpsDashboardCache();
+      tabCacheRef.current = {};
+      loadOverview(filters, true);
+      return;
+    }
+
+    // Standard updates for wants_again or no_need
     if (aging) {
       setAging(prev => ({
         ...prev,

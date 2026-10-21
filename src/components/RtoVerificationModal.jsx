@@ -97,21 +97,22 @@ export default function RtoVerificationModal({ isOpen, onClose, shipment, onSucc
   const handleSendToVerification = async () => {
     setSubmitting(true);
     try {
-      if (commentText.trim()) {
-        await submitRtoVerification({
-          order_id: shipment.order_id || shipment._id,
-          platform: shipment.platform,
-          comment: commentText.trim(),
-        });
-        setCommentText('');
-      }
+      await submitRtoVerification({
+        order_id: shipment.order_id || shipment._id,
+        platform: shipment.platform,
+        action: 'send_to_verification',
+        comment: commentText.trim() ? commentText.trim() : undefined,
+      });
+      setCommentText('');
+
+      const targetId = shipment._id || shipment.order_id;
       if (shipment.platform === 'shipmaxx') {
-        await smSendToVerification(shipment._id, { source: 'rto' });
+        await smSendToVerification(targetId, { source: 'rto' });
       } else {
-        await srSendToVerification(shipment._id, { source: 'rto' });
+        await srSendToVerification(targetId, { source: 'rto' });
       }
       success('Order moved back to Verification list');
-      if (onSuccess) onSuccess(shipment.order_id, 'send_to_verification');
+      if (onSuccess) onSuccess(shipment.order_id || shipment._id, 'send_to_verification');
       onClose();
     } catch (err) {
       console.error(err);
