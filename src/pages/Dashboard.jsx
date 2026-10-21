@@ -37,6 +37,7 @@ const DATE_FILTERS = [
   { id: 'yesterday', label: 'Yesterday' },
   { id: 'last7', label: 'Last 7 Days' },
   { id: 'month', label: 'This Month' },
+  { id: 'last_month', label: 'Last Month' },
   { id: 'all', label: 'All Time' },
   { id: 'custom', label: 'Custom' },
 ];
@@ -69,6 +70,11 @@ const getDateParams = (preset, customFrom, customTo) => {
   if (preset === 'month') {
     const d = new Date(today.getFullYear(), today.getMonth(), 1);
     return { filterType: 'range', from: formatDateInput(d), to };
+  }
+  if (preset === 'last_month') {
+    const dStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const dEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { filterType: 'range', from: formatDateInput(dStart), to: formatDateInput(dEnd) };
   }
   if (preset === 'custom' && customFrom && customTo) {
     return { filterType: 'range', from: customFrom, to: customTo };
@@ -1313,6 +1319,7 @@ export default function Dashboard() {
     if (datePreset === 'yesterday') return t('Yesterday');
     if (datePreset === 'last7') return t('Last 7 Days');
     if (datePreset === 'month') return t('This Month');
+    if (datePreset === 'last_month') return t('Last Month');
     if (datePreset === 'all') return t('All Time');
     return `${filterFrom} to ${filterTo}`;
   };

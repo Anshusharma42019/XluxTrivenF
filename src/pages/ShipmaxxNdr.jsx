@@ -65,11 +65,14 @@ function NdrDetailPanel({ ndr, onClose, onUseAwb }) {
     ['Customer',       ndr.customer_name],
     ['Phone',          phone || ndr.customer_phone],
     ['Email',          ndr.customer_email],
-    ['Courier',        ndr.courier_name],
-    ['Status',         ndr.status || ndr.current_status],
-    ['Reason',         ndr.reason],
-    ['Remarks',        ndr.remarks],
-    ['Comment',        ndr.comment],
+    ['Courier',             ndr.courier_name],
+    ['Status',              ndr.status || ndr.current_status],
+    ['Delivery Boy Reason', ndr.delivery_boy_reason || ndr.reason],
+    ['Action By / Courier', ndr.action_by || ndr.courier_name],
+    ['Staff Follow-up Note', ndr.staff_remark],
+    ['Staff Note By',       ndr.staff_remark_by],
+    ['Remarks',             ndr.remarks],
+    ['Comment',             ndr.comment],
     ['Attempts',       ndr.attempts],
     ['NDR Raised',     ndr.ndr_raised_at],
     ['Payment',        ndr.payment_method],
@@ -115,28 +118,101 @@ function NdrDetailPanel({ ndr, onClose, onUseAwb }) {
 }
 
 // ── NDR List ──────────────────────────────────────────────────────────────────
+const getMonthBounds = (m, y) => {
+  const start = new Date(y, m, 1);
+  const end = new Date(y, m + 1, 0);
+  const fmt = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  return { from: fmt(start), to: fmt(end) };
+};
+
+const getPresetDates = (presetId, monthObj) => {
+  const today = new Date();
+  const fmt = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  if (presetId === 'today') {
+    const s = fmt(today);
+    return { from: s, to: s };
+  }
+  if (presetId === 'yesterday') {
+    const y = new Date(today);
+    y.setDate(today.getDate() - 1);
+    const s = fmt(y);
+    return { from: s, to: s };
+  }
+  if (presetId === 'last7') {
+    const past = new Date(today);
+    past.setDate(today.getDate() - 6);
+    return { from: fmt(past), to: fmt(today) };
+  }
+  if (presetId === 'last_month') {
+    const m = today.getMonth() - 1;
+    const y = m < 0 ? today.getFullYear() - 1 : today.getFullYear();
+    const actM = m < 0 ? 11 : m;
+    return getMonthBounds(actM, y);
+  }
+  if (presetId === 'month') {
+    return getMonthBounds(monthObj.month, monthObj.year);
+  }
+  return null;
+};
+
 function NdrList({ department: externalDept, setDepartment: externalSetDept, onSelectNdr, onUseAwb }) {
   const [ndrs, setNdrs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [from, setFrom] = useState(() => new Date().toISOString().split('T')[0]);
-  const [to, setTo]     = useState(() => new Date().toISOString().split('T')[0]);
+  const [view, setView] = useState('ndr'); // 'ndr' | 'rto' | 'delivered' | 'all'
+  const [preset, setPreset] = useState('month');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const n = new Date();
+    return { month: n.getMonth(), year: n.getFullYear() };
+  });
+
+  const initialBounds = getMonthBounds(new Date().getMonth(), new Date().getFullYear());
+  const [from, setFrom] = useState(initialBounds.from);
+  const [to, setTo]     = useState(initialBounds.to);
   const [department, setDepartment] = useState(externalDept || 'all');
+
+  const [summary, setSummary] = useState({
+    totalInitiated: 0,
+    delivered: 0,
+    rto: 0,
+    ndr: 0,
+    inTransit: 0,
+    deliveryRate: '0%',
+    rtoRate: '0%',
+    departments: { all: 0, migraine: 0, piles: 0 }
+  });
 
   useEffect(() => {
     if (externalDept !== undefined) setDepartment(externalDept);
   }, [externalDept]);
+
   const [attempt, setAttempt] = useState('all');
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState(null);
 
-  const fetchNDR = useCallback((f = from, t = to) => {
+  const fetchNDR = useCallback((f = from, t = to, v = view) => {
     setLoading(true);
     const params = {};
     if (f) params.from = f;
     if (t) params.to = t;
+    if (v) params.view = v;
+
     smxSvc.getNdrList(params)
       .then(r => {
         let rawData = r.data?.data;
+        if (rawData?.summary) {
+          setSummary(rawData.summary);
+        }
         while (rawData && typeof rawData === 'object' && !Array.isArray(rawData)) {
           if (Array.isArray(rawData.data)) { rawData = rawData.data; break; }
           if (Array.isArray(rawData.items)) { rawData = rawData.items; break; }
@@ -147,9 +223,41 @@ function NdrList({ department: externalDept, setDepartment: externalSetDept, onS
       })
       .catch(() => setNdrs([]))
       .finally(() => setLoading(false));
-  }, [from, to]);
+  }, [from, to, view]);
 
   useEffect(() => { fetchNDR(); }, []);
+
+  const handlePresetChange = (presetId) => {
+    setPreset(presetId);
+    if (presetId === 'custom') return;
+    const b = getPresetDates(presetId, selectedMonth);
+    if (b) {
+      setFrom(b.from);
+      setTo(b.to);
+      fetchNDR(b.from, b.to, view);
+    }
+  };
+
+  const handleMonthNav = (delta) => {
+    setSelectedMonth(prev => {
+      let m = prev.month + delta;
+      let y = prev.year;
+      if (m < 0) { m = 11; y -= 1; }
+      else if (m > 11) { m = 0; y += 1; }
+      const newMonth = { month: m, year: y };
+      const b = getMonthBounds(m, y);
+      setFrom(b.from);
+      setTo(b.to);
+      setPreset('month');
+      fetchNDR(b.from, b.to, view);
+      return newMonth;
+    });
+  };
+
+  const handleViewChange = (newView) => {
+    setView(newView);
+    fetchNDR(from, to, newView);
+  };
 
   const getTrackingUrl = (n) => {
     const c = (n.courier_name || '').toLowerCase();
@@ -186,15 +294,20 @@ function NdrList({ department: externalDept, setDepartment: externalSetDept, onS
       return (
         (n.awb_code || '').toLowerCase().includes(q) ||
         (n.customer_name || '').toLowerCase().includes(q) ||
+        (n.customer_phone || '').includes(q) ||
         (n.channel_order_id || '').toLowerCase().includes(q) ||
-        (n.reason || '').toLowerCase().includes(q)
+        (n.reason || '').toLowerCase().includes(q) ||
+        (n.delivery_boy_reason || '').toLowerCase().includes(q) ||
+        (n.staff_remark || '').toLowerCase().includes(q) ||
+        (n.courier_name || '').toLowerCase().includes(q)
       );
     }
     return true;
   });
 
-  const migraineCount = safeNdrs.filter(n => getDept(n) === 'migraine').length;
-  const pilesCount = safeNdrs.filter(n => getDept(n) === 'piles').length;
+  const migraineCount = summary.departments?.migraine ?? safeNdrs.filter(n => getDept(n) === 'migraine').length;
+  const pilesCount = summary.departments?.piles ?? safeNdrs.filter(n => getDept(n) === 'piles').length;
+  const allDeptCount = summary.departments?.all ?? safeNdrs.length;
 
   if (detail) {
     return (
@@ -209,75 +322,314 @@ function NdrList({ department: externalDept, setDepartment: externalSetDept, onS
   return (
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
       <div className="h-1 bg-blue-600" />
-      {/* Filters */}
-      <div className="px-5 py-3 border-b border-gray-100 space-y-3 bg-gray-50/30">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <span className="font-bold text-gray-700 text-sm">ShipMaxx NDR List</span>
-          <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded-full border">{filtered.length} records</span>
+      
+      {/* ── Filters & Summary Header ──────────────────────────── */}
+      <div className="px-5 py-4 border-b border-gray-100 space-y-4 bg-gray-50/30">
+        
+        {/* Top Header with Month Navigator */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
+              <span>ShipMaxx Delivery & NDR Dashboard</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                Admin Analytics
+              </span>
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Live ShipMaxx overview: Total Initiated, Delivered, RTO returns & active NDR actions
+            </p>
+          </div>
+
+          {/* Month Navigator */}
+          <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-gray-200 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => handleMonthNav(-1)}
+              className="w-7 h-7 rounded-lg bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 transition cursor-pointer"
+              title="Previous Month"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span className="text-xs font-black min-w-[95px] text-center text-gray-800 uppercase tracking-tight">
+              {new Date(selectedMonth.year, selectedMonth.month).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleMonthNav(1)}
+              className="w-7 h-7 rounded-lg bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 transition cursor-pointer"
+              title="Next Month"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
         </div>
 
-        {/* Department Filter Buttons */}
-        <div className="flex items-center gap-2 flex-wrap py-1">
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-wide mr-1">Department:</span>
+        {/* ── KPI Summary Cards (Initiated, Delivered, RTO, Active NDR) ──────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* TOTAL INITIATED */}
           <button
             type="button"
-            onClick={() => setDepartment('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-              department === 'all'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            onClick={() => handleViewChange('all')}
+            className={`p-3.5 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer relative overflow-hidden ${
+              view === 'all'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                : 'bg-blue-50/60 border-blue-200/70 hover:border-blue-300'
             }`}
           >
-            <span>All</span>
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'all' ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-600'}`}>{safeNdrs.length}</span>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-black uppercase tracking-wider ${view === 'all' ? 'text-blue-100' : 'text-blue-700'}`}>
+                Initiated (Total)
+              </span>
+              <span className="text-sm">📦</span>
+            </div>
+            <p className={`text-2xl font-black mt-1 ${view === 'all' ? 'text-white' : 'text-blue-900'}`}>
+              {summary.totalInitiated || safeNdrs.length}
+            </p>
+            <p className={`text-[10px] mt-1 font-medium ${view === 'all' ? 'text-blue-100' : 'text-blue-600'}`}>
+              Shipments this period
+            </p>
           </button>
 
+          {/* DELIVERED */}
           <button
             type="button"
-            onClick={() => setDepartment('migraine')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-              department === 'migraine'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+            onClick={() => handleViewChange('delivered')}
+            className={`p-3.5 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer relative overflow-hidden ${
+              view === 'delivered'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                : 'bg-emerald-50/60 border-emerald-200/70 hover:border-emerald-300'
             }`}
           >
-            <span>Migraine</span>
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'migraine' ? 'bg-purple-700 text-white' : 'bg-purple-100 text-purple-800'}`}>{migraineCount}</span>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-black uppercase tracking-wider ${view === 'delivered' ? 'text-emerald-100' : 'text-emerald-700'}`}>
+                Delivered
+              </span>
+              <span className="text-sm">🚚</span>
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <p className={`text-2xl font-black ${view === 'delivered' ? 'text-white' : 'text-emerald-900'}`}>
+                {summary.delivered || 0}
+              </p>
+              {summary.deliveryRate && (
+                <span className={`text-[11px] font-bold ${view === 'delivered' ? 'text-emerald-100' : 'text-emerald-600'}`}>
+                  ({summary.deliveryRate})
+                </span>
+              )}
+            </div>
+            <p className={`text-[10px] mt-1 font-medium ${view === 'delivered' ? 'text-emerald-100' : 'text-emerald-600'}`}>
+              Successfully delivered
+            </p>
           </button>
 
+          {/* RTO */}
           <button
             type="button"
-            onClick={() => setDepartment('piles')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-              department === 'piles'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+            onClick={() => handleViewChange('rto')}
+            className={`p-3.5 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer relative overflow-hidden ${
+              view === 'rto'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                : 'bg-rose-50/60 border-rose-200/70 hover:border-rose-300'
             }`}
           >
-            <span>Piles</span>
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'piles' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>{pilesCount}</span>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-black uppercase tracking-wider ${view === 'rto' ? 'text-rose-100' : 'text-rose-700'}`}>
+                RTO (Returned)
+              </span>
+              <span className="text-sm">🔴</span>
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <p className={`text-2xl font-black ${view === 'rto' ? 'text-white' : 'text-rose-900'}`}>
+                {summary.rto || 0}
+              </p>
+              {summary.rtoRate && (
+                <span className={`text-[11px] font-bold ${view === 'rto' ? 'text-rose-100' : 'text-rose-600'}`}>
+                  ({summary.rtoRate})
+                </span>
+              )}
+            </div>
+            <p className={`text-[10px] mt-1 font-medium ${view === 'rto' ? 'text-rose-100' : 'text-rose-600'}`}>
+              Returned / In-Transit
+            </p>
+          </button>
+
+          {/* ACTIVE NDR */}
+          <button
+            type="button"
+            onClick={() => handleViewChange('ndr')}
+            className={`p-3.5 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer relative overflow-hidden ${
+              view === 'ndr'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                : 'bg-amber-50/60 border-amber-200/70 hover:border-amber-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-black uppercase tracking-wider ${view === 'ndr' ? 'text-amber-100' : 'text-amber-700'}`}>
+                Active NDR List
+              </span>
+              <span className="text-sm">⚠️</span>
+            </div>
+            <p className={`text-2xl font-black mt-1 ${view === 'ndr' ? 'text-white' : 'text-amber-900'}`}>
+              {summary.ndr || (view === 'ndr' ? safeNdrs.length : 0)}
+            </p>
+            <p className={`text-[10px] mt-1 font-medium ${view === 'ndr' ? 'text-amber-100' : 'text-amber-600'}`}>
+              Requires Re-Attempt
+            </p>
           </button>
         </div>
 
+        {/* ── Date Presets & Custom Pickers Bar ────────────────────── */}
+        <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-gray-200/60">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider mr-1">Period:</span>
+            {[
+              { id: 'month', label: 'This Month' },
+              { id: 'today', label: 'Today' },
+              { id: 'yesterday', label: 'Yesterday' },
+              { id: 'last7', label: 'Last 7 Days' },
+              { id: 'last_month', label: 'Last Month' },
+              { id: 'custom', label: 'Custom' },
+            ].map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handlePresetChange(p.id)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  preset === p.id
+                    ? 'bg-gray-900 text-white shadow-xs'
+                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Custom Date Pickers */}
+            <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-2.5 py-1 shadow-2xs">
+              <span className="text-[10px] font-black text-gray-400 uppercase">From:</span>
+              <input
+                type="date"
+                value={from}
+                onChange={e => { setFrom(e.target.value); setPreset('custom'); }}
+                className="text-xs bg-transparent focus:outline-none font-semibold text-gray-700"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-2.5 py-1 shadow-2xs">
+              <span className="text-[10px] font-black text-gray-400 uppercase">To:</span>
+              <input
+                type="date"
+                value={to}
+                onChange={e => { setTo(e.target.value); setPreset('custom'); }}
+                className="text-xs bg-transparent focus:outline-none font-semibold text-gray-700"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => fetchNDR(from, to, view)}
+              disabled={loading}
+              className="px-4 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition disabled:opacity-50 shadow-xs flex items-center gap-1 cursor-pointer"
+            >
+              {loading ? '…' : '🔍 Apply'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const b = getMonthBounds(new Date().getMonth(), new Date().getFullYear());
+                setPreset('month');
+                setSelectedMonth({ month: new Date().getMonth(), year: new Date().getFullYear() });
+                setFrom(b.from);
+                setTo(b.to);
+                setSearch('');
+                setAttempt('all');
+                setDepartment('all');
+                setView('ndr');
+                fetchNDR(b.from, b.to, 'ndr');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-gray-100 text-gray-600 text-xs font-bold hover:bg-gray-200 transition cursor-pointer"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+
+        {/* ── Department Filter & Search Bar ──────────────────────── */}
+        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-gray-200/60">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-black text-gray-500 uppercase tracking-wide mr-1">Department:</span>
+            <button
+              type="button"
+              onClick={() => setDepartment('all')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                department === 'all'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              }`}
+            >
+              <span>All</span>
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'all' ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                {allDeptCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDepartment('migraine')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                department === 'migraine'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+              }`}
+            >
+              <span>Migraine</span>
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'migraine' ? 'bg-purple-700 text-white' : 'bg-purple-100 text-purple-800'}`}>
+                {migraineCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDepartment('piles')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                department === 'piles'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+              }`}
+            >
+              <span>Piles</span>
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${department === 'piles' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                {pilesCount}
+              </span>
+            </button>
+          </div>
+
+          {/* Active View Badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-gray-500">
+              Table View: <span className="font-extrabold text-blue-700 uppercase bg-blue-50 px-2 py-0.5 rounded border border-blue-200">{view === 'ndr' ? 'Active NDR' : view === 'rto' ? 'RTO Returns' : view === 'delivered' ? 'Delivered Orders' : 'All Shipments'}</span>
+            </span>
+            <span className="text-[10px] font-black text-gray-500 bg-white px-2.5 py-1 rounded-xl border border-gray-200 shadow-2xs">
+              {filtered.length} records shown
+            </span>
+          </div>
+        </div>
+
+        {/* ── Search & Attempts Bar ───────────────────────────────── */}
         <div className="flex flex-wrap gap-2">
-          <input placeholder="Search AWB / name / order…" value={search} onChange={e => setSearch(e.target.value)}
-            className="flex-1 min-w-[180px] border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white" />
-          <select value={attempt} onChange={e => setAttempt(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <input
+            placeholder="Search AWB / patient name / phone / order…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 min-w-[200px] border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+          />
+          <select
+            value={attempt}
+            onChange={e => setAttempt(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
             {ATTEMPT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" />
-          <input type="date" value={to} onChange={e => setTo(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" />
-          <button onClick={() => fetchNDR(from, to)} disabled={loading}
-            className="px-5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition disabled:opacity-50">
-            {loading ? '…' : 'Search'}
-          </button>
-          <button onClick={() => { setFrom(''); setTo(''); setSearch(''); setAttempt('all'); setDepartment('all'); fetchNDR('', ''); }}
-            className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 text-xs font-bold hover:bg-gray-300 transition">
-            Reset
-          </button>
         </div>
       </div>
 
@@ -319,7 +671,37 @@ function NdrList({ department: externalDept, setDepartment: externalSetDept, onS
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-[11px] text-gray-500 max-w-[200px] truncate" title={n.reason}>{n.reason || '—'}</td>
+                    <td className="px-4 py-3 max-w-[280px]">
+                      <div className="space-y-1">
+                        {/* Delivery Boy Reason */}
+                        <div className="flex items-start gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-200/80 px-1.5 py-0.5 rounded shrink-0">
+                            <span>🚚 Delivery Boy:</span>
+                            {n.courier_name && <span className="opacity-75">({n.courier_name})</span>}
+                          </span>
+                          <span className="text-xs font-black text-gray-900 leading-snug break-words" title={n.reason}>
+                            {n.reason || 'Delivery Attempt Failed'}
+                          </span>
+                        </div>
+
+                        {/* Staff Caller Remark if present */}
+                        {n.staff_remark && (
+                          <div className="flex items-center gap-1.5 pl-0.5 text-[10px] text-gray-500 font-medium">
+                            <span className="text-[9px] font-bold text-purple-700 uppercase bg-purple-50 px-1 py-0.2 rounded border border-purple-100 shrink-0">
+                              Caller Note
+                            </span>
+                            <span className="truncate italic max-w-[190px]" title={n.staff_remark}>
+                              "{n.staff_remark}"
+                            </span>
+                            {n.staff_remark_by && (
+                              <span className="text-[9px] text-gray-400 font-semibold shrink-0">
+                                - {n.staff_remark_by}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex w-6 h-6 items-center justify-center rounded-lg bg-red-50 text-red-700 font-bold text-[11px] border border-red-100">
                         {n.attempts ?? 1}
@@ -363,10 +745,24 @@ function NdrList({ department: externalDept, setDepartment: externalSetDept, onS
                       {n.attempts ?? 1}
                     </span>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-3 text-xs space-y-1">
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Reason</p>
-                    <p className="text-xs text-gray-700 mt-1">{n.reason || '—'}</p>
-                    <p className="text-[10px] text-gray-400 font-bold mt-2">ORDER: {n.channel_order_id} · RAISED: {String(n.ndr_raised_at || '').split('T')[0]}</p>
+                  <div className="bg-gray-50 rounded-xl p-3 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                        🚚 Delivery Boy Reason
+                      </span>
+                      {n.courier_name && (
+                        <span className="text-[9px] font-bold text-gray-500 uppercase">{n.courier_name}</span>
+                      )}
+                    </div>
+                    <p className="text-xs font-black text-gray-900 pl-0.5 leading-snug">{n.reason || 'Delivery Attempt Failed'}</p>
+                    {n.staff_remark && (
+                      <div className="pt-1.5 mt-1 border-t border-gray-200/60 text-[11px] text-gray-600 flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-purple-700 text-[9px] uppercase bg-purple-50 px-1 rounded border border-purple-100">Staff Note:</span>
+                        <span className="italic">"{n.staff_remark}"</span>
+                        {n.staff_remark_by && <span className="text-[9px] text-gray-400">({n.staff_remark_by})</span>}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-gray-400 font-bold mt-1">ORDER: {n.channel_order_id} · RAISED: {String(n.ndr_raised_at || '').split('T')[0]}</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => setDetail(n)} className="flex-1 text-[11px] font-bold py-2 rounded-xl bg-white text-gray-600 border border-gray-200">VIEW</button>

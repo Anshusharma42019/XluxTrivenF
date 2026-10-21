@@ -71,11 +71,12 @@ export const fetchStats = (date, from, to, department, refresh = false) => {
 export const fetchRevenueChart = (period = 'monthly', refresh = false) =>
   cachedGet(`/dashboard/revenue-chart?period=${period}${refresh ? '&refresh=true' : ''}`, { bypass: refresh });
 
-export const fetchStaffStats = (date, staffId, from, to, department, refresh = false) => {
+export const fetchStaffStats = (date, staffId, from, to, department, refresh = false, preset = null) => {
   let url = `/dashboard/staff-stats?date=${date || ''}`;
   if (staffId) url += `&staffId=${staffId}`;
   if (from) url += `&from=${from}`;
   if (to) url += `&to=${to}`;
+  if (preset) url += `&preset=${preset}`;
   if (department) url += `&department=${department}`;
   if (refresh) url += `&refresh=true`;
   return cachedGet(url, { bypass: refresh });
@@ -100,11 +101,12 @@ export const fetchTargetHistory = (month, year, days, userId, refresh = false) =
 export const fetchStaffVerifications = (refresh = false) =>
   cachedGet(`/dashboard/staff-verifications${refresh ? '?refresh=true' : ''}`, { bypass: refresh });
 
-export const fetchStaffTodayLists = (date, staffId, from, to, department, refresh = false) => {
+export const fetchStaffTodayLists = (date, staffId, from, to, department, refresh = false, preset = null) => {
   let url = `/dashboard/staff-today-lists?date=${date || ''}`;
   if (staffId) url += `&staffId=${staffId}`;
   if (from) url += `&from=${from}`;
   if (to) url += `&to=${to}`;
+  if (preset) url += `&preset=${preset}`;
   if (department) url += `&department=${department}`;
   if (refresh) url += `&refresh=true`;
   return cachedGet(url, { bypass: refresh });
@@ -141,8 +143,8 @@ export const fetchUnassignedOrders = (month, year, refresh = false) =>
 export const fetchStaffDeliveryStats = (month, year, refresh = false) =>
   cachedGet(`/dashboard/staff-delivery-stats?month=${month}&year=${year}${refresh ? '&refresh=true' : ''}`, { bypass: refresh });
 
-export const fetchMyDeliveryStats = (month, year, refresh = false) =>
-  cachedGet(`/dashboard/my-delivery-stats?month=${month}&year=${year}${refresh ? '&refresh=true' : ''}`, { bypass: refresh });
+export const fetchMyDeliveryStats = (month, year, userId = null, refresh = false) =>
+  cachedGet(`/dashboard/my-delivery-stats?month=${month}&year=${year}${userId ? `&userId=${userId}` : ''}${refresh ? '&refresh=true' : ''}`, { bypass: refresh });
 
 export const assignOrder = (orderId, staffId, platform) => {
   clearDashboardCache();

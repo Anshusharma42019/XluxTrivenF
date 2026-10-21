@@ -32,6 +32,7 @@ export const createWarehouse = (body)   => api.post(`${BASE}/warehouses/create`,
 export const getInvoice = (order_id) => api.get(`${BASE}/invoice/${order_id}`, { responseType: 'blob' });
 
 // ── NDR & NDR Notes ───────────────────────────────────────────────────────────
+export const getNdrStats   = (params) => api.get(`${BASE}/ndr/stats`, { params });
 export const getNdrList    = (params) => api.get(`${BASE}/ndr`, { params });
 export const ndrAction     = (ndr_id, body) => api.post(`${BASE}/ndr/${ndr_id}/action`, body);
 export const ndrBulkAction = (body)   => api.post(`${BASE}/ndr/bulk-action`, body);
