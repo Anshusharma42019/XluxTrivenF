@@ -6,6 +6,7 @@ const translations = {
   en: {
     // Sidebar / Navigation
     'Dashboard': 'Dashboard',
+    'Support Retention': 'Support Retention',
     'Leads': 'Leads',
     'Action Required': 'Action Required',
     'CNP': 'CNP',

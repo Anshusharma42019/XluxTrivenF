@@ -112,8 +112,20 @@ export const fetchStaffTodayLists = (date, staffId, from, to, department, refres
   return cachedGet(url, { bypass: refresh });
 };
 
-export const fetchStaffMonthlyChart = (refresh = false) =>
-  cachedGet(`/dashboard/staff-monthly-chart${refresh ? '?refresh=true' : ''}`, { bypass: refresh });
+export const fetchStaffMonthlyChart = (staffIdOrRefresh = null, refresh = false) => {
+  let staffId = null;
+  let shouldRefresh = false;
+  if (typeof staffIdOrRefresh === 'boolean') {
+    shouldRefresh = staffIdOrRefresh;
+  } else {
+    staffId = staffIdOrRefresh;
+    shouldRefresh = refresh;
+  }
+  let url = `/dashboard/staff-monthly-chart?`;
+  if (staffId && staffId !== 'all') url += `staffId=${staffId}&`;
+  if (shouldRefresh) url += `refresh=true`;
+  return cachedGet(url, { bypass: shouldRefresh });
+};
 
 export const fetchAllStaffStats = (date, from, to, preset, refresh = false) => {
   const params = new URLSearchParams();
@@ -126,8 +138,20 @@ export const fetchAllStaffStats = (date, from, to, preset, refresh = false) => {
   return cachedGet(url, { bypass: refresh });
 };
 
-export const fetchStaffCommission = (month, year, refresh = false) =>
-  cachedGet(`/dashboard/staff-commission?month=${month}&year=${year}${refresh ? '&refresh=true' : ''}`, { bypass: refresh });
+export const fetchStaffCommission = (month, year, staffIdOrRefresh = null, refresh = false) => {
+  let staffId = null;
+  let shouldRefresh = false;
+  if (typeof staffIdOrRefresh === 'boolean') {
+    shouldRefresh = staffIdOrRefresh;
+  } else {
+    staffId = staffIdOrRefresh;
+    shouldRefresh = refresh;
+  }
+  let url = `/dashboard/staff-commission?month=${month}&year=${year}`;
+  if (staffId && staffId !== 'all') url += `&staffId=${staffId}`;
+  if (shouldRefresh) url += `&refresh=true`;
+  return cachedGet(url, { bypass: shouldRefresh });
+};
 
 export const fetchAllStaffCommissions = (month, year, refresh = false) =>
   cachedGet(`/dashboard/all-staff-commissions?month=${month}&year=${year}${refresh ? '&refresh=true' : ''}`, { bypass: refresh });
@@ -182,4 +206,15 @@ export const fetchTaskDrilldown = (paramsObj = {}, refresh = false) => {
   });
   if (refresh) params.append('refresh', 'true');
   return cachedGet(`/dashboard/task-drilldown?${params.toString()}`, { bypass: refresh });
+};
+
+export const fetchSupportStats = (paramsObj = {}, refresh = false) => {
+  const params = new URLSearchParams();
+  Object.keys(paramsObj).forEach(k => {
+    if (paramsObj[k] !== undefined && paramsObj[k] !== null && paramsObj[k] !== '') {
+      params.append(k, paramsObj[k]);
+    }
+  });
+  if (refresh) params.append('refresh', 'true');
+  return cachedGet(`/dashboard/support-stats?${params.toString()}`, { bypass: refresh });
 };
