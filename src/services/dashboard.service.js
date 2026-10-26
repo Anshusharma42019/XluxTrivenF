@@ -82,9 +82,12 @@ export const fetchStaffStats = (date, staffId, from, to, department, refresh = f
   return cachedGet(url, { bypass: refresh });
 };
 
-export const saveStaffTarget = (target, userId, date) => {
+export const saveStaffTarget = (targetOrObj, userId, date) => {
   clearDashboardCache();
-  return API.post('/dashboard/staff-target', { target, ...(userId && { userId }), ...(date && { date }) }).then(r => r.data.data);
+  const target = typeof targetOrObj === 'object' && targetOrObj !== null ? targetOrObj.target : targetOrObj;
+  const uid = (typeof targetOrObj === 'object' && targetOrObj !== null ? targetOrObj.userId : userId) || userId;
+  const dt = (typeof targetOrObj === 'object' && targetOrObj !== null ? targetOrObj.date : date) || date;
+  return API.post('/dashboard/staff-target', { target: Number(target), ...(uid && { userId: uid }), ...(dt && { date: dt }) }).then(r => r.data.data);
 };
 
 export const fetchTargetHistory = (month, year, days, userId, refresh = false) => {
@@ -217,4 +220,15 @@ export const fetchSupportStats = (paramsObj = {}, refresh = false) => {
   });
   if (refresh) params.append('refresh', 'true');
   return cachedGet(`/dashboard/support-stats?${params.toString()}`, { bypass: refresh });
+};
+
+export const fetchLogisticsStats = (paramsObj = {}, refresh = false) => {
+  const params = new URLSearchParams();
+  Object.keys(paramsObj).forEach(k => {
+    if (paramsObj[k] !== undefined && paramsObj[k] !== null && paramsObj[k] !== '') {
+      params.append(k, paramsObj[k]);
+    }
+  });
+  if (refresh) params.append('refresh', 'true');
+  return cachedGet(`/dashboard/logistics-stats?${params.toString()}`, { bypass: refresh });
 };

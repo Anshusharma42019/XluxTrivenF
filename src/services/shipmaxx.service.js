@@ -14,10 +14,10 @@ export const getDeliveredOrdersFromSchema  = (params) => api.get(`${BASE}/orders
 export const getInTransitOrdersFromSchema  = (params) => api.get(`${BASE}/orders/in-transit-schema`, { params });
 export const searchOrderByPhone = (phone)          => api.get(`${BASE}/orders/search-by-phone`, { params: { phone } });
 
-// ── Shipping ──────────────────────────────────────────────────────────────────
 export const createShipment = (body) => api.post(`${BASE}/shipping/create-shipment`, body);
 export const trackShipment  = (awb)  => api.get(`${BASE}/shipping/track-shipment`, { params: { awb } });
 export const generateLabel  = (awb)  => api.get(`${BASE}/shipping/generate-label`, { params: { awb }, responseType: 'blob' });
+export const downloadLabel  = (awb)  => api.get(`${BASE}/shipping/download-label`, { params: { awb }, responseType: 'blob' });
 export const getManifest    = (awb)  => api.get(`${BASE}/shipping/manifest/${awb}`, { responseType: 'blob' });
 export const cancelShipment = (body) => api.post(`${BASE}/shipping/cancel-shipment`, body);
 export const checkServiceability = (body) => api.post(`${BASE}/shipping/serviceability`, body);
@@ -69,3 +69,10 @@ export const createManualFollowup    = (body)     => api.post(`${BASE}/orders/ma
 export const sendToVerification = (id, body = {}) => api.post(`${BASE}/orders/${id}/send-to-verification`, body);
 
 export const toggleNotInterested = (id, not_interested) => api.patch(`${BASE}/orders/${id}/not-interested`, { not_interested });
+
+// ── Weight Disputes ───────────────────────────────────────────────────────────
+export const getWeightDisputes        = (params)       => api.get(`${BASE}/weight-disputes`, { params });
+export const getWeightDisputeHistory  = (id)           => api.get(`${BASE}/weight-disputes/${id}/history`);
+export const acceptWeightDispute      = (id)           => api.post(`${BASE}/weight-disputes/${id}/accept`);
+export const rejectWeightDispute      = (id, data)     => api.post(`${BASE}/weight-disputes/${id}/reject`, data);
+

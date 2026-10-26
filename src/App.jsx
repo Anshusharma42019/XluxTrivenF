@@ -35,6 +35,7 @@ const OpsDashboard = lazy(() => import('./pages/OpsDashboard'));
 const StaffActivity = lazy(() => import('./pages/StaffActivity'));
 const Account = lazy(() => import('./pages/Account'));
 const SupportDashboard = lazy(() => import('./pages/SupportDashboard'));
+const LogisticsDashboard = lazy(() => import('./pages/LogisticsDashboard'));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-full min-h-[300px]">
@@ -49,13 +50,18 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Navigate to={user?.role === 'doctor' ? '/doctor-dashboard' : user?.role === 'support' ? '/support-dashboard' : '/dashboard'} replace />} />
+        <Route index element={<Navigate to={user?.role === 'doctor' ? '/doctor-dashboard' : user?.role === 'support' ? '/support-dashboard' : user?.role === 'logistics' ? '/logistics-dashboard' : '/dashboard'} replace />} />
         <Route path="dashboard" element={
           user?.role === 'support'
             ? <SupportDashboard />
-            : ['sales', 'logistics'].includes(user?.role)
+            : user?.role === 'logistics'
+            ? <LogisticsDashboard />
+            : user?.role === 'sales'
             ? <StaffDashboard />
             : <ProtectedRoute roles={['admin', 'manager']}><Dashboard /></ProtectedRoute>
+        } />
+        <Route path="logistics-dashboard" element={
+          <ProtectedRoute roles={['admin', 'manager', 'logistics']}><LogisticsDashboard /></ProtectedRoute>
         } />
         <Route path="support-dashboard" element={
           <ProtectedRoute roles={['admin', 'manager', 'support']}><SupportDashboard /></ProtectedRoute>
@@ -126,10 +132,10 @@ function AppRoutes() {
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics', 'support']}><ShipmaxxFollowup /></ProtectedRoute>
         } />
         <Route path="account" element={
-          <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics', 'support']}><Account /></ProtectedRoute>
+          <ProtectedRoute roles={['admin', 'manager']}><Account /></ProtectedRoute>
         } />
         <Route path="account/delivered" element={
-          <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics', 'support']}><Account /></ProtectedRoute>
+          <ProtectedRoute roles={['admin', 'manager']}><Account /></ProtectedRoute>
         } />
         <Route path="whatsapp" element={
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'support']}><Whatsapp /></ProtectedRoute>

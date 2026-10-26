@@ -1519,11 +1519,12 @@ export default function Dashboard() {
             {/* Admin/Manager Quick Actions */}
             {canManage && (
               <SectionCard title="Quick Action Shortcuts" subtitle="Fast navigation to primary team management modules" icon={icons.lightning}>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                   {[
                     { label: t('Leads Hub'), icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>, path: '/leads', color: '#2563eb', bg: 'rgba(37,99,235,0.08)', border: '#2563eb30', badge: stats?.newLeadsToday },
                     { label: t('Verification'), icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, path: '/verification', color: '#16a34a', bg: 'rgba(22,163,74,0.08)', border: '#16a34a30', badge: stats?.taskToVerificationCount },
                     { label: t('Ready to Ship'), icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1" /><path d="M16 8h4l3 5v3h-7V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></svg>, path: '/ready-to-shipment', color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)', border: '#8b5cf630', badge: stats?.readyToShipCreatedCount },
+                    { label: t('Logistics Desk'), icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></svg>, path: '/logistics-dashboard', color: '#0ea5e9', bg: 'rgba(14,165,233,0.08)', border: '#0ea5e930' },
                     { label: t('Notifications'), icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>, path: '/notifications', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: '#f59e0b30' },
                   ].map(action => (
                     <button
