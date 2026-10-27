@@ -5,6 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import InvoiceModal from '../components/InvoiceModal';
 import BulkInvoiceModal from '../components/BulkInvoiceModal';
 import CsvExportModal from '../components/CsvExportModal';
+import ManualBillModal from '../components/ManualBillModal';
 
 const DATE_PRESETS = [
   { id: 'today', label: 'Today' },
@@ -128,6 +129,9 @@ export default function Account() {
   const [invoiceTaxMode, setInvoiceTaxMode] = useState('inter');
   const [bulkInvoiceModalOpen, setBulkInvoiceModalOpen] = useState(false);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
+  const [manualBillModalOpen, setManualBillModalOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Initialize date range based on preset
   const applyPresetDates = useCallback((p) => {
@@ -237,6 +241,29 @@ export default function Account() {
       setSyncMsg('Sync failed: ' + (e?.response?.data?.message || e.message));
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleDeleteOrder = async (order) => {
+    const targetId = order._id;
+    if (confirmDeleteId !== targetId) {
+      setConfirmDeleteId(targetId);
+      return;
+    }
+
+    setConfirmDeleteId(null);
+    setDeletingId(targetId);
+    try {
+      await smxSvc.deleteOrder(targetId);
+      setOrders((prev) => prev.filter((o) => o._id !== targetId));
+      setTotalOrders((prev) => Math.max(0, prev - 1));
+      fetchStats();
+      fetchDeliveredOrders();
+    } catch (err) {
+      console.error('[Account] Failed to delete order:', err);
+      alert('Failed to remove order: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -384,7 +411,7 @@ export default function Account() {
     const cleanState = (orderState || '').toLowerCase().replace(/[^a-z]/g, '');
     const isIntra = cleanState === 'up' || cleanState === 'uttarpradesh' || cleanState.includes('uttarpradesh');
     setInvoiceTaxMode(isIntra ? 'intra' : 'inter');
-    setInvoiceDoctorFee(0);
+    setInvoiceDoctorFee(order?.doctor_fee !== undefined && order?.doctor_fee !== null ? order.doctor_fee : 0);
     setInvoiceShipment(order);
     setInvoiceModalOpen(true);
   };
@@ -543,13 +570,23 @@ export default function Account() {
 
       {/* Main Header & Date Filter Bar */}
       <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <div className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-sm flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
             Delivered Orders List ({totalOrders})
           </div>
+          <button
+            onClick={() => setManualBillModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-emerald-100 font-bold text-xs shadow-sm border border-emerald-700/60 transition flex items-center gap-1.5 cursor-pointer"
+            title="Create a new manual delivered bill with consecutive sequence"
+          >
+            <svg className="w-4 h-4 text-emerald-300" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path d="M12 4v16m8-8H4" />
+            </svg>
+            <span>+ Create Manual Bill</span>
+          </button>
         </div>
 
         {/* Date Filter Bar */}
@@ -782,6 +819,28 @@ export default function Account() {
                           >
                             Details
                           </button>
+                          {Boolean(o.is_manual_bill || String(o.order_id || '').startsWith('MNL-') || String(o.awb_code || '').startsWith('MNL-')) && (
+                            <button
+                              onClick={() => handleDeleteOrder(o)}
+                              onMouseLeave={() => confirmDeleteId === o._id && setConfirmDeleteId(null)}
+                              disabled={deletingId === o._id}
+                              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                                confirmDeleteId === o._id
+                                  ? 'bg-red-600 text-white border border-red-700 shadow-sm'
+                                  : 'bg-red-50 hover:bg-red-600 hover:text-white text-red-600 border border-red-200'
+                              }`}
+                              title={confirmDeleteId === o._id ? "Click again to permanently delete" : "Remove Manual Bill"}
+                            >
+                              <span>✕</span>
+                              <span>
+                                {deletingId === o._id
+                                  ? 'Deleting...'
+                                  : confirmDeleteId === o._id
+                                  ? 'Confirm Delete?'
+                                  : 'Remove'}
+                              </span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1032,6 +1091,19 @@ export default function Account() {
         onClose={() => setCsvModalOpen(false)}
         onExport={handleExecuteExportCSV}
         totalOrders={totalOrders}
+      />
+
+      {/* MANUAL BILL MODAL */}
+      <ManualBillModal
+        isOpen={manualBillModalOpen}
+        onClose={() => setManualBillModalOpen(false)}
+        onSuccess={(created) => {
+          fetchStats();
+          fetchDeliveredOrders();
+          if (created) {
+            openSingleInvoice(created);
+          }
+        }}
       />
     </div>
   );

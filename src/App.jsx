@@ -158,8 +158,8 @@ function AppRoutes() {
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'support', 'logistics']}>
             <StaffActivity />
           </ProtectedRoute>
-        } />
-      </Route>
+        } /> 
+      </Route> 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
     </Suspense>

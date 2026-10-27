@@ -82,14 +82,13 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
     });
   }
 
-  const doctorFeeNum = Number(doctorFee) || 0;
+  const doctorFeeNum = Number(doctorFee) || Number(shipment.doctor_fee) || 0;
   const rawProductTotal = initialItems.reduce((s, li) => s + li.totalInclusive, 0);
-  const deductionRatio = rawProductTotal > 0 ? (rawProductTotal - doctorFeeNum) / rawProductTotal : 1;
+  const deductionRatio = (rawProductTotal > 0 && doctorFeeNum > 0) ? (rawProductTotal - doctorFeeNum) / rawProductTotal : 1;
 
-  const doctorConsultation = {
-    sno: 1,
-    description: 'Doctor Consultation Charges',
-    hsn: '999312 (SAC)',
+  const doctorConsultation = doctorFeeNum > 0 ? {
+    description: shipment.doctor_fee_name || 'Doctor Consultation Charges',
+    hsn: shipment.doctor_fee_hsn ? (shipment.doctor_fee_hsn.includes('SAC') ? shipment.doctor_fee_hsn : `${shipment.doctor_fee_hsn} (SAC)`) : '999312 (SAC)',
     qty: 1,
     rate: doctorFeeNum,
     amount: doctorFeeNum,
@@ -99,9 +98,9 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
     igst: 0,
     total: doctorFeeNum,
     isDoctor: true
-  };
+  } : null;
 
-  const productLines = initialItems.map((li, i) => {
+  const productLines = initialItems.map((li) => {
     const qty = li.qty;
     const taxPct = li.taxPct;
     const totalInclusive = Math.round((li.totalInclusive * deductionRatio) * 100) / 100;
@@ -129,7 +128,6 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
     const lineTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
 
     return {
-      sno: i + 2,
       description: li.description,
       hsn: li.hsn,
       qty,
@@ -144,9 +142,15 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
     };
   });
 
-  const allLines = [doctorConsultation, ...productLines];
+  const allLines = [
+    ...(doctorConsultation ? [doctorConsultation] : []),
+    ...productLines
+  ].map((item, idx) => ({
+    ...item,
+    sno: idx + 1
+  }));
 
-  const totalTaxableValue = Math.round((productLines.reduce((s, li) => s + li.amount, 0) + doctorFeeNum) * 100) / 100;
+  const totalTaxableValue = Math.round(((doctorConsultation ? doctorConsultation.amount : 0) + productLines.reduce((s, li) => s + li.amount, 0)) * 100) / 100;
   const totalCGST = Math.round(productLines.reduce((s, li) => s + li.cgst, 0) * 100) / 100;
   const totalSGST = Math.round(productLines.reduce((s, li) => s + li.sgst, 0) * 100) / 100;
   const totalIGST = Math.round(productLines.reduce((s, li) => s + li.igst, 0) * 100) / 100;

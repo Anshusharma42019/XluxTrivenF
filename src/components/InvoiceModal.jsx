@@ -106,11 +106,23 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
   const printRef = useRef(null);
   const [lineItemsState, setLineItemsState] = useState([]);
 
+  // Doctor Consultation Charges State (Fully Editable)
+  const [showDoctorRow, setShowDoctorRow] = useState(false);
+  const [doctorDesc, setDoctorDesc] = useState('Doctor Consultation Charges');
+  const [doctorHsn, setDoctorHsn] = useState('999312');
+  const [doctorQty, setDoctorQty] = useState(1);
+  const [doctorTax, setDoctorTax] = useState(0);
+
   // Initialize state based on shipment data
   useEffect(() => {
     if (shipment) {
-      // Only auto-set tax mode if user hasn't manually changed it yet
-      // (parent owns the state, so we leave it as-is)
+      const docFee = Number(doctorFee) || Number(shipment.doctor_fee) || 0;
+      const hasDocFee = docFee > 0;
+      setShowDoctorRow(hasDocFee);
+      setDoctorDesc(shipment.doctor_fee_name || 'Doctor Consultation Charges');
+      setDoctorHsn(shipment.doctor_fee_hsn || '999312');
+      setDoctorQty(1);
+      setDoctorTax(Number(shipment.doctor_fee_tax) || 0);
 
       const items = shipment.order_items || [];
       const computedItemsTotal = items.reduce((sum, item) => {
@@ -134,12 +146,15 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
           itemTotalInclusive = (itemOriginalTotal / computedItemsTotal) * shipment.sub_total;
         }
 
+        const unitRate = qty > 0 ? Math.round((itemTotalInclusive / qty) * 100) / 100 : itemTotalInclusive;
+
         return {
           id: idx,
           description: item.name || 'Product',
           hsn: item.hsn || autoHsn,
           qty,
           taxPct,
+          unitRate,
           totalInclusive: itemTotalInclusive,
         };
       });
@@ -151,6 +166,7 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
           hsn: autoHsn,
           qty: 1,
           taxPct: 0,
+          unitRate: Number(shipment.sub_total) || 0,
           totalInclusive: Number(shipment.sub_total) || 0,
         });
       }
@@ -166,29 +182,85 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
 
   const updateItem = (id, field, value) => {
     setLineItemsState((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: value };
+        if (field === 'qty' && updated.unitRate !== undefined) {
+          updated.totalInclusive = updated.unitRate * (Number(value) || 1);
+        }
+        return updated;
+      })
     );
   };
 
-  // ── Build line items and perform calculations ──
-  // Doctor fee is entered by user; deducted from medicine totals proportionally
-  const doctorFeeNum = Number(doctorFee) || 0;
-  const rawProductTotal = lineItemsState.reduce((s, li) => s + li.totalInclusive, 0);
-  const deductionRatio = rawProductTotal > 0 ? (rawProductTotal - doctorFeeNum) / rawProductTotal : 1;
+  const updateItemRate = (id, newRate) => {
+    setLineItemsState((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const qty = Number(item.qty) || 1;
+        return {
+          ...item,
+          unitRate: newRate,
+          totalInclusive: newRate * qty,
+        };
+      })
+    );
+  };
 
-  const doctorConsultation = {
-    description: 'Doctor Consultation Charges',
-    hsn: '999312\n(SAC)',
-    qty: 1,
-    rate: doctorFeeNum,
-    amount: doctorFeeNum,
-    gstRate: 'Exempt\n(0%)',
-    cgst: 0,
-    sgst: 0,
-    igst: 0,
+  const handleAddProductItem = () => {
+    setLineItemsState((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        description: 'New Item',
+        hsn: '30049011',
+        qty: 1,
+        taxPct: 0,
+        unitRate: 100,
+        totalInclusive: 100,
+      }
+    ]);
+  };
+
+  const handleRemoveProductItem = (id) => {
+    setLineItemsState((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  // ── Build line items and perform calculations ──
+  const doctorFeeNum = showDoctorRow ? (Number(doctorFee) || 0) : 0;
+  const rawProductTotal = lineItemsState.reduce((s, li) => s + (Number(li.totalInclusive) || 0), 0);
+  const deductionRatio = (rawProductTotal > 0 && doctorFeeNum > 0) ? (rawProductTotal - doctorFeeNum) / rawProductTotal : 1;
+
+  let docAmount = doctorFeeNum;
+  let docCgst = 0;
+  let docSgst = 0;
+  let docIgst = 0;
+  if (doctorTax > 0 && doctorFeeNum > 0) {
+    docAmount = Math.round((doctorFeeNum / (1 + (doctorTax / 100))) * 100) / 100;
+    const docGst = Math.round((doctorFeeNum - docAmount) * 100) / 100;
+    if (isIntraState) {
+      docCgst = Math.round((docGst / 2) * 100) / 100;
+      docSgst = Math.round((docGst - docCgst) * 100) / 100;
+    } else {
+      docIgst = docGst;
+    }
+  }
+
+  const doctorConsultation = showDoctorRow ? {
+    id: 'doctor-consultation',
+    description: doctorDesc,
+    hsn: doctorHsn ? (doctorHsn.includes('SAC') ? doctorHsn : `${doctorHsn}\n(SAC)`) : '999312\n(SAC)',
+    qty: doctorQty,
+    rate: doctorQty > 0 ? Math.round((docAmount / doctorQty) * 100) / 100 : docAmount,
+    amount: docAmount,
+    gstRate: doctorTax > 0 ? `${doctorTax}%` : 'Exempt\n(0%)',
+    taxPct: doctorTax,
+    cgst: docCgst,
+    sgst: docSgst,
+    igst: docIgst,
     total: doctorFeeNum,
     isDoctor: true,
-  };
+  } : null;
 
   const productLineItems = lineItemsState.map((li) => {
     // Adjust totalInclusive by subtracting doctor fee proportionally
@@ -237,7 +309,7 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
   });
 
   const finalLineItems = [
-    doctorConsultation,
+    ...(doctorConsultation ? [doctorConsultation] : []),
     ...productLineItems
   ].map((item, idx) => ({
     ...item,
@@ -245,10 +317,18 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
   }));
 
   // Calculations for totals — include doctor fee in taxable value and grand total
-  const totalTaxableValue = Math.round((productLineItems.reduce((s, li) => s + li.amount, 0) + doctorFeeNum) * 100) / 100;
-  const totalCGST = Math.round(productLineItems.reduce((s, li) => s + li.cgst, 0) * 100) / 100;
-  const totalSGST = Math.round(productLineItems.reduce((s, li) => s + li.sgst, 0) * 100) / 100;
-  const totalIGST = Math.round(productLineItems.reduce((s, li) => s + li.igst, 0) * 100) / 100;
+  const totalTaxableValue = Math.round(
+    (productLineItems.reduce((s, li) => s + li.amount, 0) + (doctorConsultation ? doctorConsultation.amount : 0)) * 100
+  ) / 100;
+  const totalCGST = Math.round(
+    (productLineItems.reduce((s, li) => s + li.cgst, 0) + (doctorConsultation ? doctorConsultation.cgst : 0)) * 100
+  ) / 100;
+  const totalSGST = Math.round(
+    (productLineItems.reduce((s, li) => s + li.sgst, 0) + (doctorConsultation ? doctorConsultation.sgst : 0)) * 100
+  ) / 100;
+  const totalIGST = Math.round(
+    (productLineItems.reduce((s, li) => s + li.igst, 0) + (doctorConsultation ? doctorConsultation.igst : 0)) * 100
+  ) / 100;
   const totalGST = Math.round((totalCGST + totalSGST + totalIGST) * 100) / 100;
   const grandTotal = Math.round((totalTaxableValue + totalGST) * 100) / 100;
 
@@ -334,20 +414,53 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               {/* Doctor Fee Input */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>🩺 Doctor Fee ₹:</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={doctorFee}
-                  onChange={(e) => onDoctorFeeChange && onDoctorFeeChange(e.target.value)}
-                  style={{
-                    width: 90, padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db',
-                    fontSize: 12, fontWeight: 600, background: '#fff', color: '#374151',
-                    textAlign: 'right',
-                  }}
-                  placeholder="0"
-                />
-                <span style={{ fontSize: 11, color: '#6b7280' }}>(deducted from medicine)</span>
+                {showDoctorRow ? (
+                  <>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>🩺 Doctor Fee ₹:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={doctorFee}
+                      onChange={(e) => onDoctorFeeChange && onDoctorFeeChange(e.target.value)}
+                      style={{
+                        width: 90, padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db',
+                        fontSize: 12, fontWeight: 600, background: '#fff', color: '#374151',
+                        textAlign: 'right',
+                      }}
+                      placeholder="0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDoctorRow(false);
+                        if (onDoctorFeeChange) onDoctorFeeChange(0);
+                      }}
+                      title="Remove Doctor Consultation Charges"
+                      style={{
+                        padding: '5px 8px', borderRadius: 5, border: '1px solid #fca5a5',
+                        background: '#fef2f2', color: '#b91c1c', fontSize: 11, fontWeight: 700, cursor: 'pointer'
+                      }}
+                    >
+                      ✕ Remove
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDoctorRow(true);
+                      if (onDoctorFeeChange && (!doctorFee || Number(doctorFee) === 0)) {
+                        onDoctorFeeChange(500);
+                      }
+                    }}
+                    style={{
+                      padding: '6px 12px', borderRadius: 6, border: '1px dashed #0284c7',
+                      background: '#f0f9ff', color: '#0284c7', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    + Add Doctor Fee
+                  </button>
+                )}
               </div>
               {/* Interactive GST Selector */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -395,7 +508,7 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 0.5, color: '#000' }}>
-                    {COMPANY.name}
+                    {shipment.company_name || COMPANY.name}
                   </div>
                   <div style={{ fontSize: 12, color: '#333', marginTop: 4 }}>
                     GSTIN: {COMPANY.gstin}
@@ -419,7 +532,7 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
               {/* FROM */}
               <div style={{ flex: 1, padding: '14px 16px', borderRight: '1px solid #000' }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#000', marginBottom: 6, textTransform: 'uppercase' }}>FROM</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#000' }}>{COMPANY.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#000' }}>{shipment.company_name || COMPANY.name}</div>
                 <div style={{ fontSize: 11.5, color: '#333', marginTop: 4, lineHeight: 1.5 }}>
                   GSTIN: {COMPANY.gstin}<br />
                   {COMPANY.address.split('\n').map((line, i) => (
@@ -457,7 +570,8 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                     <th rowSpan={2} style={{ ...cellBase, fontWeight: 700, background: '#f5f5f5', textAlign: 'center', width: 75, borderTop: 'none' }}>Amount<br />(₹)</th>
                     <th rowSpan={2} style={{ ...cellBase, fontWeight: 700, background: '#f5f5f5', textAlign: 'center', width: 80, borderTop: 'none' }}>GST<br />Rate</th>
                     <th colSpan={3} style={{ ...cellBase, fontWeight: 700, background: '#f5f5f5', textAlign: 'center', borderTop: 'none' }}>GST Amount (₹)</th>
-                    <th rowSpan={2} style={{ ...cellBase, fontWeight: 700, background: '#f5f5f5', textAlign: 'center', width: 85, borderRight: 'none', borderTop: 'none' }}>Total<br />(₹)</th>
+                    <th rowSpan={2} style={{ ...cellBase, fontWeight: 700, background: '#f5f5f5', textAlign: 'center', width: 85, borderTop: 'none' }}>Total<br />(₹)</th>
+                    <th rowSpan={2} className="invoice-no-print" style={{ ...cellBase, fontWeight: 700, background: '#f5f5f5', textAlign: 'center', width: 36, borderRight: 'none', borderTop: 'none' }}>✕</th>
                   </tr>
                   <tr>
                     <th style={{ ...cellBase, fontWeight: 700, background: '#f5f5f5', textAlign: 'center', width: 60, fontSize: 11 }}>CGST</th>
@@ -474,7 +588,16 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                       {/* Description */}
                       <td style={{ ...cellBase, fontWeight: 600 }}>
                         {li.isDoctor ? (
-                          li.description
+                          <>
+                            <span className="invoice-print-only">{doctorDesc}</span>
+                            <input 
+                              type="text" 
+                              className="invoice-no-print" 
+                              value={doctorDesc}
+                              onChange={(e) => setDoctorDesc(e.target.value)}
+                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+                            />
+                          </>
                         ) : (
                           <>
                             <span className="invoice-print-only">{li.description}</span>
@@ -492,7 +615,17 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                       {/* HSN/SAC */}
                       <td style={{ ...cellBase, textAlign: 'center', fontSize: 11 }}>
                         {li.isDoctor ? (
-                          <span style={{ whiteSpace: 'pre-line' }}>{li.hsn}</span>
+                          <>
+                            <span className="invoice-print-only" style={{ whiteSpace: 'pre-line' }}>{li.hsn}</span>
+                            <input 
+                              type="text" 
+                              className="invoice-no-print" 
+                              placeholder="SAC Code"
+                              value={doctorHsn}
+                              onChange={(e) => setDoctorHsn(e.target.value)}
+                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', textAlign: 'center' }}
+                            />
+                          </>
                         ) : (
                           <>
                             <span className="invoice-print-only" style={{ whiteSpace: 'pre-line' }}>
@@ -513,7 +646,17 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                       {/* Qty */}
                       <td style={{ ...cellBase, textAlign: 'center' }}>
                         {li.isDoctor ? (
-                          li.qty
+                          <>
+                            <span className="invoice-print-only">{doctorQty}</span>
+                            <input 
+                              type="number" 
+                              min="1"
+                              className="invoice-no-print" 
+                              value={doctorQty}
+                              onChange={(e) => setDoctorQty(Math.max(1, Number(e.target.value) || 1))}
+                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', textAlign: 'center' }}
+                            />
+                          </>
                         ) : (
                           <>
                             <span className="invoice-print-only">{li.qty}</span>
@@ -543,7 +686,17 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                             />
                           </>
                         ) : (
-                          fmtCurrency(li.rate)
+                          <>
+                            <span className="invoice-print-only">{fmtCurrency(li.rate)}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              className="invoice-no-print"
+                              value={li.unitRate !== undefined ? li.unitRate : (li.qty > 0 ? Math.round((li.amount / li.qty) * 100) / 100 : 0)}
+                              onChange={(e) => updateItemRate(li.id, Number(e.target.value) || 0)}
+                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', textAlign: 'right' }}
+                            />
+                          </>
                         )}
                       </td>
 
@@ -553,7 +706,21 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                       {/* GST Rate */}
                       <td style={{ ...cellBase, textAlign: 'center', fontSize: 11 }}>
                         {li.isDoctor ? (
-                          <span style={{ whiteSpace: 'pre-line' }}>{li.gstRate}</span>
+                          <>
+                            <span className="invoice-print-only" style={{ whiteSpace: 'pre-line' }}>{li.gstRate}</span>
+                            <select 
+                              className="invoice-no-print"
+                              value={doctorTax} 
+                              onChange={(e) => setDoctorTax(Number(e.target.value))}
+                              style={{ width: '100%', padding: '4px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+                            >
+                              <option value={0}>Exempt (0%)</option>
+                              <option value={5}>5%</option>
+                              <option value={12}>12%</option>
+                              <option value={18}>18%</option>
+                              <option value={28}>28%</option>
+                            </select>
+                          </>
                         ) : (
                           <>
                             <span className="invoice-print-only" style={{ whiteSpace: 'pre-line' }}>{li.gstRate}</span>
@@ -583,7 +750,7 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                       <td style={{ ...cellBase, textAlign: 'right' }}>{li.igst > 0 ? fmtCurrency(li.igst) : '-'}</td>
 
                       {/* Total */}
-                      <td style={{ ...cellBase, textAlign: 'right', fontWeight: 700, borderRight: 'none' }}>
+                      <td style={{ ...cellBase, textAlign: 'right', fontWeight: 700 }}>
                         {li.isDoctor ? (
                           fmtCurrency(li.total)
                         ) : (
@@ -599,10 +766,69 @@ export default function InvoiceModal({ isOpen, onClose, shipment, deliveryIndex 
                           </>
                         )}
                       </td>
+
+                      {/* Row Delete Action (No Print) */}
+                      <td className="invoice-no-print" style={{ ...cellBase, textAlign: 'center', borderRight: 'none' }}>
+                        {li.isDoctor ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowDoctorRow(false);
+                              if (onDoctorFeeChange) onDoctorFeeChange(0);
+                            }}
+                            title="Remove Doctor Consultation"
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}
+                          >
+                            ✕
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveProductItem(li.id)}
+                            title="Remove item"
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+
+              {/* Add item buttons (no-print) */}
+              <div className="invoice-no-print" style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleAddProductItem}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6, border: '1px dashed #6b7280',
+                    background: '#fff', color: '#111827', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 4
+                  }}
+                >
+                  + Add Medicine / Product Item
+                </button>
+                {!showDoctorRow && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDoctorRow(true);
+                      if (onDoctorFeeChange && (!doctorFee || Number(doctorFee) === 0)) {
+                        onDoctorFeeChange(500);
+                      }
+                    }}
+                    style={{
+                      padding: '6px 14px', borderRadius: 6, border: '1px dashed #0284c7',
+                      background: '#f0f9ff', color: '#0284c7', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 4
+                    }}
+                  >
+                    + Add Doctor Consultation Row
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* ═══════ TOTALS SUMMARY ═══════ */}
