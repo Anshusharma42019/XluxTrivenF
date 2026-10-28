@@ -286,10 +286,8 @@ export default function Account() {
     setDeletingId(targetId);
     try {
       await smxSvc.deleteOrder(targetId);
-      setOrders((prev) => prev.filter((o) => o._id !== targetId));
-      setTotalOrders((prev) => Math.max(0, prev - 1));
+      await fetchDeliveredOrders();
       fetchStats();
-      fetchDeliveredOrders();
     } catch (err) {
       console.error('[Account] Failed to delete order:', err);
       alert('Failed to remove order: ' + (err.response?.data?.message || err.message));
