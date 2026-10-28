@@ -24,6 +24,19 @@ const PIN_PREFIX_TO_STATE = {
   '80': 'Bihar', '81': 'Bihar', '82': 'Bihar', '83': 'Jharkhand', '84': 'Bihar', '85': 'Bihar'
 };
 
+const GSTIN_STATE_PREFIX = {
+  '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
+  '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan',
+  '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh',
+  '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura',
+  '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand',
+  '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat',
+  '26': 'Dadra & Nagar Haveli and Daman & Diu', '27': 'Maharashtra', '28': 'Andhra Pradesh',
+  '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala',
+  '33': 'Tamil Nadu', '34': 'Puducherry', '36': 'Telangana', '37': 'Andhra Pradesh',
+  '38': 'Ladakh'
+};
+
 const COURIER_OPTIONS = [
   'Manual Delivery',
   'ShipMaxx',
@@ -70,6 +83,7 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [customerGstin, setCustomerGstin] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('Uttar Pradesh');
@@ -82,6 +96,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
   const [doctorFeeQty, setDoctorFeeQty] = useState(0);
   const [doctorFeeRate, setDoctorFeeRate] = useState(0);
   const [doctorFeeTax, setDoctorFeeTax] = useState(0);
+
+  // GST Calculation Type: 'inclusive' (MRP / Total Fixed) vs 'exclusive' (Rate + GST Extra)
+  const [taxCalculationType, setTaxCalculationType] = useState('inclusive');
 
   // Product Items
   const [items, setItems] = useState([
@@ -128,6 +145,7 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
       setCustomerName(editOrder.billing_customer_name || '');
       setCustomerPhone(editOrder.billing_phone || '');
       setCustomerEmail(editOrder.billing_email || '');
+      setCustomerGstin(editOrder.billing_gstin || editOrder.raw_response?.customer_gstin || editOrder.raw_response?.billing_gstin || '');
       setAddress(editOrder.billing_address || '');
       setCity(editOrder.billing_city || '');
       setState(editOrder.billing_state || 'Uttar Pradesh');
@@ -148,6 +166,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
         setDoctorFeeQty(0);
         setDoctorFeeTax(0);
       }
+
+      // Tax calculation type
+      setTaxCalculationType(editOrder.raw_response?.tax_calculation_type || editOrder.tax_calculation_type || 'inclusive');
 
       // Order items
       if (Array.isArray(editOrder.order_items) && editOrder.order_items.length > 0) {
@@ -188,6 +209,7 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
       setCustomerName('');
       setCustomerPhone('');
       setCustomerEmail('');
+      setCustomerGstin('');
       setAddress('');
       setCity('');
       setState('Uttar Pradesh');
@@ -210,6 +232,7 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
         }
       ]);
 
+      setTaxCalculationType('inclusive');
       setLoadingSeq(true);
       smxSvc.getNextBillSeq()
         .then(res => {
@@ -247,6 +270,18 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
     }
   };
 
+  // Auto detect state on GSTIN change
+  const handleGstinChange = (e) => {
+    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
+    setCustomerGstin(val);
+    if (val.length >= 2) {
+      const code = val.slice(0, 2);
+      if (GSTIN_STATE_PREFIX[code]) {
+        setState(GSTIN_STATE_PREFIX[code]);
+      }
+    }
+  };
+
   const handleAddItem = () => {
     setItems(prev => [
       ...prev,
@@ -278,24 +313,39 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
   // Determine state & tax type
   const cleanState = (state || '').toLowerCase().replace(/[^a-z]/g, '');
   const isIntraState = cleanState === 'up' || cleanState === 'uttarpradesh' || cleanState.includes('uttarpradesh');
+  const isExclusive = taxCalculationType === 'exclusive';
 
   // Doctor fee total & tax calculation
-  const doctorTotal = includeDoctorFee ? (Number(doctorFeeQty) || 0) * (Number(doctorFeeRate) || 0) : 0;
-  let doctorTaxable = doctorTotal;
+  const doctorQtyNum = Number(doctorFeeQty) || 0;
+  const doctorRateNum = Number(doctorFeeRate) || 0;
+  let doctorTaxable = includeDoctorFee ? doctorQtyNum * doctorRateNum : 0;
   let doctorCGST = 0;
   let doctorSGST = 0;
   let doctorIGST = 0;
+  let doctorTotal = doctorTaxable;
 
-  if (includeDoctorFee && Number(doctorFeeTax) > 0 && doctorTotal > 0) {
+  if (includeDoctorFee && Number(doctorFeeTax) > 0 && doctorTaxable > 0) {
     const dTaxPct = Number(doctorFeeTax);
-    doctorTaxable = Math.round((doctorTotal / (1 + (dTaxPct / 100))) * 100) / 100;
-    const dGstAmt = Math.round((doctorTotal - doctorTaxable) * 100) / 100;
-    if (isIntraState) {
-      const half = Math.round((dGstAmt / 2) * 100) / 100;
-      doctorCGST = half;
-      doctorSGST = Math.round((dGstAmt - half) * 100) / 100;
+    if (isExclusive) {
+      const dGstAmt = Math.round((doctorTaxable * (dTaxPct / 100)) * 100) / 100;
+      if (isIntraState) {
+        const half = Math.round((dGstAmt / 2) * 100) / 100;
+        doctorCGST = half;
+        doctorSGST = Math.round((dGstAmt - half) * 100) / 100;
+      } else {
+        doctorIGST = dGstAmt;
+      }
+      doctorTotal = Math.round((doctorTaxable + dGstAmt) * 100) / 100;
     } else {
-      doctorIGST = dGstAmt;
+      const dGstAmt = Math.round((doctorTotal * (dTaxPct / 100)) * 100) / 100;
+      doctorTaxable = Math.round((doctorTotal - dGstAmt) * 100) / 100;
+      if (isIntraState) {
+        const half = Math.round((dGstAmt / 2) * 100) / 100;
+        doctorCGST = half;
+        doctorSGST = Math.round((dGstAmt - half) * 100) / 100;
+      } else {
+        doctorIGST = dGstAmt;
+      }
     }
   }
 
@@ -309,28 +359,47 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
   items.forEach(it => {
     const qty = Number(it.units) || 0;
     const rate = Number(it.selling_price) || 0;
-    const lineTotal = rate * qty;
-    productGrandTotal += lineTotal;
-
     const taxPct = Number(it.tax) || 0;
-    if (taxPct > 0 && lineTotal > 0) {
-      const taxable = Math.round((lineTotal / (1 + (taxPct / 100))) * 100) / 100;
-      const gstAmount = Math.round((lineTotal - taxable) * 100) / 100;
-      productTaxableTotal += taxable;
 
-      if (isIntraState) {
-        const half = Math.round((gstAmount / 2) * 100) / 100;
-        totalCGST += half;
-        totalSGST += Math.round((gstAmount - half) * 100) / 100;
-      } else {
-        totalIGST += gstAmount;
+    if (isExclusive) {
+      const taxable = Math.round((rate * qty) * 100) / 100;
+      productTaxableTotal += taxable;
+      let gstAmount = 0;
+      if (taxPct > 0 && taxable > 0) {
+        gstAmount = Math.round((taxable * (taxPct / 100)) * 100) / 100;
+        if (isIntraState) {
+          const half = Math.round((gstAmount / 2) * 100) / 100;
+          totalCGST += half;
+          totalSGST += Math.round((gstAmount - half) * 100) / 100;
+        } else {
+          totalIGST += gstAmount;
+        }
       }
+      const lineTotal = Math.round((taxable + gstAmount) * 100) / 100;
+      productGrandTotal += lineTotal;
     } else {
-      productTaxableTotal += lineTotal;
+      const lineTotal = rate * qty;
+      productGrandTotal += lineTotal;
+      if (taxPct > 0 && lineTotal > 0) {
+        const gstAmount = Math.round((lineTotal * (taxPct / 100)) * 100) / 100;
+        const taxable = Math.round((lineTotal - gstAmount) * 100) / 100;
+        productTaxableTotal += taxable;
+
+        if (isIntraState) {
+          const half = Math.round((gstAmount / 2) * 100) / 100;
+          totalCGST += half;
+          totalSGST += Math.round((gstAmount - half) * 100) / 100;
+        } else {
+          totalIGST += gstAmount;
+        }
+      } else {
+        productTaxableTotal += lineTotal;
+      }
     }
   });
 
-  const grandTotal = Math.round((productGrandTotal + doctorTotal) * 100) / 100;
+  const grandTotal = Math.round((productGrandTotal + (isExclusive ? doctorTotal : (includeDoctorFee ? doctorTotal : 0))) * 100) / 100;
+  const totalGST = Math.round((totalCGST + totalSGST + totalIGST) * 100) / 100;
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -355,7 +424,10 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
           city: city.trim(),
           state: state.trim() || 'Uttar Pradesh',
           pincode: pincode.trim(),
+          gstin: customerGstin.trim().toUpperCase(),
         },
+        billing_gstin: customerGstin.trim().toUpperCase(),
+        customer_gstin: customerGstin.trim().toUpperCase(),
         bill_number: finalBill,
         awb_code: finalAwb,
         order_id: finalOrdId,
@@ -367,6 +439,7 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
         doctor_fee_hsn: doctorFeeHsn.trim() || '999312',
         doctor_fee_tax: Number(doctorFeeTax) || 0,
         company_name: companyName.trim() || 'TRIVEN WELLNESS LLP',
+        tax_calculation_type: taxCalculationType,
         sub_total: grandTotal,
         order_items: items.map(it => ({
           name: it.name.trim() || 'Product',
@@ -667,6 +740,44 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
               />
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1 flex items-center justify-between">
+                  <span>Customer GSTIN / UIN</span>
+                  <span className="text-[10px] text-gray-400 font-normal">Optional (B2B)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    maxLength={15}
+                    placeholder="e.g. 33AAAPY5798D1ZD"
+                    value={customerGstin}
+                    onChange={handleGstinChange}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-mono font-bold uppercase bg-white focus:outline-none focus:border-emerald-500 tracking-wider"
+                  />
+                  {customerGstin && (
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      {customerGstin.length}/15
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1 flex items-center justify-between">
+                  <span>Customer Email</span>
+                  <span className="text-[10px] text-gray-400 font-normal">Optional</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="e.g. client@company.com"
+                  value={customerEmail}
+                  onChange={e => setCustomerEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-1">Pincode</label>
@@ -742,6 +853,36 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                   </svg>
                   <span>Add Medicine</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
+              <div>
+                <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <span>GST Calculation Method</span>
+                </span>
+                <p className="text-[10px] text-emerald-800 mt-0.5">
+                  {isExclusive ? 'Base Rate + GST Extra (e.g. ₹1,40,000 Rate + 18% GST = ₹1,65,200 Total)' : 'Total includes GST (MRP / Reverse Calculation e.g. ₹1,40,000 Total)'}
+                </p>
+              </div>
+              <div className="inline-flex rounded-lg bg-white p-1 text-xs font-semibold border border-emerald-200 shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setTaxCalculationType('inclusive')}
+                  className={`px-3 py-1 rounded-md transition cursor-pointer ${taxCalculationType === 'inclusive' ? 'bg-emerald-700 text-white font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  Tax Inclusive (MRP / Total Fixed)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTaxCalculationType('exclusive')}
+                  className={`px-3 py-1 rounded-md transition cursor-pointer ${taxCalculationType === 'exclusive' ? 'bg-emerald-700 text-white font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  Tax Exclusive (+ GST Extra)
                 </button>
               </div>
             </div>
@@ -956,10 +1097,17 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
 
                     <div className="flex justify-between items-center pt-1 border-t border-gray-50 text-[11px]">
                       <span className="text-gray-400">
-                        {Number(it.tax) > 0 ? `Includes ${it.tax}% GST` : 'Tax Exempt'}
+                        {Number(it.tax) > 0 ? (
+                          isExclusive
+                            ? `+ ${it.tax}% GST Extra (₹${((Number(it.units) || 1) * (Number(it.selling_price) || 0) * (Number(it.tax) / 100)).toFixed(2)})`
+                            : `Includes ${it.tax}% GST`
+                        ) : 'Tax Exempt (0%)'}
                       </span>
                       <span className="font-extrabold text-gray-900">
-                        Line Total: ₹{lineTotal.toFixed(2)}
+                        Line Total: ₹{(isExclusive
+                          ? ((Number(it.units) || 1) * (Number(it.selling_price) || 0) * (1 + (Number(it.tax) || 0) / 100))
+                          : ((Number(it.units) || 1) * (Number(it.selling_price) || 0))
+                        ).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -972,15 +1120,21 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
           <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-wrap items-center justify-between gap-4">
             <div className="text-xs text-gray-700 space-y-1">
               <div>
+                <span className="text-gray-500">Taxable Value:</span>{' '}
+                <span className="font-mono font-bold text-gray-800">₹{productTaxableTotal.toFixed(2)}</span>
+              </div>
+              <div>
                 <span className="text-gray-500">Tax Breakdown ({isIntraState ? 'Intra-State: CGST + SGST' : 'Inter-State: IGST'}):</span>{' '}
                 <span className="font-mono font-bold text-emerald-800">
                   {isIntraState ? `CGST: ₹${totalCGST.toFixed(2)} | SGST: ₹${totalSGST.toFixed(2)}` : `IGST: ₹${totalIGST.toFixed(2)}`}
                 </span>
               </div>
-              <div>
-                <span className="text-gray-500">Doctor Consultation Fee:</span>{' '}
-                <span className="font-mono font-bold text-gray-800">₹{doctorTotal.toFixed(2)}</span>
-              </div>
+              {includeDoctorFee && (
+                <div>
+                  <span className="text-gray-500">Doctor Consultation Fee:</span>{' '}
+                  <span className="font-mono font-bold text-gray-800">₹{doctorTotal.toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             <div className="text-right">

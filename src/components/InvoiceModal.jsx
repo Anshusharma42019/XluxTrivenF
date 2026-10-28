@@ -264,6 +264,7 @@ export default function InvoiceModal({
 }) {
   const printRef = useRef(null);
   const [lineItemsState, setLineItemsState] = useState([]);
+  const [taxCalculationType, setTaxCalculationType] = useState('inclusive');
 
   // Doctor Consultation Charges State (Fully Editable)
   const [showDoctorRow, setShowDoctorRow] = useState(false);
@@ -279,6 +280,7 @@ export default function InvoiceModal({
 
   // TO / Customer Information (Fully Editable)
   const [custName, setCustName] = useState('');
+  const [custGstin, setCustGstin] = useState('');
   const [custAddress, setCustAddress] = useState('');
   const [custCity, setCustCity] = useState('');
   const [custState, setCustState] = useState('Uttar Pradesh');
@@ -303,6 +305,7 @@ export default function InvoiceModal({
 
       // ── TO Info ──
       setCustName(shipment.billing_customer_name || '');
+      setCustGstin(shipment.billing_gstin || shipment.customer_gstin || shipment.raw_response?.customer_gstin || shipment.raw_response?.billing_gstin || '');
       setCustAddress(shipment.billing_address || '');
       setCustCity(shipment.billing_city || '');
       setCustState(shipment.billing_state || 'Uttar Pradesh');
@@ -337,6 +340,10 @@ export default function InvoiceModal({
       setDoctorQty(1);
       setDoctorTax(Number(shipment.doctor_fee_tax) || 0);
 
+      // ── Tax Calculation Mode (Exclusive vs Inclusive) ──
+      // Default to 'inclusive' so Grand Total always equals the customer bill amount (₹1,40,000)
+      setTaxCalculationType('inclusive');
+
       // ── Order Line Items ──
       const items = shipment.order_items || [];
       const computedItemsTotal = items.reduce((sum, item) => {
@@ -351,16 +358,19 @@ export default function InvoiceModal({
       const initialItems = items.map((item, idx) => {
         const qty = Number(item.units) || 1;
         const taxPct = Number(item.tax) || 0;
+        const itemSellingPrice = Number(item.selling_price) || 0;
 
         let itemTotalInclusive = 0;
-        if (computedItemsTotal === 0) {
+        if (itemSellingPrice > 0) {
+          itemTotalInclusive = itemSellingPrice * qty;
+        } else if (computedItemsTotal === 0) {
           itemTotalInclusive = totalUnits > 0 ? (shipment.sub_total * qty) / totalUnits : 0;
         } else {
-          const itemOriginalTotal = (Number(item.selling_price) || 0) * qty;
-          itemTotalInclusive = (itemOriginalTotal / computedItemsTotal) * shipment.sub_total;
+          const itemOriginalTotal = itemSellingPrice * qty;
+          itemTotalInclusive = (itemOriginalTotal / computedItemsTotal) * (shipment.sub_total || itemOriginalTotal);
         }
 
-        const unitRate = qty > 0 ? Math.round((itemTotalInclusive / qty) * 100) / 100 : itemTotalInclusive;
+        const unitRate = itemSellingPrice > 0 ? itemSellingPrice : (qty > 0 ? Math.round((itemTotalInclusive / qty) * 100) / 100 : itemTotalInclusive);
 
         return {
           id: idx,
@@ -393,14 +403,33 @@ export default function InvoiceModal({
   if (!isOpen || !shipment) return null;
 
   const isIntraState = taxMode === 'intra';
+  const isExclusive = taxCalculationType === 'exclusive';
 
   const updateItem = (id, field, value) => {
     setLineItemsState((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
         const updated = { ...item, [field]: value };
+        const isExcl = taxCalculationType === 'exclusive';
         if (field === 'qty' && updated.unitRate !== undefined) {
-          updated.totalInclusive = updated.unitRate * (Number(value) || 1);
+          const qtyVal = Number(value) || 1;
+          const taxPct = Number(updated.taxPct) || 0;
+          const lineTaxable = updated.unitRate * qtyVal;
+          const lineGst = isExcl ? (lineTaxable * (taxPct / 100)) : 0;
+          updated.totalInclusive = Math.round((lineTaxable + lineGst) * 100) / 100;
+        } else if (field === 'taxPct' && isExcl && updated.unitRate !== undefined) {
+          const qtyVal = Number(updated.qty) || 1;
+          const lineTaxable = updated.unitRate * qtyVal;
+          const lineGst = lineTaxable * (Number(value) / 100);
+          updated.totalInclusive = Math.round((lineTaxable + lineGst) * 100) / 100;
+        } else if (field === 'totalInclusive') {
+          const qtyVal = Number(updated.qty) || 1;
+          const taxPct = Number(updated.taxPct) || 0;
+          if (isExcl) {
+            updated.unitRate = taxPct > 0 ? Math.round(((Number(value) / (1 + taxPct / 100)) / qtyVal) * 100) / 100 : Math.round((Number(value) / qtyVal) * 100) / 100;
+          } else {
+            updated.unitRate = qtyVal > 0 ? Math.round((Number(value) / qtyVal) * 100) / 100 : Number(value);
+          }
         }
         return updated;
       })
@@ -412,10 +441,14 @@ export default function InvoiceModal({
       prev.map((item) => {
         if (item.id !== id) return item;
         const qty = Number(item.qty) || 1;
+        const taxPct = Number(item.taxPct) || 0;
+        const isExcl = taxCalculationType === 'exclusive';
+        const lineTaxable = newRate * qty;
+        const lineGst = isExcl ? (lineTaxable * (taxPct / 100)) : 0;
         return {
           ...item,
           unitRate: newRate,
-          totalInclusive: newRate * qty,
+          totalInclusive: Math.round((isExcl ? (lineTaxable + lineGst) : (newRate * qty)) * 100) / 100,
         };
       })
     );
@@ -443,21 +476,38 @@ export default function InvoiceModal({
   // ── Build line items and perform calculations ──
   const doctorFeeNum = showDoctorRow ? (Number(doctorFee) || 0) : 0;
   const rawProductTotal = lineItemsState.reduce((s, li) => s + (Number(li.totalInclusive) || 0), 0);
-  const deductionRatio = (rawProductTotal > 0 && doctorFeeNum > 0) ? (rawProductTotal - doctorFeeNum) / rawProductTotal : 1;
+  const deductionRatio = (!isExclusive && rawProductTotal > 0 && doctorFeeNum > 0) ? (rawProductTotal - doctorFeeNum) / rawProductTotal : 1;
 
   let docAmount = doctorFeeNum;
   let docCgst = 0;
   let docSgst = 0;
   let docIgst = 0;
-  if (doctorTax > 0 && doctorFeeNum > 0) {
-    docAmount = Math.round((doctorFeeNum / (1 + (doctorTax / 100))) * 100) / 100;
-    const docGst = Math.round((doctorFeeNum - docAmount) * 100) / 100;
-    if (isIntraState) {
-      docCgst = Math.round((docGst / 2) * 100) / 100;
-      docSgst = Math.round((docGst - docCgst) * 100) / 100;
-    } else {
-      docIgst = docGst;
+  let docTotal = doctorFeeNum;
+
+  if (isExclusive) {
+    docAmount = doctorFeeNum;
+    if (doctorTax > 0 && doctorFeeNum > 0) {
+      const docGst = Math.round((doctorFeeNum * (doctorTax / 100)) * 100) / 100;
+      if (isIntraState) {
+        docCgst = Math.round((docGst / 2) * 100) / 100;
+        docSgst = Math.round((docGst - docCgst) * 100) / 100;
+      } else {
+        docIgst = docGst;
+      }
+      docTotal = Math.round((docAmount + docGst) * 100) / 100;
     }
+  } else {
+    if (doctorTax > 0 && doctorFeeNum > 0) {
+      const docGst = Math.round((doctorFeeNum * (doctorTax / 100)) * 100) / 100;
+      docAmount = Math.round((doctorFeeNum - docGst) * 100) / 100;
+      if (isIntraState) {
+        docCgst = Math.round((docGst / 2) * 100) / 100;
+        docSgst = Math.round((docGst - docCgst) * 100) / 100;
+      } else {
+        docIgst = docGst;
+      }
+    }
+    docTotal = doctorFeeNum;
   }
 
   const doctorConsultation = showDoctorRow ? {
@@ -472,37 +522,55 @@ export default function InvoiceModal({
     cgst: docCgst,
     sgst: docSgst,
     igst: docIgst,
-    total: doctorFeeNum,
+    total: docTotal,
     isDoctor: true,
   } : null;
 
   const productLineItems = lineItemsState.map((li) => {
-    const adjustedTotal = Math.round((li.totalInclusive * deductionRatio) * 100) / 100;
-    const qty = li.qty;
-    const taxPct = li.taxPct;
-    const totalInclusive = adjustedTotal;
+    const qty = Number(li.qty) || 1;
+    const taxPct = Number(li.taxPct) || 0;
 
+    let rate = 0;
     let amount = 0;
     let cgst = 0;
     let sgst = 0;
     let igst = 0;
+    let itemTotal = 0;
 
-    if (taxPct > 0) {
-      amount = Math.round((totalInclusive / (1 + (taxPct / 100))) * 100) / 100;
-      const gstAmount = Math.round((totalInclusive - amount) * 100) / 100;
-
-      if (isIntraState) {
-        cgst = Math.round((gstAmount / 2) * 100) / 100;
-        sgst = Math.round((gstAmount - cgst) * 100) / 100;
-      } else {
-        igst = gstAmount;
+    if (isExclusive) {
+      rate = li.unitRate !== undefined ? Number(li.unitRate) : (qty > 0 ? Math.round((Number(li.totalInclusive || 0) / qty) * 100) / 100 : 0);
+      amount = Math.round((rate * qty) * 100) / 100;
+      if (taxPct > 0) {
+        const gstAmount = Math.round((amount * (taxPct / 100)) * 100) / 100;
+        if (isIntraState) {
+          cgst = Math.round((gstAmount / 2) * 100) / 100;
+          sgst = Math.round((gstAmount - cgst) * 100) / 100;
+        } else {
+          igst = gstAmount;
+        }
       }
+      itemTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
     } else {
-      amount = totalInclusive;
-    }
+      const adjustedTotal = Math.round((li.totalInclusive * deductionRatio) * 100) / 100;
+      const totalInclusive = adjustedTotal;
 
-    const rate = qty > 0 ? Math.round((amount / qty) * 100) / 100 : 0;
-    const itemTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
+      if (taxPct > 0) {
+        const gstAmount = Math.round((totalInclusive * (taxPct / 100)) * 100) / 100;
+        amount = Math.round((totalInclusive - gstAmount) * 100) / 100;
+
+        if (isIntraState) {
+          cgst = Math.round((gstAmount / 2) * 100) / 100;
+          sgst = Math.round((gstAmount - cgst) * 100) / 100;
+        } else {
+          igst = gstAmount;
+        }
+      } else {
+        amount = totalInclusive;
+      }
+
+      rate = qty > 0 ? Math.round((amount / qty) * 100) / 100 : 0;
+      itemTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
+    }
 
     return {
       id: li.id,
@@ -545,6 +613,21 @@ export default function InvoiceModal({
   const totalGST = Math.round((totalCGST + totalSGST + totalIGST) * 100) / 100;
   const grandTotal = Math.round((totalTaxableValue + totalGST) * 100) / 100;
 
+  // Determine active GST percentage labels
+  const taxRates = Array.from(new Set(
+    finalLineItems
+      .map(li => Number(li.taxPct) || 0)
+      .filter(r => r > 0)
+  ));
+  const primaryTaxPct = taxRates.length > 0 ? taxRates[0] : 0;
+  const rateStr = taxRates.length > 1 ? `${taxRates.join('%, ')}%` : (primaryTaxPct > 0 ? `${primaryTaxPct}%` : '');
+  const halfRateStr = taxRates.length > 1 ? `${taxRates.map(r => r / 2).join('%, ')}%` : (primaryTaxPct > 0 ? `${primaryTaxPct / 2}%` : '');
+
+  const cgstLabel = (totalCGST > 0 || (isIntraState && rateStr)) ? `Total CGST (${halfRateStr})` : 'Total CGST';
+  const sgstLabel = (totalSGST > 0 || (isIntraState && rateStr)) ? `Total SGST/UTGST (${halfRateStr})` : 'Total SGST/UTGST';
+  const igstLabel = (totalIGST > 0 || (!isIntraState && rateStr)) ? `Total IGST (${rateStr})` : 'Total IGST';
+  const totalGstLabel = rateStr ? `Total GST Amount (${rateStr})` : 'Total GST Amount';
+
   // ── Save Changes to Database ──
   const handleSave = async () => {
     setSaving(true);
@@ -560,22 +643,26 @@ export default function InvoiceModal({
           city: custCity.trim(),
           state: custState.trim() || 'Uttar Pradesh',
           pincode: custPincode.trim(),
+          gstin: custGstin.trim().toUpperCase(),
         },
+        billing_gstin: custGstin.trim().toUpperCase(),
+        customer_gstin: custGstin.trim().toUpperCase(),
         bill_number: customBillNumber.trim() || undefined,
         delivered_at: invoiceDateStr ? `${invoiceDateStr}T12:00:00.000+05:30` : undefined,
         company_name: fromName.trim() || COMPANY.name,
         company_gstin: fromGstin.trim() || COMPANY.gstin,
         company_address: fromAddress.trim() || COMPANY.address,
-        doctor_fee: doctorFeeNum,
+        doctor_fee: docTotal,
         doctor_fee_name: doctorDesc,
         doctor_fee_hsn: doctorHsn,
         doctor_fee_tax: doctorTax,
         sub_total: grandTotal,
+        tax_calculation_type: taxCalculationType,
         order_items: lineItemsState.map(li => ({
           name: li.description || 'Product',
           sku: 'MED-01',
           units: Number(li.qty) || 1,
-          selling_price: Number(li.unitRate) || Number(li.totalInclusive) || 0,
+          selling_price: isExclusive ? (Number(li.unitRate) || 0) : (Number(li.totalInclusive) || 0),
           tax: String(li.taxPct || 0),
           hsn: li.hsn || '30049011',
         })),
@@ -603,6 +690,7 @@ export default function InvoiceModal({
       orderId: (shipment.order_id || shipment._id || '—').toString(),
       invoiceDate: invoiceDateStr ? new Date(`${invoiceDateStr}T12:00:00.000+05:30`) : new Date(),
       customerName: custName || 'Customer',
+      customerGstin: custGstin || '',
       customerPhone: custPhone || '',
       customerAddress: custAddress || '',
       customerState: custState || '',
@@ -760,6 +848,23 @@ export default function InvoiceModal({
                 >
                   <option value="intra">CGST + SGST (Intra-state)</option>
                   <option value="inter">IGST (Inter-state)</option>
+                </select>
+              </div>
+
+              {/* Interactive Calculation Type Selector (Exclusive vs Inclusive) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Calculation:</span>
+                <select
+                  value={taxCalculationType}
+                  onChange={(e) => setTaxCalculationType(e.target.value)}
+                  style={{
+                    padding: '6px 10px', borderRadius: 6, border: '1px solid #059669',
+                    fontSize: 12, fontWeight: 700, background: '#f0fdf4', color: '#166534', cursor: 'pointer',
+                  }}
+                  title="Choose between Tax Exclusive (+ GST Extra on Rate) or Tax Inclusive (MRP / Included in Price)"
+                >
+                  <option value="inclusive">Tax Inclusive (MRP / Total Fixed)</option>
+                  <option value="exclusive">Tax Exclusive (+ GST Extra)</option>
                 </select>
               </div>
 
@@ -1031,6 +1136,7 @@ export default function InvoiceModal({
                       {custName || 'Direct Customer'}
                     </div>
                     <div style={{ fontSize: 10.5, color: '#222', marginTop: 2, lineHeight: 1.4 }}>
+                      {custGstin && <>GSTIN / UIN: <strong>{custGstin}</strong><br /></>}
                       {custAddress && <>{custAddress}<br /></>}
                       {[custCity, custState].filter(Boolean).join(', ')}
                       {custPincode ? ` - ${custPincode}` : ''}<br />
@@ -1042,20 +1148,38 @@ export default function InvoiceModal({
 
                   {/* Screen View (Interactive Inputs) */}
                   <div className="invoice-no-print" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 9, fontWeight: 700, color: '#64748b', marginBottom: 1 }}>
-                        CUSTOMER NAME
-                      </label>
-                      <input
-                        type="text"
-                        value={custName}
-                        onChange={(e) => setCustName(e.target.value)}
-                        placeholder="Customer Name"
-                        style={{
-                          width: '100%', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: 4,
-                          fontSize: 11, fontWeight: 700, color: '#0f172a', background: '#fff', boxSizing: 'border-box'
-                        }}
-                      />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 5 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 9, fontWeight: 700, color: '#64748b', marginBottom: 1 }}>
+                          CUSTOMER NAME
+                        </label>
+                        <input
+                          type="text"
+                          value={custName}
+                          onChange={(e) => setCustName(e.target.value)}
+                          placeholder="Customer Name"
+                          style={{
+                            width: '100%', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: 4,
+                            fontSize: 11, fontWeight: 700, color: '#0f172a', background: '#fff', boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 9, fontWeight: 700, color: '#64748b', marginBottom: 1 }}>
+                          BUYER GSTIN / UIN
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={15}
+                          value={custGstin}
+                          onChange={(e) => setCustGstin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))}
+                          placeholder="e.g. 33AAAPY5798D1ZD"
+                          style={{
+                            width: '100%', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: 4,
+                            fontSize: 10.5, fontFamily: 'monospace', fontWeight: 700, color: '#0f172a', background: '#fff', boxSizing: 'border-box', textTransform: 'uppercase'
+                          }}
+                        />
+                      </div>
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: 9, fontWeight: 700, color: '#64748b', marginBottom: 1 }}>
@@ -1160,9 +1284,15 @@ export default function InvoiceModal({
                       </th>
                     </tr>
                     <tr>
-                      <th style={{ ...thBase, width: 55, textAlign: 'right', fontSize: 10 }}>CGST</th>
-                      <th style={{ ...thBase, width: 65, textAlign: 'right', fontSize: 10 }}>SGST/UTGST</th>
-                      <th style={{ ...thBase, width: 50, textAlign: 'right', fontSize: 10 }}>IGST</th>
+                      <th style={{ ...thBase, width: 55, textAlign: 'right', fontSize: 10 }}>
+                        CGST{isIntraState && halfRateStr ? ` (${halfRateStr})` : ''}
+                      </th>
+                      <th style={{ ...thBase, width: 65, textAlign: 'right', fontSize: 10 }}>
+                        SGST/UTGST{isIntraState && halfRateStr ? ` (${halfRateStr})` : ''}
+                      </th>
+                      <th style={{ ...thBase, width: 50, textAlign: 'right', fontSize: 10 }}>
+                        IGST{!isIntraState && rateStr ? ` (${rateStr})` : ''}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1277,8 +1407,9 @@ export default function InvoiceModal({
                               <input
                                 type="number"
                                 min="0"
+                                step="0.01"
                                 className="invoice-no-print"
-                                value={li.unitRate !== undefined ? li.unitRate : (li.qty > 0 ? Math.round((li.amount / li.qty) * 100) / 100 : 0)}
+                                value={li.rate}
                                 onChange={(e) => updateItemRate(li.id, Number(e.target.value) || 0)}
                                 style={{ width: '100%', padding: '3px 4px', border: '1px solid #cbd5e1', borderRadius: 4, boxSizing: 'border-box', textAlign: 'right' }}
                               />
@@ -1468,19 +1599,19 @@ export default function InvoiceModal({
                         <td style={{ ...tdBase, textAlign: 'right', fontWeight: 600, borderRight: 'none', padding: '5px 12px' }}>{fmtCurrency(totalTaxableValue)}</td>
                       </tr>
                       <tr>
-                        <td style={{ ...tdBase, padding: '5px 12px' }}>Total CGST</td>
+                        <td style={{ ...tdBase, padding: '5px 12px' }}>{cgstLabel}</td>
                         <td style={{ ...tdBase, textAlign: 'right', borderRight: 'none', padding: '5px 12px' }}>{fmtCurrency(totalCGST)}</td>
                       </tr>
                       <tr>
-                        <td style={{ ...tdBase, padding: '5px 12px' }}>Total SGST/UTGST</td>
+                        <td style={{ ...tdBase, padding: '5px 12px' }}>{sgstLabel}</td>
                         <td style={{ ...tdBase, textAlign: 'right', borderRight: 'none', padding: '5px 12px' }}>{fmtCurrency(totalSGST)}</td>
                       </tr>
                       <tr>
-                        <td style={{ ...tdBase, padding: '5px 12px' }}>Total IGST</td>
+                        <td style={{ ...tdBase, padding: '5px 12px' }}>{igstLabel}</td>
                         <td style={{ ...tdBase, textAlign: 'right', borderRight: 'none', padding: '5px 12px' }}>{totalIGST > 0 ? fmtCurrency(totalIGST) : '—'}</td>
                       </tr>
                       <tr>
-                        <td style={{ ...tdBase, padding: '5px 12px' }}>Total GST Amount</td>
+                        <td style={{ ...tdBase, padding: '5px 12px' }}>{totalGstLabel}</td>
                         <td style={{ ...tdBase, textAlign: 'right', borderRight: 'none', padding: '5px 12px' }}>{fmtCurrency(totalGST)}</td>
                       </tr>
                       <tr>

@@ -55,11 +55,14 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
   const initialItems = items.map((item, i) => {
     const qty = Number(item.units) || 1;
     let itemTotalInclusive = 0;
-    if (computedItemsTotal === 0) {
+    const itemPrice = Number(item.selling_price) || 0;
+    if (itemPrice > 0) {
+      itemTotalInclusive = itemPrice * qty;
+    } else if (computedItemsTotal === 0) {
       itemTotalInclusive = totalUnits > 0 ? (subTotal * qty) / totalUnits : 0;
     } else {
-      const itemOrigTotal = (Number(item.selling_price) || 0) * qty;
-      itemTotalInclusive = (itemOrigTotal / computedItemsTotal) * subTotal;
+      const itemOrigTotal = itemPrice * qty;
+      itemTotalInclusive = (itemOrigTotal / computedItemsTotal) * (subTotal || itemOrigTotal);
     }
     const itemTax = Number(item.tax);
     const taxPct = (!isNaN(itemTax) && itemTax > 0) ? itemTax : Number(gstRate);
@@ -69,6 +72,7 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
       hsn: item.hsn || '30049011',
       qty,
       taxPct,
+      rate: Number(item.selling_price) || 0,
       totalInclusive: itemTotalInclusive,
     };
   });
@@ -94,6 +98,7 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
     rate: doctorFeeNum,
     amount: doctorFeeNum,
     gstRate: 'Exempt (0%)',
+    taxPct: 0,
     cgst: 0,
     sgst: 0,
     igst: 0,
@@ -101,32 +106,50 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
     isDoctor: true
   } : null;
 
+  const isExclusive = false;
+
   const productLines = initialItems.map((li) => {
     const qty = li.qty;
     const taxPct = li.taxPct;
-    const totalInclusive = Math.round((li.totalInclusive * deductionRatio) * 100) / 100;
 
     let amount = 0;
     let cgst = 0;
     let sgst = 0;
     let igst = 0;
+    let rate = 0;
+    let lineTotal = 0;
 
-    if (taxPct > 0) {
-      amount = Math.round((totalInclusive / (1 + (taxPct / 100))) * 100) / 100;
-      const gstAmount = Math.round((totalInclusive - amount) * 100) / 100;
-
-      if (isIntraState) {
-        cgst = Math.round((gstAmount / 2) * 100) / 100;
-        sgst = Math.round((gstAmount - cgst) * 100) / 100;
-      } else {
-        igst = gstAmount;
+    if (isExclusive) {
+      rate = li.rate || (qty > 0 ? Math.round((li.totalInclusive / qty) * 100) / 100 : li.totalInclusive);
+      amount = Math.round((rate * qty) * 100) / 100;
+      if (taxPct > 0) {
+        const gstAmount = Math.round((amount * (taxPct / 100)) * 100) / 100;
+        if (isIntraState) {
+          cgst = Math.round((gstAmount / 2) * 100) / 100;
+          sgst = Math.round((gstAmount - cgst) * 100) / 100;
+        } else {
+          igst = gstAmount;
+        }
       }
+      lineTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
     } else {
-      amount = totalInclusive;
-    }
+      const totalInclusive = Math.round((li.totalInclusive * deductionRatio) * 100) / 100;
+      if (taxPct > 0) {
+        const gstAmount = Math.round((totalInclusive * (taxPct / 100)) * 100) / 100;
+        amount = Math.round((totalInclusive - gstAmount) * 100) / 100;
 
-    const rate = qty > 0 ? Math.round((amount / qty) * 100) / 100 : 0;
-    const lineTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
+        if (isIntraState) {
+          cgst = Math.round((gstAmount / 2) * 100) / 100;
+          sgst = Math.round((gstAmount - cgst) * 100) / 100;
+        } else {
+          igst = gstAmount;
+        }
+      } else {
+        amount = totalInclusive;
+      }
+      rate = qty > 0 ? Math.round((amount / qty) * 100) / 100 : 0;
+      lineTotal = Math.round((amount + cgst + sgst + igst) * 100) / 100;
+    }
 
     return {
       description: li.description,
@@ -135,6 +158,7 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
       rate,
       amount,
       gstRate: taxPct > 0 ? `${taxPct}%` : 'Exempt (0%)',
+      taxPct,
       cgst,
       sgst,
       igst,
@@ -157,6 +181,21 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
   const totalIGST = Math.round(productLines.reduce((s, li) => s + li.igst, 0) * 100) / 100;
   const totalGST = Math.round((totalCGST + totalSGST + totalIGST) * 100) / 100;
   const grandTotal = Math.round((totalTaxableValue + totalGST) * 100) / 100;
+
+  // Determine active GST percentage labels
+  const taxRates = Array.from(new Set(
+    allLines
+      .map(li => Number(li.taxPct) || 0)
+      .filter(r => r > 0)
+  ));
+  const primaryTaxPct = taxRates.length > 0 ? taxRates[0] : 0;
+  const rateStr = taxRates.length > 1 ? `${taxRates.join('%, ')}%` : (primaryTaxPct > 0 ? `${primaryTaxPct}%` : '');
+  const halfRateStr = taxRates.length > 1 ? `${taxRates.map(r => r / 2).join('%, ')}%` : (primaryTaxPct > 0 ? `${primaryTaxPct / 2}%` : '');
+
+  const cgstLabel = (totalCGST > 0 || (isIntraState && rateStr)) ? `Total CGST (${halfRateStr})` : 'Total CGST';
+  const sgstLabel = (totalSGST > 0 || (isIntraState && rateStr)) ? `Total SGST/UTGST (${halfRateStr})` : 'Total SGST/UTGST';
+  const igstLabel = (totalIGST > 0 || (!isIntraState && rateStr)) ? `Total IGST (${rateStr})` : 'Total IGST';
+  const totalGstLabel = rateStr ? `Total GST Amount (${rateStr})` : 'Total GST Amount';
 
   return {
     billNumber,
@@ -191,7 +230,13 @@ function computeInvoiceData(shipment, idx, doctorFee, gstRate) {
     totalGST: Math.round(totalGST * 100) / 100,
     grandTotal: Math.round(grandTotal * 100) / 100,
     allLines,
-    isIntraState
+    isIntraState,
+    cgstLabel,
+    sgstLabel,
+    igstLabel,
+    totalGstLabel,
+    rateStr,
+    halfRateStr
   };
 }
 
@@ -357,6 +402,7 @@ export default function BulkInvoiceModal({ isOpen, onClose, selectedOrders = [],
               <div style="font-size:10px;font-weight:800;text-transform:uppercase;margin-bottom:3px;letter-spacing:0.5px;">DETAILS OF RECEIVER / BUYER (BILLED TO)</div>
               <div style="font-size:12px;font-weight:800;">${s.billing_customer_name || 'Direct Customer'}</div>
               <div style="font-size:10.5px;color:#222;margin-top:2px;line-height:1.4;">
+                ${(s.billing_gstin || s.customer_gstin || s.raw_response?.customer_gstin || s.raw_response?.billing_gstin) ? 'GSTIN / UIN: <strong>' + (s.billing_gstin || s.customer_gstin || s.raw_response?.customer_gstin || s.raw_response?.billing_gstin) + '</strong><br/>' : ''}
                 ${custAddr}<br/>
                 ${s.billing_phone ? 'Phone: <strong>' + s.billing_phone + '</strong><br/>' : ''}
                 State: <strong>${s.billing_state || 'Uttar Pradesh'}</strong>
@@ -380,9 +426,9 @@ export default function BulkInvoiceModal({ isOpen, onClose, selectedOrders = [],
                 <th rowspan="2" style="${thStyle}text-align:right;width:88px;border-right:none;">Total (₹)</th>
               </tr>
               <tr>
-                <th style="${thStyle}text-align:right;width:55px;font-size:10px;">CGST</th>
-                <th style="${thStyle}text-align:right;width:65px;font-size:10px;">SGST/UTGST</th>
-                <th style="${thStyle}text-align:right;width:50px;font-size:10px;">IGST</th>
+                <th style="${thStyle}text-align:right;width:55px;font-size:10px;">CGST${data.isIntraState && data.halfRateStr ? ` (${data.halfRateStr})` : ''}</th>
+                <th style="${thStyle}text-align:right;width:65px;font-size:10px;">SGST/UTGST${data.isIntraState && data.halfRateStr ? ` (${data.halfRateStr})` : ''}</th>
+                <th style="${thStyle}text-align:right;width:50px;font-size:10px;">IGST${!data.isIntraState && data.rateStr ? ` (${data.rateStr})` : ''}</th>
               </tr>
             </thead>
             <tbody>${rows}
@@ -420,10 +466,10 @@ export default function BulkInvoiceModal({ isOpen, onClose, selectedOrders = [],
               <table style="width:100%;border-collapse:collapse;margin:0;">
                 <tbody>
                   <tr><td style="${tdStyle}font-weight:600;padding:5px 12px;">Total Taxable Value</td><td style="${tdStyle}text-align:right;font-weight:600;border-right:none;padding:5px 12px;">${fmtCurrency(data.totalTaxableValue)}</td></tr>
-                  <tr><td style="${tdStyle}padding:5px 12px;">Total CGST</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${fmtCurrency(data.totalCGST)}</td></tr>
-                  <tr><td style="${tdStyle}padding:5px 12px;">Total SGST/UTGST</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${fmtCurrency(data.totalSGST)}</td></tr>
-                  <tr><td style="${tdStyle}padding:5px 12px;">Total IGST</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${data.totalIGST > 0 ? fmtCurrency(data.totalIGST) : '—'}</td></tr>
-                  <tr><td style="${tdStyle}padding:5px 12px;">Total GST Amount</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${fmtCurrency(data.totalGST)}</td></tr>
+                  <tr><td style="${tdStyle}padding:5px 12px;">${data.cgstLabel}</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${fmtCurrency(data.totalCGST)}</td></tr>
+                  <tr><td style="${tdStyle}padding:5px 12px;">${data.sgstLabel}</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${fmtCurrency(data.totalSGST)}</td></tr>
+                  <tr><td style="${tdStyle}padding:5px 12px;">${data.igstLabel}</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${data.totalIGST > 0 ? fmtCurrency(data.totalIGST) : '—'}</td></tr>
+                  <tr><td style="${tdStyle}padding:5px 12px;">${data.totalGstLabel}</td><td style="${tdStyle}text-align:right;border-right:none;padding:5px 12px;">${fmtCurrency(data.totalGST)}</td></tr>
                   <tr><td style="${tdStyle}font-weight:900;font-size:13px;padding:7px 12px;border-bottom:none;background:#f8fafc;">Grand Total (₹)</td><td style="${tdStyle}text-align:right;font-weight:900;font-size:13px;border-right:none;border-bottom:none;padding:7px 12px;background:#f8fafc;">${fmtCurrency(data.grandTotal)}</td></tr>
                 </tbody>
               </table>
