@@ -15,6 +15,7 @@ export const getInTransitOrdersFromSchema  = (params) => api.get(`${BASE}/orders
 export const searchOrderByPhone = (phone)          => api.get(`${BASE}/orders/search-by-phone`, { params: { phone } });
 export const getNextBillSeq     = ()               => api.get(`${BASE}/orders/next-bill-seq`);
 export const createManualBill   = (body)           => api.post(`${BASE}/orders/manual-bill`, body);
+export const updateManualBill   = (id, body)       => api.put(`${BASE}/orders/manual-bill/${id}`, body);
 export const deleteOrder        = (id)             => api.delete(`${BASE}/orders/${id}`);
 
 export const createShipment = (body) => api.post(`${BASE}/shipping/create-shipment`, body);

@@ -279,7 +279,9 @@ function NdrList({ department: externalDept, setDepartment: externalSetDept, onS
     return 'migraine';
   };
 
-  const safeNdrs = Array.isArray(ndrs) ? ndrs : [];
+  const safeNdrs = Array.isArray(ndrs)
+    ? ndrs.filter(n => !n.is_manual_bill && !String(n.order_id || '').startsWith('MNL-') && !String(n.awb_code || '').startsWith('MNL-'))
+    : [];
   const filtered = safeNdrs.filter(n => {
     if (department !== 'all') {
       const d = getDept(n);

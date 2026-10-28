@@ -43,12 +43,17 @@ export default function CsvExportModal({ isOpen, onClose, onExport, totalOrders 
           <button
             onClick={onClose}
             disabled={exporting}
-            className="absolute right-5 top-5 w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 font-bold transition disabled:opacity-50"
+            className="absolute right-5 top-5 w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition disabled:opacity-50 cursor-pointer"
           >
-            ✕
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-semibold mb-2">
-            📊 Detailed GST Invoice Export
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span>Detailed GST Invoice Export</span>
           </div>
           <h3 className="text-xl font-extrabold tracking-tight">Export CSV Settings</h3>
           <p className="text-emerald-200/80 text-xs mt-1">
@@ -60,8 +65,11 @@ export default function CsvExportModal({ isOpen, onClose, onExport, totalOrders 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Doctor Consultation Fee */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-              🩺 Doctor Consultation Fee (Per Invoice)
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 text-gray-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6m-7 4h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <span>Doctor Consultation Fee (Per Invoice)</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-gray-500 font-bold text-base">₹</span>
@@ -81,8 +89,11 @@ export default function CsvExportModal({ isOpen, onClose, onExport, totalOrders 
 
           {/* Medicine GST Rate */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-              📦 Medicine GST Rate (%)
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 text-gray-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              <span>Medicine GST Rate (%)</span>
             </label>
             <div className="flex items-center gap-2">
               <select
@@ -118,7 +129,10 @@ export default function CsvExportModal({ isOpen, onClose, onExport, totalOrders 
           {/* Included Columns Notice */}
           <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-100 text-[11.5px] text-teal-900 leading-relaxed space-y-1">
             <div className="font-bold flex items-center gap-1 text-teal-950">
-              <span>📋 Included CSV Columns:</span>
+              <svg className="w-3.5 h-3.5 text-teal-800 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+              <span>Included CSV Columns:</span>
             </div>
             <p className="text-teal-800">
               Bill Number, Sl No, Description, SAC/HSN Code, <strong>Doctor Fee (Rs)</strong>, <strong>Medicine Taxable Value (Rs)</strong>, <strong>State</strong>, <strong>GST Type</strong>, GST Rate (%), CGST, SGST/UTGST, IGST, <strong>Medicine Charge (Rs)</strong>, GST Amount, Total Amount, <strong>Delivered Date</strong>.
@@ -143,7 +157,7 @@ export default function CsvExportModal({ isOpen, onClose, onExport, totalOrders 
               <svg className={`w-4 h-4 ${exporting ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              {exporting ? 'Generating CSV...' : '📥 Generate & Download CSV'}
+              {exporting ? 'Generating CSV...' : 'Generate & Download CSV'}
             </button>
           </div>
         </form>

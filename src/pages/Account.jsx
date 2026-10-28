@@ -105,8 +105,24 @@ export default function Account() {
   const [exporting, setExporting] = useState(false);
 
   // Stats & Revenue
-  const [stats, setStats] = useState({ count: 0, revenue: 0, codCount: 0, prepaidCount: 0, statusBreakdown: [] });
+  const [stats, setStats] = useState({
+    count: 0,
+    revenue: 0,
+    courierCount: 0,
+    courierRevenue: 0,
+    totalCount: 0,
+    totalRevenue: 0,
+    codCount: 0,
+    prepaidCount: 0,
+    manualCount: 0,
+    manualRevenue: 0,
+    statusBreakdown: []
+  });
   const [filteredRevenue, setFilteredRevenue] = useState(0);
+  const [filteredCourierRevenue, setFilteredCourierRevenue] = useState(0);
+  const [filteredCourierCount, setFilteredCourierCount] = useState(0);
+  const [filteredManualRevenue, setFilteredManualRevenue] = useState(0);
+  const [filteredManualCount, setFilteredManualCount] = useState(0);
 
   // Filters & Pagination
   const [preset, setPreset] = useState('month');
@@ -130,6 +146,7 @@ export default function Account() {
   const [bulkInvoiceModalOpen, setBulkInvoiceModalOpen] = useState(false);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
   const [manualBillModalOpen, setManualBillModalOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
@@ -184,10 +201,16 @@ export default function Account() {
       .then(res => {
         const d = res.data?.data || {};
         setStats({
-          count: d.count || 0,
-          revenue: d.revenue || 0,
+          count: d.courierCount !== undefined ? d.courierCount : (d.count || 0),
+          revenue: d.courierRevenue !== undefined ? d.courierRevenue : (d.revenue || 0),
+          courierCount: d.courierCount !== undefined ? d.courierCount : (d.count || 0),
+          courierRevenue: d.courierRevenue !== undefined ? d.courierRevenue : (d.revenue || 0),
+          totalCount: d.totalCount || (d.count || 0),
+          totalRevenue: d.totalRevenue || (d.revenue || 0),
           codCount: d.codCount || 0,
           prepaidCount: d.prepaidCount || 0,
+          manualCount: d.manualCount || 0,
+          manualRevenue: d.manualRevenue || 0,
           statusBreakdown: d.statusBreakdown || []
         });
       })
@@ -209,12 +232,20 @@ export default function Account() {
         setOrders(list);
         setTotalOrders(d.total ?? list.length);
         setFilteredRevenue(d.totalRevenue ?? 0);
+        setFilteredCourierRevenue(d.courierRevenue !== undefined ? d.courierRevenue : (d.totalRevenue ?? 0));
+        setFilteredCourierCount(d.courierCount !== undefined ? d.courierCount : (d.total ?? list.length));
+        setFilteredManualRevenue(d.manualRevenue ?? 0);
+        setFilteredManualCount(d.manualCount ?? 0);
       })
       .catch(err => {
         console.error('[Account] Error fetching delivered orders:', err);
         setOrders([]);
         setTotalOrders(0);
         setFilteredRevenue(0);
+        setFilteredCourierRevenue(0);
+        setFilteredCourierCount(0);
+        setFilteredManualRevenue(0);
+        setFilteredManualCount(0);
       })
       .finally(() => setLoading(false));
   }, [page, perPage, search, from, to, paymentFilter, sortOrder]);
@@ -429,7 +460,20 @@ export default function Account() {
 
   // Total Revenue & Payment breakdown calculation across full dataset
   const hasActiveFilters = Boolean(search.trim() || paymentFilter !== 'all');
-  const totalRevenueCalc = hasActiveFilters ? filteredRevenue : (stats.revenue || filteredRevenue || 0);
+
+  const clientManualOrders = orders.filter(o => o.is_manual_bill || String(o.order_id || '').startsWith('MNL-') || String(o.awb_code || '').startsWith('MNL-'));
+  const clientManualRev = clientManualOrders.reduce((sum, o) => sum + Number(o.sub_total || 0), 0);
+  const displayManualRevenue = hasActiveFilters ? filteredManualRevenue : (stats.manualRevenue || filteredManualRevenue || clientManualRev);
+  const displayManualCount = hasActiveFilters ? filteredManualCount : (stats.manualCount || filteredManualCount || clientManualOrders.length);
+
+  // Delivered Revenue strictly shows Courier Delivery (excludes Manual Bills)
+  const displayCourierRevenue = hasActiveFilters
+    ? filteredCourierRevenue
+    : (stats.courierRevenue !== undefined ? stats.courierRevenue : (stats.revenue || 0));
+
+  const displayCourierCount = hasActiveFilters
+    ? filteredCourierCount
+    : (stats.courierCount !== undefined ? stats.courierCount : (stats.count || 0));
 
   const displayCodCount = paymentFilter === 'prepaid' ? 0 : (paymentFilter === 'cod' ? totalOrders : (stats.codCount || filteredOrders.filter(o => String(o.payment_method || '').toLowerCase().includes('cod')).length));
   const displayPrepaidCount = paymentFilter === 'cod' ? 0 : (paymentFilter === 'prepaid' ? totalOrders : (stats.prepaidCount || filteredOrders.filter(o => !String(o.payment_method || '').toLowerCase().includes('cod')).length));
@@ -504,8 +548,8 @@ export default function Account() {
         )}
       </div>
 
-      {/* KPI Cards Row (3 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* KPI Cards Row (4 Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Delivered */}
         <div className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
           <div className="flex items-center justify-between">
@@ -518,10 +562,10 @@ export default function Account() {
           </div>
           <div className="mt-3">
             <div className="text-2xl font-extrabold text-gray-900 tracking-tight">
-              {(hasActiveFilters ? totalOrders : (stats.count || totalOrders)).toLocaleString()}
+              {displayCourierCount.toLocaleString()}
             </div>
             <p className="text-[11px] font-semibold text-emerald-600 mt-1 flex items-center gap-1">
-              <span>Verified Delivered Orders</span>
+              <span>Verified Courier Deliveries</span>
             </p>
           </div>
         </div>
@@ -536,10 +580,34 @@ export default function Account() {
           </div>
           <div className="mt-3">
             <div className="text-2xl font-extrabold text-gray-900 tracking-tight">
-              ₹{totalRevenueCalc.toLocaleString('en-IN')}
+              ₹{displayCourierRevenue.toLocaleString('en-IN')}
             </div>
             <p className="text-[11px] font-semibold text-teal-600 mt-1">
-              {preset === 'month' ? 'This Month Delivered Total' : preset === 'last_month' ? 'Last Month Delivered Total' : preset === 'today' ? "Today's Delivered Total" : 'Selected Period Total'}
+              {preset === 'month' ? 'This Month Courier Total' : preset === 'last_month' ? 'Last Month Courier Total' : preset === 'today' ? "Today's Courier Total" : 'Courier Delivered Total'}
+            </p>
+          </div>
+        </div>
+
+        {/* Manual Revenue Card (Requested separately) */}
+        <div className="bg-white rounded-2xl p-5 border border-amber-200/90 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+              </svg>
+              <span>Manual Revenue</span>
+            </span>
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+              <span className="text-base font-black">₹</span>
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-extrabold text-amber-950 tracking-tight">
+              ₹{displayManualRevenue.toLocaleString('en-IN')}
+            </div>
+            <p className="text-[11px] font-semibold text-amber-700 mt-1 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span>{displayManualCount} Manual Bill{displayManualCount === 1 ? '' : 's'}</span>
             </p>
           </div>
         </div>
@@ -578,7 +646,7 @@ export default function Account() {
             Delivered Orders List ({totalOrders})
           </div>
           <button
-            onClick={() => setManualBillModalOpen(true)}
+            onClick={() => { setEditingOrder(null); setManualBillModalOpen(true); }}
             className="px-3.5 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-emerald-100 font-bold text-xs shadow-sm border border-emerald-700/60 transition flex items-center gap-1.5 cursor-pointer"
             title="Create a new manual delivered bill with consecutive sequence"
           >
@@ -755,7 +823,10 @@ export default function Account() {
 
                       <td className="px-4 py-3">
                         <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-100/70 text-emerald-800 font-mono text-[10px] font-extrabold mb-1">
-                          🧾 {billNum}
+                          <svg className="w-3 h-3 text-emerald-700 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>{billNum}</span>
                         </div>
                         <a
                           href={getTrackingUrl(o.awb_code, o.courier_name)}
@@ -799,23 +870,49 @@ export default function Account() {
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-gray-800">{o.staff_name || o.verification_staff_name || 'System / Auto'}</div>
-                        {o.staff_role && <div className="text-[10px] text-gray-400 capitalize">{o.staff_role}</div>}
+                        {Boolean(o.is_manual_bill || o.courier_name === 'Manual Delivery' || String(o.awb_code || '').startsWith('MNL-') || String(o.order_id || '').startsWith('MNL-')) ? (
+                          <>
+                            <div className="font-semibold text-gray-800">Admin</div>
+                            <div className="text-[10px] text-gray-400 capitalize">Admin</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-semibold text-gray-800">{o.staff_name || o.verification_staff_name || 'System / Auto'}</div>
+                            {o.staff_role && <div className="text-[10px] text-gray-400 capitalize">{o.staff_role}</div>}
+                          </>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openSingleInvoice(o)}
-                            className="px-2.5 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 border border-teal-200/80 text-[11px] font-bold transition flex items-center gap-1"
+                            className="px-2.5 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 border border-teal-200/80 text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer"
                             title="Tax Invoice / Bill"
                           >
-                            <span>🧾</span>
+                            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                            </svg>
                             <span>Invoice</span>
                           </button>
+                          {Boolean(o.is_manual_bill || String(o.order_id || '').startsWith('MNL-') || String(o.awb_code || '').startsWith('MNL-')) && (
+                            <button
+                              onClick={() => {
+                                setEditingOrder(o);
+                                setManualBillModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200/80 text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer"
+                              title="Edit Bill Details"
+                            >
+                              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                              <span>Edit</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => setSelectedOrder(o)}
-                            className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold transition"
+                            className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold transition cursor-pointer"
                           >
                             Details
                           </button>
@@ -824,14 +921,16 @@ export default function Account() {
                               onClick={() => handleDeleteOrder(o)}
                               onMouseLeave={() => confirmDeleteId === o._id && setConfirmDeleteId(null)}
                               disabled={deletingId === o._id}
-                              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
                                 confirmDeleteId === o._id
                                   ? 'bg-red-600 text-white border border-red-700 shadow-sm'
                                   : 'bg-red-50 hover:bg-red-600 hover:text-white text-red-600 border border-red-200'
                               }`}
                               title={confirmDeleteId === o._id ? "Click again to permanently delete" : "Remove Manual Bill"}
                             >
-                              <span>✕</span>
+                              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
                               <span>
                                 {deletingId === o._id
                                   ? 'Deleting...'
@@ -958,9 +1057,11 @@ export default function Account() {
               </div>
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 font-bold text-sm"
+                className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition cursor-pointer"
               >
-                ✕
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
@@ -1015,7 +1116,9 @@ export default function Account() {
                 <div className="bg-gray-50 p-3 rounded-2xl">
                   <div className="text-gray-400 font-bold uppercase text-[9px]">Verification Staff</div>
                   <div className="font-bold text-gray-800 text-xs mt-0.5">
-                    {selectedOrder.staff_name || selectedOrder.verification_staff_name || 'System Auto'}
+                    {Boolean(selectedOrder.is_manual_bill || selectedOrder.courier_name === 'Manual Delivery' || String(selectedOrder.awb_code || '').startsWith('MNL-') || String(selectedOrder.order_id || '').startsWith('MNL-'))
+                      ? 'Admin'
+                      : (selectedOrder.staff_name || selectedOrder.verification_staff_name || 'System Auto')}
                   </div>
                 </div>
               </div>
@@ -1048,9 +1151,13 @@ export default function Account() {
                   setSelectedOrder(null);
                   openSingleInvoice(o);
                 }}
-                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
               >
-                <span>🧾</span>
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
+                </svg>
                 <span>Print Tax Invoice</span>
               </button>
               <button
@@ -1074,6 +1181,13 @@ export default function Account() {
         onDoctorFeeChange={setInvoiceDoctorFee}
         taxMode={invoiceTaxMode}
         onTaxModeChange={setInvoiceTaxMode}
+        onSaveSuccess={(updated) => {
+          fetchStats();
+          fetchDeliveredOrders();
+          if (updated) {
+            setInvoiceShipment(prev => ({ ...prev, ...updated }));
+          }
+        }}
       />
 
       {/* BULK INVOICE MODAL */}
@@ -1093,15 +1207,20 @@ export default function Account() {
         totalOrders={totalOrders}
       />
 
-      {/* MANUAL BILL MODAL */}
+      {/* MANUAL BILL MODAL (CREATE & EDIT) */}
       <ManualBillModal
         isOpen={manualBillModalOpen}
-        onClose={() => setManualBillModalOpen(false)}
-        onSuccess={(created) => {
+        onClose={() => {
+          setManualBillModalOpen(false);
+          setEditingOrder(null);
+        }}
+        editOrder={editingOrder}
+        onSuccess={(result, isEdit) => {
           fetchStats();
           fetchDeliveredOrders();
-          if (created) {
-            openSingleInvoice(created);
+          setEditingOrder(null);
+          if (!isEdit && result) {
+            openSingleInvoice(result);
           }
         }}
       />

@@ -278,9 +278,10 @@ export default function OrderStatusBoard({
     }
     svc.getStatusOrders({ ...params, status, limit: 500 }).then(res => {
       const list = res.data?.data?.data || [];
-      setStatusOrders(list);
+      const cleanList = list.filter(o => !o.is_manual_bill && !String(o.order_id || '').startsWith('MNL-') && !String(o.awb_code || '').startsWith('MNL-'));
+      setStatusOrders(cleanList);
       const c = {};
-      list.forEach(o => { c[o._id] = o.comments || []; });
+      cleanList.forEach(o => { c[o._id] = o.comments || []; });
       setComments(prev => ({ ...prev, ...c }));
     }).catch(e => {
       setStatusOrders([]);

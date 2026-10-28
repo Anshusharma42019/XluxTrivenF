@@ -43,7 +43,7 @@ const GST_OPTIONS = [
   { value: 28, label: '28%' }
 ];
 
-export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
+export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder = null }) {
   const [loadingSeq, setLoadingSeq] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [nextBillNumber, setNextBillNumber] = useState('TW-....');
@@ -96,10 +96,120 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
     }
   ]);
 
-  // Fetch current next sequence whenever modal opens
+  // Initialize form for Create or Edit mode
   useEffect(() => {
-    if (isOpen) {
-      setErrorMsg('');
+    if (!isOpen) return;
+
+    setErrorMsg('');
+    if (editOrder) {
+      // ── EDIT MODE ──────────────────────────────────────────────────────────
+      const bNum = editOrder.bill_number || editOrder.billNumber || '';
+      setBillNumber(bNum);
+      setNextBillNumber(bNum || 'TW-0001');
+      setAwbCode(editOrder.awb_code || '');
+      setOrderId(editOrder.order_id || '');
+      setCourierName(editOrder.courier_name || 'Manual Delivery');
+      setCompanyName(editOrder.company_name || 'TRIVEN WELLNESS LLP');
+      setPaymentMethod(editOrder.payment_method || 'COD');
+
+      const dVal = editOrder.delivered_at || editOrder.status_updated_at || editOrder.createdAt;
+      if (dVal) {
+        try {
+          const dObj = new Date(dVal);
+          if (!isNaN(dObj.getTime())) {
+            const yyyy = dObj.getFullYear();
+            const mm = String(dObj.getMonth() + 1).padStart(2, '0');
+            const dd = String(dObj.getDate()).padStart(2, '0');
+            setDeliveredDate(`${yyyy}-${mm}-${dd}`);
+          }
+        } catch (_) {}
+      }
+
+      setCustomerName(editOrder.billing_customer_name || '');
+      setCustomerPhone(editOrder.billing_phone || '');
+      setCustomerEmail(editOrder.billing_email || '');
+      setAddress(editOrder.billing_address || '');
+      setCity(editOrder.billing_city || '');
+      setState(editOrder.billing_state || 'Uttar Pradesh');
+      setPincode(String(editOrder.billing_pincode || ''));
+
+      // Doctor fee
+      const dFee = Number(editOrder.doctor_fee || 0);
+      if (dFee > 0) {
+        setIncludeDoctorFee(true);
+        setDoctorFeeName(editOrder.doctor_fee_name || 'Doctor Consultation Charges');
+        setDoctorFeeHsn(editOrder.doctor_fee_hsn || '999312');
+        setDoctorFeeQty(1);
+        setDoctorFeeRate(dFee);
+        setDoctorFeeTax(Number(editOrder.doctor_fee_tax || 0));
+      } else {
+        setIncludeDoctorFee(false);
+        setDoctorFeeRate(0);
+        setDoctorFeeQty(0);
+        setDoctorFeeTax(0);
+      }
+
+      // Order items
+      if (Array.isArray(editOrder.order_items) && editOrder.order_items.length > 0) {
+        setItems(editOrder.order_items.map((it, idx) => ({
+          id: idx + 1,
+          name: it.name || it.product_name || 'Ayurvedic Medicine',
+          sku: it.sku || `MED-${idx + 1}`,
+          hsn: it.hsn || '30049011',
+          units: Number(it.units) || 1,
+          selling_price: Number(it.selling_price) || 0,
+          tax: Number(it.tax) || 0,
+        })));
+      } else if (Number(editOrder.sub_total || 0) > 0) {
+        setItems([{
+          id: 1,
+          name: 'Ayurvedic Wellness Package',
+          sku: 'MED-01',
+          hsn: '30049011',
+          units: 1,
+          selling_price: Math.max(0, Number(editOrder.sub_total) - dFee),
+          tax: 0,
+        }]);
+      } else {
+        setItems([]);
+      }
+    } else {
+      // ── CREATE MODE ────────────────────────────────────────────────────────
+      setAwbCode('');
+      setOrderId('');
+      setCourierName('Manual Delivery');
+      setCompanyName('TRIVEN WELLNESS LLP');
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      setDeliveredDate(`${yyyy}-${mm}-${dd}`);
+      setPaymentMethod('COD');
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerEmail('');
+      setAddress('');
+      setCity('');
+      setState('Uttar Pradesh');
+      setPincode('');
+      setIncludeDoctorFee(true);
+      setDoctorFeeName('Doctor Consultation Charges');
+      setDoctorFeeHsn('999312');
+      setDoctorFeeQty(0);
+      setDoctorFeeRate(0);
+      setDoctorFeeTax(0);
+      setItems([
+        {
+          id: 1,
+          name: 'Migraine Wellness',
+          sku: 'MIG-01',
+          hsn: '30049011',
+          units: 1,
+          selling_price: 1500,
+          tax: 0,
+        }
+      ]);
+
       setLoadingSeq(true);
       smxSvc.getNextBillSeq()
         .then(res => {
@@ -113,7 +223,7 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
         })
         .finally(() => setLoadingSeq(false));
     }
-  }, [isOpen]);
+  }, [isOpen, editOrder]);
 
   // Quick generators
   const handleResetToAutoBill = () => {
@@ -268,12 +378,22 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
         })),
       };
 
-      const res = await smxSvc.createManualBill(payload);
-      const created = res.data?.data;
-      if (onSuccess) {
-        onSuccess(created);
+      if (editOrder) {
+        const targetId = editOrder._id || editOrder.order_id;
+        const res = await smxSvc.updateManualBill(targetId, payload);
+        const updated = res.data?.data;
+        if (onSuccess) {
+          onSuccess(updated, true);
+        }
+        onClose();
+      } else {
+        const res = await smxSvc.createManualBill(payload);
+        const created = res.data?.data;
+        if (onSuccess) {
+          onSuccess(created, false);
+        }
+        onClose();
       }
-      onClose();
     } catch (err) {
       console.error('[ManualBillModal] Error:', err);
       const errMsg = err.response?.data?.message || err.message || 'Failed to create manual bill';
@@ -295,26 +415,33 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
           <button
             onClick={onClose}
             disabled={submitting}
-            className="absolute right-5 top-5 w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 font-bold transition disabled:opacity-50"
+            className="absolute right-5 top-5 w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition disabled:opacity-50 cursor-pointer"
           >
-            ✕
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
 
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Manual Delivered Bill Creation
+              {editOrder ? 'Edit Delivered Bill' : 'Manual Delivered Bill Creation'}
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-teal-400 text-teal-950 text-xs font-mono font-extrabold shadow-sm">
-              🧾 Bill No: {billNumber || nextBillNumber}
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Bill No: {billNumber || nextBillNumber}</span>
             </span>
           </div>
 
           <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white">
-            Create Manual Delivered Bill & Tax Invoice
+            {editOrder ? 'Edit Delivered Bill & Tax Invoice' : 'Create Manual Delivered Bill & Tax Invoice'}
           </h3>
           <p className="text-emerald-200/80 text-xs mt-1 max-w-xl">
-            Enter your custom <strong>Bill No.</strong> and <strong>AWB Tracking Number</strong>, or use the automatic consecutive sequence to keep counting accurate.
+            {editOrder
+              ? 'Update customer details, bill number, AWB tracking, medicines, and doctor fee. Changes reflect immediately across tax invoices and reports.'
+              : 'Enter your custom Bill No. and AWB Tracking Number, or use the automatic consecutive sequence to keep counting accurate.'}
           </p>
         </div>
 
@@ -324,7 +451,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
           <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center gap-2">
-              <span className="text-base">⚠️</span>
+              <svg className="w-4 h-4 text-red-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
               <span>{errorMsg}</span>
             </div>
           )}
@@ -333,7 +462,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
           <div className="bg-gradient-to-r from-teal-50/90 via-emerald-50/80 to-teal-50/90 p-4 rounded-2xl border-2 border-emerald-300/80 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-xs font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="text-sm">🧾</span>
+                <svg className="w-4 h-4 text-emerald-800 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                </svg>
                 <span>Bill Number & AWB Tracking Information</span>
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-xs">
@@ -360,7 +491,11 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                   )}
                 </div>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">🧾</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </span>
                   <input
                     type="text"
                     value={billNumber}
@@ -383,13 +518,20 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                   <button
                     type="button"
                     onClick={handleGenerateRandomAwb}
-                    className="text-[10px] text-teal-800 font-bold hover:underline flex items-center gap-0.5"
+                    className="text-[10px] text-teal-800 font-bold hover:underline flex items-center gap-1"
                   >
-                    <span>⚡</span> Auto Generate AWB
+                    <svg className="w-3.5 h-3.5 text-teal-800 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span>Auto Generate AWB</span>
                   </button>
                 </div>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">📦</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </span>
                   <input
                     type="text"
                     value={awbCode}
@@ -436,7 +578,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
           {/* Section 2: Organization & Invoice Parameters */}
           <div className="bg-gray-50/70 p-4 rounded-2xl border border-gray-100 space-y-4">
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-              <span>🏛️</span>
+              <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
               <span>Organization & Invoice Parameters</span>
             </div>
 
@@ -478,7 +622,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
           {/* Section 3: Customer Information */}
           <div className="bg-gray-50/70 p-4 rounded-2xl border border-gray-100 space-y-4">
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-              <span>👤</span>
+              <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
               <span>Customer Information</span>
             </div>
 
@@ -553,8 +699,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                   onChange={e => setState(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-bold text-emerald-800 bg-white focus:outline-none focus:border-emerald-500"
                 />
-                <span className="text-[10px] text-gray-400 mt-0.5 block">
-                  {isIntraState ? '🟢 Intra-State (CGST + SGST)' : '🔵 Inter-State (IGST)'}
+                <span className="text-[10px] text-gray-500 mt-1 flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${isIntraState ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                  <span>{isIntraState ? 'Intra-State (CGST + SGST)' : 'Inter-State (IGST)'}</span>
                 </span>
               </div>
             </div>
@@ -564,7 +711,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
           <div className="bg-gray-50/70 p-4 rounded-2xl border border-gray-100 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                <span>📋</span>
+                <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
                 <span>Bill Line Items & Services</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -576,17 +725,23 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                       setDoctorFeeQty(1);
                       setDoctorFeeRate(0);
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-teal-100 text-teal-800 hover:bg-teal-200 font-bold text-xs transition flex items-center gap-1 shadow-xs"
+                    className="px-3 py-1.5 rounded-xl bg-teal-100 text-teal-800 hover:bg-teal-200 font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
                   >
-                    <span>🩺 +</span> Add Doctor Consultation
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Add Doctor Consultation</span>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={handleAddItem}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-bold text-xs transition flex items-center gap-1 shadow-xs"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
-                  <span>📦 +</span> Add Medicine
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Medicine</span>
                 </button>
               </div>
             </div>
@@ -596,7 +751,10 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
               <div className="bg-white p-3.5 rounded-xl border-2 border-teal-200/90 shadow-sm space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
-                    <span>🩺</span> 1. {doctorFeeName || 'Doctor Consultation Charges'}
+                    <svg className="w-3.5 h-3.5 text-teal-800 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6m-7 4h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>1. {doctorFeeName || 'Doctor Consultation Charges'}</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
@@ -612,7 +770,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                       className="px-2.5 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 font-bold rounded-lg transition flex items-center gap-1 border border-red-200 cursor-pointer"
                       title="Remove Doctor Consultation Charges"
                     >
-                      <span>✕</span>
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
                       <span>Remove</span>
                     </button>
                   </div>
@@ -715,8 +875,11 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                 return (
                   <div key={it.id} className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-gray-800">
-                        📦 {itemNum}. {it.name || 'Medicine Product'}
+                      <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                        <span>{itemNum}. {it.name || 'Medicine Product'}</span>
                       </span>
                       <button
                         type="button"
@@ -724,7 +887,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                         className="px-2.5 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 font-bold rounded-lg transition flex items-center gap-1 border border-red-200 cursor-pointer"
                         title="Remove this medicine"
                       >
-                        <span>✕</span>
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                         <span>Remove</span>
                       </button>
                     </div>
@@ -831,7 +996,9 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
         <div className="bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 px-6 py-4 shrink-0 space-y-2">
           {errorMsg && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center gap-2">
-              <span className="text-base">⚠️</span>
+              <svg className="w-4 h-4 text-red-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
               <span>{errorMsg}</span>
             </div>
           )}
@@ -872,9 +1039,18 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess }) {
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     <span>Saving Bill {billNumber}...</span>
                   </>
+                ) : editOrder ? (
+                  <>
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Save Changes (Update Bill {billNumber})</span>
+                  </>
                 ) : (
                   <>
-                    <span>✓</span>
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
                     <span>Create Bill ({billNumber || nextBillNumber})</span>
                   </>
                 )}
