@@ -169,8 +169,8 @@ export default function Sidebar({ open, onClose, unreadCount = 0, whatsappUnread
 
   return (
     <>
-      {open && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 md:hidden" onClick={onClose} />}
-      <aside className={`fixed top-0 left-0 h-full w-64 z-30 flex flex-col transition-transform duration-300
+      {open && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden" onClick={onClose} />}
+      <aside className={`fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300
         ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
         style={{ background: bg, transition: 'background 0.4s ease' }}>
 

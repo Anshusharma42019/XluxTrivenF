@@ -448,7 +448,7 @@ export default function Layout() {
 
       <div className="flex-1 md:ml-64 flex flex-col h-screen min-w-0 overflow-hidden">
         {/* Header */}
-        <header className="sticky top-0 z-10 px-4 py-3 flex items-center justify-between glass shadow-sm shadow-black/5"
+        <header className="sticky top-0 z-30 px-4 py-3 flex items-center justify-between glass shadow-sm shadow-black/5"
           style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
           <button onClick={() => setSidebarOpen(true)} 
             className="w-10 h-10 flex items-center justify-center rounded-xl bg-white shadow-sm text-gray-500 hover:text-green-700 hover:scale-105 active:scale-95 transition-all md:hidden">

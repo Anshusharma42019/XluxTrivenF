@@ -141,7 +141,10 @@ export default function UniversalSearch() {
 
       {/* Results Dropdown */}
       {isOpen && query.trim().length >= 2 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden max-h-[80vh] overflow-y-auto ring-1 ring-black/5">
+        <div 
+          className="absolute top-full left-0 right-0 mt-2 z-50 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden max-h-[80vh] overflow-y-auto ring-1 ring-black/5"
+          style={{ backgroundColor: 'var(--theme-surface, #ffffff)' }}
+        >
           {results.length === 0 && !loading ? (
             <div className="p-8 text-center text-gray-500 dark:text-gray-400">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 mb-3">
@@ -158,7 +161,7 @@ export default function UniversalSearch() {
                 const kitNum = customerGroup.latestStatus.kit_number || 1;
 
                 return (
-                <div key={idx} className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-3 border border-gray-100 dark:border-gray-800 transition-all hover:border-green-200 dark:hover:border-green-900/50">
+                <div key={idx} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-800 transition-all hover:border-green-200 dark:hover:border-green-900/50">
                   {/* LATEST STATUS BLOCK */}
                   <div 
                     onClick={() => handleResultClick(customerGroup.latestStatus.link)}
@@ -244,7 +247,7 @@ export default function UniversalSearch() {
                           </div>
                         )}
                         {customerGroup.latestStatus.note && (
-                          <div className="flex items-start gap-2 text-gray-600 dark:text-gray-400 mt-2 bg-gray-50 dark:bg-gray-900/50 p-2 rounded-md border border-gray-100 dark:border-gray-700">
+                          <div className="flex items-start gap-2 text-gray-600 dark:text-gray-400 mt-2 bg-gray-50 dark:bg-gray-900 p-2 rounded-md border border-gray-100 dark:border-gray-700">
                              <span className="font-medium text-gray-500 text-[10px] uppercase mt-0.5 shrink-0">Note:</span> 
                              <span className="text-[11px] line-clamp-2 italic leading-tight">"{customerGroup.latestStatus.note}"</span>
                           </div>
@@ -364,7 +367,7 @@ export default function UniversalSearch() {
 
                                 {/* Commissions split detail */}
                                 {entry.commissions && entry.commissions.length > 0 && (
-                                  <div className="mt-2 bg-gray-50 dark:bg-gray-800/40 p-2 rounded-lg border border-gray-100/50 dark:border-gray-700/50">
+                                  <div className="mt-2 bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border border-gray-100/50 dark:border-gray-700/50">
                                     <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1.5">Commissions Split</p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                                       {entry.commissions.map((comm, commIdx) => (
