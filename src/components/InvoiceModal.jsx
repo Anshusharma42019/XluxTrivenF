@@ -1581,12 +1581,8 @@ export default function InvoiceModal({
                     </div>
                   </div>
                   
-                  <div style={{ marginTop: 10, paddingTop: 6, borderTop: '1px dashed #cbd5e1', fontSize: 10, color: '#475569' }}>
-                    <div>Payment Mode: <strong style={{ color: '#0f172a' }}>{shipment.payment_method || 'Cash on Delivery (COD)'}</strong></div>
-                    <div style={{ marginTop: 2 }}>Total Items: <strong style={{ color: '#0f172a' }}>{finalLineItems.reduce((acc, li) => acc + (Number(li.qty) || 0), 0)}</strong></div>
-                    <div style={{ fontSize: 9, color: '#64748b', fontStyle: 'italic', marginTop: 3 }}>
-                      Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
-                    </div>
+                  <div style={{ marginTop: 10, paddingTop: 6, borderTop: '1px dashed #cbd5e1', fontSize: 9, color: '#64748b', fontStyle: 'italic' }}>
+                    Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
                   </div>
                 </div>
 

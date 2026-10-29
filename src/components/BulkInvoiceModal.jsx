@@ -456,11 +456,7 @@ export default function BulkInvoiceModal({ isOpen, onClose, selectedOrders = [],
                 <div style="font-size:9.5px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:0.5px;">Amount Chargeable (in words):</div>
                 <div style="font-size:12px;font-weight:800;color:#000;margin-top:3px;line-height:1.4;">${grandTotalWords}</div>
               </div>
-              <div style="margin-top:10px;padding-top:6px;border-top:1px dashed #cbd5e1;font-size:10px;color:#475569;">
-                <div>Payment Mode: <strong style="color:#0f172a;">${s.payment_method || 'Cash on Delivery (COD)'}</strong></div>
-                <div style="margin-top:2px;">Total Items: <strong style="color:#0f172a;">${totalItemsCount}</strong></div>
-                <div style="font-size:9px;color:#64748b;font-style:italic;margin-top:3px;">Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div>
-              </div>
+              <div style="margin-top:10px;padding-top:6px;border-top:1px dashed #cbd5e1;font-size:9px;color:#64748b;font-style:italic;">Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div>
             </div>
             <div style="width:330px;background:#fff;">
               <table style="width:100%;border-collapse:collapse;margin:0;">

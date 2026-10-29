@@ -439,6 +439,8 @@ export default function ManualBillModal({ isOpen, onClose, onSuccess, editOrder 
         doctor_fee_hsn: doctorFeeHsn.trim() || '999312',
         doctor_fee_tax: Number(doctorFeeTax) || 0,
         company_name: companyName.trim() || 'TRIVEN WELLNESS LLP',
+        company_gstin: '09AAZFT9024A1ZS',
+        company_address: 'RPN/ 341(7), Harmilap Society, Rana Pratap Nagar, Keshavpuram, Kalyanpur, Kanpur Nagar, Uttar Pradesh - 208017',
         tax_calculation_type: taxCalculationType,
         sub_total: grandTotal,
         order_items: items.map(it => ({
