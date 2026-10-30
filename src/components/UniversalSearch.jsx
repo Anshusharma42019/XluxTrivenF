@@ -178,6 +178,59 @@ export default function UniversalSearch() {
                           <span className="text-lg font-bold text-gray-900 dark:text-white capitalize truncate">{customerGroup.customerName}</span>
                           <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-md font-mono shrink-0">{customerGroup.phone}</span>
                         </div>
+
+                        {/* ORDER JOURNEY / OWNERSHIP BADGES */}
+                        {customerGroup.orderJourney && (customerGroup.orderJourney.firstOrder || customerGroup.orderJourney.repeatOrder) && (
+                          <div className="mt-2 mb-2.5 flex items-center flex-wrap gap-2">
+                            {/* 1st Order Badge (Sales) */}
+                            {customerGroup.orderJourney.firstOrder && (
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800 text-xs shadow-xs">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                                <span className="font-bold text-emerald-800 dark:text-emerald-300 uppercase text-[10px] tracking-wider">
+                                  1st Order:
+                                </span>
+                                <span className="font-bold text-gray-900 dark:text-gray-100">
+                                  {customerGroup.orderJourney.firstOrder.staffName}
+                                </span>
+                                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold capitalize">
+                                  ({customerGroup.orderJourney.firstOrder.staffRole || 'Sales'})
+                                </span>
+                                {customerGroup.orderJourney.firstOrder.status && (
+                                  <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                                    {customerGroup.orderJourney.firstOrder.status.replace(/_/g, ' ')}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Arrow Indicator */}
+                            {customerGroup.orderJourney.hasReorder && customerGroup.orderJourney.repeatOrder && (
+                              <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                              </svg>
+                            )}
+
+                            {/* Repeat / Followup Order Badge (Support) */}
+                            {customerGroup.orderJourney.hasReorder && customerGroup.orderJourney.repeatOrder && (
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800 text-xs shadow-xs">
+                                <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 animate-pulse"></span>
+                                <span className="font-bold text-blue-800 dark:text-blue-300 uppercase text-[10px] tracking-wider">
+                                  Reorder {customerGroup.orderJourney.repeatOrder.kitNumber ? `#${customerGroup.orderJourney.repeatOrder.kitNumber}` : ''}:
+                                </span>
+                                <span className="font-bold text-gray-900 dark:text-gray-100">
+                                  {customerGroup.orderJourney.repeatOrder.staffName}
+                                </span>
+                                <span className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold capitalize">
+                                  ({customerGroup.orderJourney.repeatOrder.staffRole || 'Support'})
+                                </span>
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                  {customerGroup.orderJourney.repeatOrder.stage || customerGroup.orderJourney.repeatOrder.status}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mt-2">
                            <span className="w-20 font-medium text-gray-500 text-[11px] uppercase shrink-0">Found In:</span> 
                            <span className="font-semibold text-gray-800 dark:text-gray-200">{customerGroup.latestStatus.module}</span>
@@ -206,10 +259,29 @@ export default function UniversalSearch() {
                            <span className="w-20 font-medium text-gray-500 text-[11px] uppercase shrink-0">Updated:</span> 
                            <span className="text-xs font-medium">{formatDate(customerGroup.latestStatus.updatedAt)}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mt-1">
-                           <span className="w-20 font-medium text-gray-500 text-[11px] uppercase shrink-0">Assigned:</span> 
-                           <span className="text-xs">{customerGroup.latestStatus.assignedTo || 'Unassigned'}</span>
-                        </div>
+
+                        {/* STAFF ATTRIBUTION */}
+                        {customerGroup.orderJourney?.hasReorder ? (
+                          <div className="mt-1.5 space-y-1 bg-gray-50/80 dark:bg-gray-900/40 p-2 rounded-md border border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                              <span className="w-24 font-medium text-gray-500 text-[10px] uppercase shrink-0">1st Order Rep:</span>
+                              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                {customerGroup.orderJourney.firstOrder?.staffName || 'Unknown'} <span className="font-normal text-[10px] text-gray-500">({customerGroup.orderJourney.firstOrder?.staffRole || 'Sales'})</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                              <span className="w-24 font-medium text-gray-500 text-[10px] uppercase shrink-0">Reorder Rep:</span>
+                              <span className="text-xs font-bold text-blue-700 dark:text-blue-400">
+                                {customerGroup.orderJourney.repeatOrder?.staffName || 'Unknown'} <span className="font-normal text-[10px] text-gray-500">({customerGroup.orderJourney.repeatOrder?.staffRole || 'Support'})</span>
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mt-1">
+                             <span className="w-20 font-medium text-gray-500 text-[11px] uppercase shrink-0">Assigned:</span> 
+                             <span className="text-xs">{customerGroup.latestStatus.assignedTo || 'Unassigned'}</span>
+                          </div>
+                        )}
                         {customerGroup.latestStatus.department && (
                           <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mt-1">
                              <span className="w-20 font-medium text-gray-500 text-[11px] uppercase shrink-0">Dept:</span> 
@@ -289,6 +361,11 @@ export default function UniversalSearch() {
                               ) : hist.courier_name ? (
                                 <span className="text-[10px] text-gray-400 font-medium">({hist.courier_name})</span>
                               ) : null}
+                              {hist.assignedTo && (
+                                <span className="text-[10px] text-gray-400 font-medium">
+                                  • {hist.assignedTo} {hist.assignedRole ? `(${hist.assignedRole})` : ''}
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-gray-500 whitespace-nowrap">
                               {formatDate(hist.updatedAt)}
