@@ -155,7 +155,7 @@ export default function Sidebar({ open, onClose, unreadCount = 0, whatsappUnread
   const { user } = useAuth();
   const { t } = useLanguage();
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
-
+// next project
   useEffect(() => {
     import('../pages/Pipeline').then(m => m.prefetchPipeline?.()).catch(() => {});
     const observer = new MutationObserver(() => {
