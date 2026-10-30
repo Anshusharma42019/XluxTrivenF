@@ -1,13 +1,20 @@
 import axios from 'axios';
 
-// Always use relative '/api/v1' in browser to avoid broken localhost URLs in production.
-// Vite dev server proxies '/api' to local backend automatically.
+// Determine API base URL dynamically:
+// - If running on xluxtriven.de or localhost, use relative '/api/v1'
+// - If running on any other frontend domain (e.g. support.trivenayurveda.in),
+//   point directly to the live backend server 'https://xluxtriven.de/api/v1'
 const isBrowser = typeof window !== 'undefined';
-const isLocalhost = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-const envApiUrl = import.meta.env.VITE_API_BASE_URL;
-const BASE_URL = (isBrowser && (!isLocalhost || !envApiUrl || envApiUrl.includes('localhost'))) 
-  ? '/api/v1' 
-  : (envApiUrl || '/api/v1');
+const hostname = isBrowser ? window.location.hostname : '';
+const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+const isXluxOrigin = hostname.endsWith('xluxtriven.de');
+
+let BASE_URL = 'https://xluxtriven.de/api/v1';
+if (isXluxOrigin || isLocalhost) {
+  BASE_URL = '/api/v1';
+} else {
+  BASE_URL = 'https://xluxtriven.de/api/v1';
+}
 
 const API = axios.create({ baseURL: BASE_URL });
 API.interceptors.request.use((config) => {
@@ -31,7 +38,13 @@ const onTokenRefreshed = (token) => {
 };
 
 API.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    // Guard against SPA returning 200 OK with HTML index.html
+    if (typeof res.data === 'string' && res.data.trim().startsWith('<!doctype')) {
+      return Promise.reject(new Error('Backend API endpoint not found (received HTML instead of JSON)'));
+    }
+    return res;
+  },
   async (error) => {
     const original = error.config;
     
