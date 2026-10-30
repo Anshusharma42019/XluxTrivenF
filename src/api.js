@@ -1,9 +1,13 @@
 import axios from 'axios';
 
-// In local dev (localhost), always use relative path so Vite proxy forwards to localhost:5000.
-// In production builds, VITE_API_BASE_URL from .env.production is used directly.
-const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-const BASE_URL = isLocalDev ? '/api/v1' : (import.meta.env.VITE_API_BASE_URL || '/api/v1');
+// Always use relative '/api/v1' in browser to avoid broken localhost URLs in production.
+// Vite dev server proxies '/api' to local backend automatically.
+const isBrowser = typeof window !== 'undefined';
+const isLocalhost = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const envApiUrl = import.meta.env.VITE_API_BASE_URL;
+const BASE_URL = (isBrowser && (!isLocalhost || !envApiUrl || envApiUrl.includes('localhost'))) 
+  ? '/api/v1' 
+  : (envApiUrl || '/api/v1');
 
 const API = axios.create({ baseURL: BASE_URL });
 API.interceptors.request.use((config) => {

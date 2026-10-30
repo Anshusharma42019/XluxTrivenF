@@ -7,6 +7,7 @@ export default function UniversalSearch() {
   const [results, setResults] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const [integrityStates, setIntegrityStates] = useState({});
   const containerRef = useRef(null);
   const navigate = useNavigate();
@@ -27,17 +28,21 @@ export default function UniversalSearch() {
     const timer = setTimeout(async () => {
       if (!query || query.trim().length < 2) {
         setResults([]);
+        setSearchError(null);
         setLoading(false);
         return;
       }
       setLoading(true);
+      setSearchError(null);
       try {
         const res = await API.get('/search', { params: { q: query } });
         setResults(res.data?.data || []);
         setIsOpen(true);
       } catch (err) {
         console.error('Search failed', err);
+        setSearchError(err?.response?.data?.message || err?.message || 'Search failed');
         setResults([]);
+        setIsOpen(true);
       } finally {
         setLoading(false);
       }
@@ -145,7 +150,17 @@ export default function UniversalSearch() {
           className="absolute top-full left-0 right-0 mt-2 z-50 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden max-h-[80vh] overflow-y-auto ring-1 ring-black/5"
           style={{ backgroundColor: 'var(--theme-surface, #ffffff)' }}
         >
-          {results.length === 0 && !loading ? (
+          {searchError ? (
+            <div className="p-8 text-center text-red-500">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-3">
+                 <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                 </svg>
+              </div>
+              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">Search Error</p>
+              <p className="text-xs mt-1 text-red-500 font-medium">{searchError}</p>
+            </div>
+          ) : results.length === 0 && !loading ? (
             <div className="p-8 text-center text-gray-500 dark:text-gray-400">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 mb-3">
                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
