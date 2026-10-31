@@ -99,7 +99,7 @@ function AppRoutes() {
           </ProtectedRoute>
         } />
         <Route path="verification" element={
-          <ProtectedRoute roles={['admin', 'manager', 'sales', 'support']}><Verification /></ProtectedRoute>
+          <ProtectedRoute roles={['admin', 'manager', 'sales', 'support', 'staff']}><Verification /></ProtectedRoute>
         } />
         <Route path="ready-to-shipment" element={
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'logistics']}><ReadyToShipment /></ProtectedRoute>
@@ -158,8 +158,8 @@ function AppRoutes() {
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'support', 'logistics']}>
             <StaffActivity />
           </ProtectedRoute>
-        } /> 
-      </Route> 
+        } />  
+      </Route>  
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
     </Suspense>

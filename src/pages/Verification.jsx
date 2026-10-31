@@ -285,8 +285,10 @@ export default function Verification() {
       notes: r.notes || [],
       status: r.status,
       lead: r.lead,
+      name: r.name || r.lead?.name || r.title,
+      phone: r.phone || r.lead?.phone,
       assignedTo: r.assignedTo || r.task?.assignedTo,
-      title: r.title || r.task?.title,
+      title: r.name || r.title || r.task?.title || r.lead?.name,
       department: r.department || r.task?.department || r.lead?.department,
       task: r.task,
       _isPipelineOnly: r._isPipelineOnly,
@@ -305,23 +307,23 @@ export default function Verification() {
 
   const startEdit = () => {
     setEditForm({
-      name: selected.lead?.name || '',
-      phone: selected.lead?.phone || '',
+      name: selected.lead?.name || selected.name || selected.title || '',
+      phone: selected.lead?.phone || selected.phone || '',
       description: selected.description || '',
-      problem: selected.problem || '',
+      problem: selected.problem || selected.lead?.problem || '',
       age: selected.age || '',
       weight: selected.weight || '',
       height: selected.height || '',
       otherProblems: selected.otherProblems || '',
       problemDuration: selected.problemDuration || '',
-      cityVillageType: selected.cityVillageType || 'city',
-      cityVillage: selected.cityVillage || '',
-      houseNo: selected.houseNo || '',
-      postOffice: selected.postOffice || '',
-      district: selected.district || '',
-      landmark: selected.landmark || '',
-      pincode: selected.pincode || '',
-      state: selected.state || '',
+      cityVillageType: selected.cityVillageType || selected.lead?.cityVillageType || 'city',
+      cityVillage: selected.cityVillage || selected.lead?.cityVillage || '',
+      houseNo: selected.houseNo || selected.lead?.houseNo || '',
+      postOffice: selected.postOffice || selected.lead?.postOffice || '',
+      district: selected.district || selected.lead?.district || '',
+      landmark: selected.landmark || selected.lead?.landmark || '',
+      pincode: selected.pincode || selected.lead?.pincode || '',
+      state: selected.state || selected.lead?.state || '',
       reminderAt: selected.reminderAt ? selected.reminderAt.slice(0, 10) : '',
       price: selected.price || '',
     });
@@ -332,19 +334,42 @@ export default function Verification() {
     if (e) e.preventDefault();
     setSaving(true);
     try {
-      const { name, phone, ...verificationFields } = editForm;
-      await updateVerificationRecord(selected._id, verificationFields);
-      if (selected.lead?._id) await updateLead(selected.lead._id, { name, phone });
+      const { name, phone } = editForm;
 
-      // Reload both pending and on-hold lists so neither tab goes stale
-      load(true);
-      loadOnHold(true);
+      // 1. Update verification record (passes entire editForm including name & phone)
+      const updatedRes = await updateVerificationRecord(selected._id, editForm);
+      const updatedData = updatedRes?.data || updatedRes;
 
-      const flattened = flattenRecord({ ...selected, ...verificationFields });
-      setSelected({ ...flattened, lead: { ...(flattened.lead || selected.lead || {}), name, phone } });
+      // 2. Also directly update lead if lead ID is available as extra guarantee
+      const leadId = selected.lead?._id || (typeof selected.lead === 'string' ? selected.lead : null) || (selected._isPipelineOnly ? selected._id : null);
+      if (leadId) {
+        await updateLead(leadId, { name, phone }).catch(err => {
+          console.warn('[handleSave] Direct updateLead notice:', err.message);
+        });
+      }
+
+      // 3. Immediately refresh lists in background so neither tab goes stale
+      await Promise.all([load(true), loadOnHold(true)]);
+
+      // 4. Update currently selected record view
+      const flattened = flattenRecord({ ...selected, ...editForm, ...(updatedData || {}) });
+      setSelected({
+        ...flattened,
+        title: name || flattened.title,
+        name: name || flattened.name,
+        phone: phone || flattened.phone,
+        lead: {
+          ...(flattened.lead || selected.lead || {}),
+          name: name || flattened.lead?.name,
+          phone: phone || flattened.lead?.phone,
+        }
+      });
       setEditMode(false);
-    } catch (e) { /* ignore */ }
-    finally { setSaving(false); }
+    } catch (err) {
+      alert('Save failed: ' + (err.response?.data?.message || err.message || 'Error occurred while saving'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleStatusUpdate = async (status, holdDate = null, holdReason = null) => {
@@ -563,8 +588,8 @@ export default function Verification() {
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            {flattened.lead?.name && <span className="text-xs text-gray-500">{flattened.lead.name}</span>}
-                            {flattened.lead?.phone && <span className="text-xs text-gray-400">{flattened.lead.phone}</span>}
+                            {(flattened.name || flattened.lead?.name) && <span className="text-xs text-gray-500">{flattened.name || flattened.lead?.name}</span>}
+                            {(flattened.phone || flattened.lead?.phone) && <span className="text-xs text-gray-400">{flattened.phone || flattened.lead?.phone}</span>}
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
@@ -626,11 +651,11 @@ export default function Verification() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {flattened.lead?.name && <span className="text-xs text-gray-500">{flattened.lead.name}</span>}
-                          {flattened.lead?.phone && (
+                          {(flattened.name || flattened.lead?.name) && <span className="text-xs text-gray-500">{flattened.name || flattened.lead?.name}</span>}
+                          {(flattened.phone || flattened.lead?.phone) && (
                             <span className="text-xs text-gray-400 flex items-center gap-0.5">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
-                              {flattened.lead.phone}
+                              {flattened.phone || flattened.lead.phone}
                             </span>
                           )}
                         </div>
@@ -761,8 +786,8 @@ export default function Verification() {
                 {initials(selected.lead?.name || selected.title)}
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-800 leading-tight">{selected.lead?.name || 'Task Detail'}</p>
-                {selected.lead?.phone && <p className="text-xs text-gray-400">{selected.lead.phone}</p>}
+                <p className="text-sm font-bold text-gray-800 leading-tight">{selected.name || selected.lead?.name || selected.title || 'Task Detail'}</p>
+                {(selected.phone || selected.lead?.phone) && <p className="text-xs text-gray-400">{selected.phone || selected.lead.phone}</p>}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1031,8 +1056,8 @@ export default function Verification() {
                   {initials(selected.lead?.name || selected.title)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-bold text-lg tracking-tight truncate">{selected.lead?.name || selected.title}</h3>
-                  <p className="text-emerald-300/70 text-sm font-medium">{selected.lead?.phone}</p>
+                  <h3 className="text-white font-bold text-lg tracking-tight truncate">{selected.name || selected.lead?.name || selected.title}</h3>
+                  <p className="text-emerald-300/70 text-sm font-medium">{selected.phone || selected.lead?.phone}</p>
                 </div>
               </div>
             </div>
