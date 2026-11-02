@@ -666,12 +666,14 @@ export default function TelecallingDesk() {
 
             <div className="pt-2">
               <a
-                href="/downloads/triven-calling-tracker.apk"
+                href="https://expo.dev/artifacts/eas/8OV14tQjZzHMTh-vQqRuQb8WWmwRNhAiimC8FTWVlCE.apk"
+                target="_blank"
+                rel="noreferrer"
                 download="triven-calling-tracker.apk"
                 className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition"
               >
                 <Download className="w-5 h-5" />
-                Download APK Directly (v1.0.0)
+                Download Auto-Sync APK (v1.0.1)
               </a>
             </div>
           </div>
