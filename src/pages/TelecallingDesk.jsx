@@ -149,6 +149,12 @@ export default function TelecallingDesk() {
   useEffect(() => {
     setLoading(true);
     refreshAll().finally(() => setLoading(false));
+
+    // Auto-refresh every 30s so Admin CRM always stays updated with staff calls
+    const liveInterval = setInterval(() => {
+      refreshAll();
+    }, 30000);
+    return () => clearInterval(liveInterval);
   }, [timeFilter, deptFilter]);
 
   useEffect(() => {
