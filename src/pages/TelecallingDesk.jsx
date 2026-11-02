@@ -819,35 +819,44 @@ export default function TelecallingDesk() {
 
             {/* Quick Metrics Bar inside Modal */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-gray-50/30 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800">
-              <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Total Dialed</div>
+              <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-900/40">
+                <div className="text-[11px] text-blue-600 dark:text-blue-400 font-bold">Total Dialed (Outgoing)</div>
                 <div className="text-base font-bold text-gray-900 dark:text-white">
                   {selectedStaff.dialedCalls !== undefined ? selectedStaff.dialedCalls : ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0))}
                 </div>
+                <div className="text-[10px] text-gray-400 font-medium">
+                  {selectedStaff.connectedCalls || 0} Connected + {selectedStaff.cnpCalls || 0} CNP
+                </div>
               </div>
               <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-900/40">
-                <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Connected</div>
+                <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">Connected (Talked)</div>
                 <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">
                   {selectedStaff.connectedCalls || 0}
                 </div>
+                <div className="text-[10px] text-emerald-600/80 font-medium">
+                  {Math.round(((selectedStaff.connectedCalls || 0) / (selectedStaff.dialedCalls || ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0)) || 1)) * 100)}% Connect Rate
+                </div>
               </div>
               <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-900/40">
-                <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Not Picked (CNP)</div>
+                <div className="text-[11px] text-amber-600 dark:text-amber-400 font-bold">Not Picked (CNP)</div>
                 <div className="text-base font-bold text-amber-600 dark:text-amber-400">
                   {selectedStaff.cnpCalls || 0}
                 </div>
+                <div className="text-[10px] text-amber-600/80 font-medium">Customer didn't answer</div>
               </div>
               <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-rose-200 dark:border-rose-900/40">
-                <div className="text-[11px] text-rose-500 font-medium">Missed Inbound</div>
+                <div className="text-[11px] text-rose-500 font-bold">Inbound Missed</div>
                 <div className="text-base font-bold text-rose-500">
                   {selectedStaff.missedCalls || 0}
                 </div>
+                <div className="text-[10px] text-rose-500/80 font-medium">Customer called employee</div>
               </div>
               <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-900/40">
-                <div className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">Total Talk Time</div>
+                <div className="text-[11px] text-purple-600 dark:text-purple-400 font-bold">Total Talk Time</div>
                 <div className="text-base font-bold text-purple-600 dark:text-purple-400">
                   {fmtDuration(selectedStaff.totalTalkTime)}
                 </div>
+                <div className="text-[10px] text-purple-600/80 font-medium">Avg {fmtDuration(selectedStaff.avgDuration)} / call</div>
               </div>
             </div>
 
@@ -856,10 +865,10 @@ export default function TelecallingDesk() {
               {/* Type Filter Pills */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {[
-                  { id: 'all', label: 'All Calls' },
-                  { id: 'outgoing_connected', label: 'Connected / Talked' },
-                  { id: 'outgoing_cnp', label: 'Not Picked (CNP)' },
-                  { id: 'missed', label: 'Missed Inbound' },
+                  { id: 'all', label: `All Calls (${(selectedStaff.dialedCalls || ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0))) + (selectedStaff.missedCalls || 0)})` },
+                  { id: 'outgoing_connected', label: `Connected (${selectedStaff.connectedCalls || 0})` },
+                  { id: 'outgoing_cnp', label: `Not Picked (${selectedStaff.cnpCalls || 0})` },
+                  { id: 'missed', label: `Missed Inbound (${selectedStaff.missedCalls || 0})` },
                 ].map((f) => (
                   <button
                     key={f.id}
