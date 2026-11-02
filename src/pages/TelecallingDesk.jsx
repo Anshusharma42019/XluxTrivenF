@@ -47,6 +47,7 @@ export default function TelecallingDesk() {
   const [staffCustomStart, setStaffCustomStart] = useState('');
   const [staffCustomEnd, setStaffCustomEnd] = useState('');
   const [staffStats, setStaffStats] = useState(null);
+  const [missedSubFilter, setMissedSubFilter] = useState('pending'); // 'pending' | 'all'
   const [copiedPhone, setCopiedPhone] = useState(null);
   const [summary, setSummary] = useState({
     totalCalls: 0,
@@ -292,9 +293,54 @@ export default function TelecallingDesk() {
     }
   }, []);
 
+  // Group and process logs when viewing missed calls (group by customer number & count)
+  const displayedStaffLogs = useMemo(() => {
+    if (staffLogsFilter !== 'missed') {
+      return staffLogs;
+    }
+
+    const groups = {};
+    staffLogs.forEach((log) => {
+      const phone = log.phoneNumber;
+      if (!groups[phone]) {
+        groups[phone] = {
+          ...log,
+          missedCount: 1,
+          allTimestamps: [log.timestamp],
+          isResolved: log.status === 'missed_resolved',
+        };
+      } else {
+        groups[phone].missedCount += 1;
+        groups[phone].allTimestamps.push(log.timestamp);
+        if (log.status === 'missed_resolved') {
+          groups[phone].isResolved = true;
+        }
+      }
+    });
+
+    const list = Object.values(groups);
+    // Auto-detect if staff called back this customer afterwards in logs
+    list.forEach((item) => {
+      const earliestMissed = Math.min(...item.allTimestamps.map((t) => new Date(t).getTime()));
+      const callbackCall = staffLogs.find(
+        (l) => l.phoneNumber === item.phoneNumber && l.callType === 'outgoing' && new Date(l.timestamp).getTime() >= earliestMissed
+      );
+      if (callbackCall) {
+        item.isResolved = true;
+        item.callbackCall = callbackCall;
+      }
+    });
+
+    if (missedSubFilter === 'pending') {
+      return list.filter((item) => !item.isResolved);
+    }
+    return list;
+  }, [staffLogs, staffLogsFilter, missedSubFilter]);
+
   const openStaffCallModal = (agent) => {
     setSelectedStaff(agent);
     setStaffLogsFilter('all');
+    setMissedSubFilter('pending');
     setStaffLogsSearch('');
     const initialScope = timeFilter === 'custom' ? 'custom' : timeFilter;
     setStaffTimeScope(initialScope);
@@ -573,8 +619,16 @@ export default function TelecallingDesk() {
                         <td className="px-4 py-3 text-center text-amber-600 font-medium">
                           {agent.cnpCalls}
                         </td>
-                        <td className="px-4 py-3 text-center text-rose-500 font-medium">
-                          {agent.missedCalls}
+                        <td className="px-4 py-3 text-center font-medium">
+                          {agent.pendingMissedCalls > 0 ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-300">
+                              {agent.pendingMissedCalls} Pending
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">
+                              0 {agent.missedCalls > 0 ? `(${agent.missedCalls} handled)` : ''}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-purple-600 dark:text-purple-400">
                           {fmtDuration(agent.totalTalkTime)}
@@ -967,9 +1021,11 @@ export default function TelecallingDesk() {
                   <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-rose-200 dark:border-rose-900/40">
                     <div className="text-[11px] text-rose-500 font-bold">Inbound Missed</div>
                     <div className="text-base font-bold text-rose-500">
-                      {activeStats.missedCalls}
+                      {(activeStats.pendingMissedCalls !== undefined ? activeStats.pendingMissedCalls : 0)} Pending
                     </div>
-                    <div className="text-[10px] text-rose-500/80 font-medium">Customer called employee</div>
+                    <div className="text-[10px] text-rose-500/80 font-medium">
+                      {(activeStats.resolvedMissedCalls || activeStats.missedCalls || 0)} called back by employee
+                    </div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-900/40">
                     <div className="text-[11px] text-purple-600 dark:text-purple-400 font-bold">Total Talk Time</div>
@@ -999,7 +1055,7 @@ export default function TelecallingDesk() {
                       { id: 'all', label: `All Calls (${(activeStats.dialedCalls || 0) + (activeStats.missedCalls || 0)})` },
                       { id: 'outgoing_connected', label: `Connected (${activeStats.connectedCalls || 0})` },
                       { id: 'outgoing_cnp', label: `Not Picked (${activeStats.cnpCalls || 0})` },
-                      { id: 'missed', label: `Missed Inbound (${activeStats.missedCalls || 0})` },
+                      { id: 'missed', label: activeStats.pendingMissedCalls > 0 ? `Missed Inbound (${activeStats.pendingMissedCalls} Pending)` : `Missed Inbound (${activeStats.missedCalls || 0})` },
                     ].map((f) => (
                       <button
                         key={f.id}
@@ -1094,6 +1150,38 @@ export default function TelecallingDesk() {
               );
             })()}
 
+            {/* Missed Calls Sub-filter Bar: Pending vs Handled */}
+            {staffLogsFilter === 'missed' && (
+              <div className="px-4 py-2 bg-rose-50/60 dark:bg-rose-950/20 border-b border-rose-100 dark:border-rose-900/30 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600 dark:text-gray-300 font-semibold">Missed Filter:</span>
+                  <button
+                    onClick={() => setMissedSubFilter('pending')}
+                    className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                      missedSubFilter === 'pending'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+                    }`}
+                  >
+                    🔴 Pending Callback
+                  </button>
+                  <button
+                    onClick={() => setMissedSubFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                      missedSubFilter === 'all'
+                        ? 'bg-emerald-700 text-white shadow-xs'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+                    }`}
+                  >
+                    📋 All Missed History
+                  </button>
+                </div>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                  {missedSubFilter === 'pending' ? 'Calls staff has NOT yet dialed back' : 'Showing all missed callers with total attempts & callback status'}
+                </div>
+              </div>
+            )}
+
             {/* Calls List / Table */}
             <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
               {staffLogsLoading ? (
@@ -1101,11 +1189,27 @@ export default function TelecallingDesk() {
                   <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" />
                   <span className="text-xs">Loading calls...</span>
                 </div>
-              ) : staffLogs.length === 0 ? (
+              ) : displayedStaffLogs.length === 0 ? (
                 <div className="py-12 text-center text-gray-400 space-y-2">
-                  <PhoneOff className="w-8 h-8 mx-auto text-gray-300 dark:text-gray-600" />
-                  <div className="text-sm font-medium">No calls found for this filter</div>
-                  <p className="text-xs text-gray-400">Try changing the filter or time scope.</p>
+                  {staffLogsFilter === 'missed' && missedSubFilter === 'pending' ? (
+                    <div className="space-y-1">
+                      <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mx-auto text-xl font-bold">
+                        ✓
+                      </div>
+                      <div className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                        No Pending Missed Calls!
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        All incoming missed calls were successfully called back by {selectedStaff.name}.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <PhoneOff className="w-8 h-8 mx-auto text-gray-300 dark:text-gray-600" />
+                      <div className="text-sm font-medium">No calls found for this filter</div>
+                      <p className="text-xs text-gray-400">Try changing the filter or time scope.</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse">
@@ -1115,11 +1219,11 @@ export default function TelecallingDesk() {
                       <th className="px-4 py-2.5 text-center">Call Type</th>
                       <th className="px-4 py-2.5 text-center">Duration</th>
                       <th className="px-4 py-2.5 text-right">Time & Date</th>
-                      <th className="px-4 py-2.5 text-center">Alerts</th>
+                      <th className="px-4 py-2.5 text-center">{staffLogsFilter === 'missed' ? 'Callback Status' : 'Alerts'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-xs">
-                    {staffLogs.map((log) => {
+                    {displayedStaffLogs.map((log) => {
                       const isConnected = log.callType === 'outgoing' && log.duration > 0;
                       const isCNP = log.callType === 'outgoing' && log.duration === 0;
                       const isMissed = log.callType === 'missed';
@@ -1160,9 +1264,16 @@ export default function TelecallingDesk() {
                               </span>
                             )}
                             {isMissed && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-300 dark:border-rose-800">
-                                MISSED
-                              </span>
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-300 dark:border-rose-800 flex items-center gap-1">
+                                  <span>MISSED</span>
+                                  {log.missedCount > 1 && (
+                                    <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[9px] font-black">
+                                      {log.missedCount}x Calls
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
                             )}
                             {!isConnected && !isCNP && !isMissed && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
@@ -1188,7 +1299,17 @@ export default function TelecallingDesk() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {log.isDuplicate ? (
+                            {staffLogsFilter === 'missed' ? (
+                              log.isResolved ? (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  ✓ Called Back
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 animate-pulse">
+                                  Pending Callback
+                                </span>
+                              )
+                            ) : log.isDuplicate ? (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center gap-1 mx-auto w-max" title="Duplicate Call within 48h">
                                 <AlertTriangle className="w-2.5 h-2.5" />
                                 Duplicate
