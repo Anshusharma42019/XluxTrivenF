@@ -36,6 +36,7 @@ const StaffActivity = lazy(() => import('./pages/StaffActivity'));
 const Account = lazy(() => import('./pages/Account'));
 const SupportDashboard = lazy(() => import('./pages/SupportDashboard'));
 const LogisticsDashboard = lazy(() => import('./pages/LogisticsDashboard'));
+const TelecallingDesk = lazy(() => import('./pages/TelecallingDesk'));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-full min-h-[300px]">
@@ -83,6 +84,9 @@ function AppRoutes() {
         } />
         <Route path="tasks" element={
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'support']}><Tasks /></ProtectedRoute>
+        } />
+        <Route path="telecalling-desk" element={
+          <ProtectedRoute roles={['admin', 'manager', 'sales', 'support']}><TelecallingDesk /></ProtectedRoute>
         } />
         <Route path="attendance" element={
           <ProtectedRoute roles={['admin', 'manager', 'sales', 'support', 'logistics']}><Attendance /></ProtectedRoute>

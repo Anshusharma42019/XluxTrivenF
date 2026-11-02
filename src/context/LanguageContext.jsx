@@ -6,6 +6,8 @@ const translations = {
   en: {
     // Sidebar / Navigation
     'Dashboard': 'Dashboard',
+    'Telecalling Desk': 'Telecalling Desk',
+    'Calling Desk': 'Calling Desk',
     'Support Retention': 'Support Retention',
     'Leads': 'Leads',
     'Action Required': 'Action Required',
@@ -109,6 +111,8 @@ const translations = {
   hi_disabled: {
     // Sidebar / Navigation
     'Dashboard': 'डैशबोर्ड',
+    'Telecalling Desk': 'टेलीकॉलिंग डेस्क',
+    'Calling Desk': 'कॉलिंग डेस्क',
     'Leads': 'लीड्स',
     'Action Required': 'कार्रवाई आवश्यक',
     'CNP': 'सीएनपी (CNP)',
