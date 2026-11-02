@@ -32,6 +32,7 @@ export default function TelecallingDesk() {
   // Data states
   const [summary, setSummary] = useState({
     totalCalls: 0,
+    dialedCalls: 0,
     connectedCalls: 0,
     cnpCalls: 0,
     missedCalls: 0,
@@ -237,7 +238,7 @@ export default function TelecallingDesk() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard
           label="Total Calls Dialed"
-          value={summary.totalCalls || 0}
+          value={summary.dialedCalls !== undefined ? summary.dialedCalls : ((summary.connectedCalls || 0) + (summary.cnpCalls || 0))}
           color="border-blue-500"
           icon={<Phone className="w-5 h-5 text-blue-500" />}
         />
@@ -364,7 +365,8 @@ export default function TelecallingDesk() {
                   </tr>
                 ) : (
                   leaderboard.map((agent, index) => {
-                    const connectRate = agent.totalCalls > 0 ? Math.round((agent.connectedCalls / agent.totalCalls) * 100) : 0;
+                    const dialed = agent.dialedCalls !== undefined ? agent.dialedCalls : ((agent.connectedCalls || 0) + (agent.cnpCalls || 0));
+                    const connectRate = dialed > 0 ? Math.round((agent.connectedCalls / dialed) * 100) : 0;
                     return (
                       <tr key={agent.staffId} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40 transition">
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white flex items-center gap-3">
@@ -386,7 +388,7 @@ export default function TelecallingDesk() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center font-bold text-gray-800 dark:text-gray-200">
-                          {agent.totalCalls}
+                          {dialed}
                         </td>
                         <td className="px-4 py-3 text-center text-emerald-600 font-semibold">
                           {agent.connectedCalls} ({connectRate}%)
