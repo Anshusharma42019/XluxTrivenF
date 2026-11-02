@@ -41,7 +41,12 @@ export default function TelecallingDesk() {
   const [staffLogsTotal, setStaffLogsTotal] = useState(0);
   const [staffLogsFilter, setStaffLogsFilter] = useState('all');
   const [staffLogsSearch, setStaffLogsSearch] = useState('');
-  const [staffTimeScope, setStaffTimeScope] = useState('selected');
+  const [staffTimeScope, setStaffTimeScope] = useState('today');
+  const [mainCustomStart, setMainCustomStart] = useState('');
+  const [mainCustomEnd, setMainCustomEnd] = useState('');
+  const [staffCustomStart, setStaffCustomStart] = useState('');
+  const [staffCustomEnd, setStaffCustomEnd] = useState('');
+  const [staffStats, setStaffStats] = useState(null);
   const [copiedPhone, setCopiedPhone] = useState(null);
   const [summary, setSummary] = useState({
     totalCalls: 0,
@@ -60,34 +65,70 @@ export default function TelecallingDesk() {
   const [page, setPage] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0);
 
-  // Calculate Date Filters
-  const getDateRange = useCallback(() => {
+  const getTodayInputStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getScopeLabel = (scope, start, end) => {
+    if (scope === 'today') return 'Today';
+    if (scope === 'yesterday') return 'Yesterday';
+    if (scope === 'week') return 'Last 7 Days';
+    if (scope === 'this_month') return 'This Month';
+    if (scope === 'last_month') return 'Last Month';
+    if (scope === 'custom') return `${start || 'Start'} to ${end || 'End'}`;
+    return 'All-Time History';
+  };
+
+  // Comprehensive Date Range Helper
+  const computeDateRange = (filterType, customStart, customEnd) => {
     const now = new Date();
     let startDate = null;
     let endDate = null;
 
-    if (timeFilter === 'today') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    if (filterType === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
-    } else if (timeFilter === 'yesterday') {
+    } else if (filterType === 'yesterday') {
       const y = new Date(now);
       y.setDate(y.getDate() - 1);
-      startDate = new Date(y.getFullYear(), y.getMonth(), y.getDate()).toISOString();
+      startDate = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0).toISOString();
       endDate = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999).toISOString();
-    } else if (timeFilter === 'week') {
+    } else if (filterType === 'week') {
       const w = new Date(now);
       w.setDate(w.getDate() - 7);
+      w.setHours(0, 0, 0, 0);
       startDate = w.toISOString();
-      endDate = now.toISOString();
-    } else if (timeFilter === 'month') {
-      const m = new Date(now);
-      m.setDate(m.getDate() - 30);
-      startDate = m.toISOString();
-      endDate = now.toISOString();
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+    } else if (filterType === 'this_month' || filterType === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).toISOString();
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+    } else if (filterType === 'last_month') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0).toISOString();
+      endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+    } else if (filterType === 'custom') {
+      if (customStart) {
+        const s = new Date(customStart + 'T00:00:00');
+        startDate = s.toISOString();
+      }
+      if (customEnd) {
+        const e = new Date(customEnd + 'T23:59:59.999');
+        endDate = e.toISOString();
+      }
+    } else if (filterType === 'all') {
+      startDate = null;
+      endDate = null;
     }
 
     return { startDate, endDate };
-  }, [timeFilter]);
+  };
+
+  const getDateRange = useCallback(() => {
+    return computeDateRange(timeFilter, mainCustomStart, mainCustomEnd);
+  }, [timeFilter, mainCustomStart, mainCustomEnd]);
 
   // Load Overview Stats & Leaderboard
   const loadStats = useCallback(async () => {
@@ -160,6 +201,7 @@ export default function TelecallingDesk() {
   };
 
   useEffect(() => {
+    if (timeFilter === 'custom' && (!mainCustomStart || !mainCustomEnd)) return;
     setLoading(true);
     refreshAll().finally(() => setLoading(false));
 
@@ -168,7 +210,7 @@ export default function TelecallingDesk() {
       refreshAll();
     }, 30000);
     return () => clearInterval(liveInterval);
-  }, [timeFilter, deptFilter]);
+  }, [timeFilter, deptFilter, mainCustomStart, mainCustomEnd]);
 
   useEffect(() => {
     if (tab === 'logs') loadLogs();
@@ -187,11 +229,11 @@ export default function TelecallingDesk() {
     return `${s}s`;
   };
 
-  const loadStaffLogs = useCallback(async (staff, pageNum = 1, filterType = 'all', searchTxt = '', scope = 'selected') => {
+  const loadStaffLogs = useCallback(async (staff, pageNum = 1, filterType = 'all', searchTxt = '', scope = 'today', customStart = '', customEnd = '') => {
     if (!staff) return;
     setStaffLogsLoading(true);
     try {
-      const { startDate, endDate } = scope === 'selected' ? getDateRange() : { startDate: undefined, endDate: undefined };
+      const { startDate, endDate } = computeDateRange(scope, customStart, customEnd);
       let callType = undefined;
 
       if (filterType === 'outgoing_connected' || filterType === 'outgoing_cnp') {
@@ -200,15 +242,23 @@ export default function TelecallingDesk() {
         callType = 'missed';
       }
 
-      const res = await callSvc.getCallLogs({
-        page: pageNum,
-        limit: 100,
-        staffId: staff.staffId,
-        callType,
-        search: searchTxt.trim() || undefined,
-        startDate,
-        endDate,
-      });
+      // Parallel fetch: logs list + aggregated metrics for this exact date scope
+      const [res, statsRes] = await Promise.all([
+        callSvc.getCallLogs({
+          page: pageNum,
+          limit: 150,
+          staffId: staff.staffId,
+          callType,
+          search: searchTxt.trim() || undefined,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        }),
+        callSvc.getCallingStats({
+          staffId: staff.staffId,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        }),
+      ]);
 
       if (res.data?.data) {
         let list = res.data.data.logs || [];
@@ -221,19 +271,49 @@ export default function TelecallingDesk() {
         setStaffLogsTotal(res.data.data.total || 0);
         setStaffLogsPage(pageNum);
       }
+
+      if (statsRes.data?.data?.summary) {
+        const s = statsRes.data.data.summary;
+        const dialedCalls = s.dialedCalls !== undefined ? s.dialedCalls : ((s.connectedCalls || 0) + (s.cnpCalls || 0));
+        const avgDuration = s.connectedCalls > 0 ? Math.round((s.totalTalkTime || 0) / s.connectedCalls) : 0;
+        setStaffStats({
+          dialedCalls,
+          connectedCalls: s.connectedCalls || 0,
+          cnpCalls: s.cnpCalls || 0,
+          missedCalls: s.missedCalls || 0,
+          totalTalkTime: s.totalTalkTime || 0,
+          avgDuration,
+        });
+      }
     } catch (err) {
       console.error('[TelecallingDesk] Error fetching staff logs:', err);
     } finally {
       setStaffLogsLoading(false);
     }
-  }, [getDateRange]);
+  }, []);
 
   const openStaffCallModal = (agent) => {
     setSelectedStaff(agent);
     setStaffLogsFilter('all');
     setStaffLogsSearch('');
-    setStaffTimeScope('selected');
-    loadStaffLogs(agent, 1, 'all', '', 'selected');
+    const initialScope = timeFilter === 'custom' ? 'custom' : timeFilter;
+    setStaffTimeScope(initialScope);
+    const startStr = mainCustomStart || getTodayInputStr();
+    const endStr = mainCustomEnd || getTodayInputStr();
+    setStaffCustomStart(startStr);
+    setStaffCustomEnd(endStr);
+
+    const initialDialed = agent.dialedCalls !== undefined ? agent.dialedCalls : ((agent.connectedCalls || 0) + (agent.cnpCalls || 0));
+    setStaffStats({
+      dialedCalls: initialDialed,
+      connectedCalls: agent.connectedCalls || 0,
+      cnpCalls: agent.cnpCalls || 0,
+      missedCalls: agent.missedCalls || 0,
+      totalTalkTime: agent.totalTalkTime || 0,
+      avgDuration: agent.avgDuration || 0,
+    });
+
+    loadStaffLogs(agent, 1, 'all', '', initialScope, startStr, endStr);
   };
 
   const handleResolveMissed = async (id) => {
@@ -281,14 +361,42 @@ export default function TelecallingDesk() {
           {/* Time Filter */}
           <select
             value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setTimeFilter(val);
+              if (val === 'custom' && (!mainCustomStart || !mainCustomEnd)) {
+                setMainCustomStart(getTodayInputStr());
+                setMainCustomEnd(getTodayInputStr());
+              }
+            }}
             className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
           >
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
             <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
+            <option value="this_month">This Month</option>
+            <option value="last_month">Last Month</option>
+            <option value="custom">📅 Custom Range</option>
           </select>
+
+          {timeFilter === 'custom' && (
+            <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 px-2.5 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 shadow-sm text-xs">
+              <span className="text-gray-400 font-medium">From:</span>
+              <input
+                type="date"
+                value={mainCustomStart}
+                onChange={(e) => setMainCustomStart(e.target.value)}
+                className="px-2 py-0.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none"
+              />
+              <span className="text-gray-400 font-medium">To:</span>
+              <input
+                type="date"
+                value={mainCustomEnd}
+                onChange={(e) => setMainCustomEnd(e.target.value)}
+                className="px-2 py-0.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none"
+              />
+            </div>
+          )}
 
           {/* Refresh Button */}
           <button
@@ -805,7 +913,7 @@ export default function TelecallingDesk() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Showing calls made by {selectedStaff.name} ({staffTimeScope === 'selected' ? `Filtered by ${timeFilter}` : 'All-Time History'})
+                    Showing calls made by {selectedStaff.name} ({getScopeLabel(staffTimeScope, staffCustomStart, staffCustomEnd)})
                   </p>
                 </div>
               </div>
@@ -818,106 +926,173 @@ export default function TelecallingDesk() {
             </div>
 
             {/* Quick Metrics Bar inside Modal */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-gray-50/30 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800">
-              <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-900/40">
-                <div className="text-[11px] text-blue-600 dark:text-blue-400 font-bold">Total Dialed (Outgoing)</div>
-                <div className="text-base font-bold text-gray-900 dark:text-white">
-                  {selectedStaff.dialedCalls !== undefined ? selectedStaff.dialedCalls : ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0))}
+            {(() => {
+              const activeStats = staffStats || {
+                dialedCalls: selectedStaff.dialedCalls !== undefined ? selectedStaff.dialedCalls : ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0)),
+                connectedCalls: selectedStaff.connectedCalls || 0,
+                cnpCalls: selectedStaff.cnpCalls || 0,
+                missedCalls: selectedStaff.missedCalls || 0,
+                totalTalkTime: selectedStaff.totalTalkTime || 0,
+                avgDuration: selectedStaff.avgDuration || 0,
+              };
+              const connectRate = activeStats.dialedCalls > 0 ? Math.round((activeStats.connectedCalls / activeStats.dialedCalls) * 100) : 0;
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-gray-50/30 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800">
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-900/40">
+                    <div className="text-[11px] text-blue-600 dark:text-blue-400 font-bold">Total Dialed (Outgoing)</div>
+                    <div className="text-base font-bold text-gray-900 dark:text-white">
+                      {activeStats.dialedCalls}
+                    </div>
+                    <div className="text-[10px] text-gray-400 font-medium">
+                      {activeStats.connectedCalls} Connected + {activeStats.cnpCalls} CNP
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-900/40">
+                    <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">Connected (Talked)</div>
+                    <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                      {activeStats.connectedCalls}
+                    </div>
+                    <div className="text-[10px] text-emerald-600/80 font-medium">
+                      {connectRate}% Connect Rate
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-900/40">
+                    <div className="text-[11px] text-amber-600 dark:text-amber-400 font-bold">Not Picked (CNP)</div>
+                    <div className="text-base font-bold text-amber-600 dark:text-amber-400">
+                      {activeStats.cnpCalls}
+                    </div>
+                    <div className="text-[10px] text-amber-600/80 font-medium">Customer didn't answer</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-rose-200 dark:border-rose-900/40">
+                    <div className="text-[11px] text-rose-500 font-bold">Inbound Missed</div>
+                    <div className="text-base font-bold text-rose-500">
+                      {activeStats.missedCalls}
+                    </div>
+                    <div className="text-[10px] text-rose-500/80 font-medium">Customer called employee</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-900/40">
+                    <div className="text-[11px] text-purple-600 dark:text-purple-400 font-bold">Total Talk Time</div>
+                    <div className="text-base font-bold text-purple-600 dark:text-purple-400">
+                      {fmtDuration(activeStats.totalTalkTime)}
+                    </div>
+                    <div className="text-[10px] text-purple-600/80 font-medium">Avg {fmtDuration(activeStats.avgDuration)} / call</div>
+                  </div>
                 </div>
-                <div className="text-[10px] text-gray-400 font-medium">
-                  {selectedStaff.connectedCalls || 0} Connected + {selectedStaff.cnpCalls || 0} CNP
-                </div>
-              </div>
-              <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-900/40">
-                <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">Connected (Talked)</div>
-                <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">
-                  {selectedStaff.connectedCalls || 0}
-                </div>
-                <div className="text-[10px] text-emerald-600/80 font-medium">
-                  {Math.round(((selectedStaff.connectedCalls || 0) / (selectedStaff.dialedCalls || ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0)) || 1)) * 100)}% Connect Rate
-                </div>
-              </div>
-              <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-900/40">
-                <div className="text-[11px] text-amber-600 dark:text-amber-400 font-bold">Not Picked (CNP)</div>
-                <div className="text-base font-bold text-amber-600 dark:text-amber-400">
-                  {selectedStaff.cnpCalls || 0}
-                </div>
-                <div className="text-[10px] text-amber-600/80 font-medium">Customer didn't answer</div>
-              </div>
-              <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-rose-200 dark:border-rose-900/40">
-                <div className="text-[11px] text-rose-500 font-bold">Inbound Missed</div>
-                <div className="text-base font-bold text-rose-500">
-                  {selectedStaff.missedCalls || 0}
-                </div>
-                <div className="text-[10px] text-rose-500/80 font-medium">Customer called employee</div>
-              </div>
-              <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-900/40">
-                <div className="text-[11px] text-purple-600 dark:text-purple-400 font-bold">Total Talk Time</div>
-                <div className="text-base font-bold text-purple-600 dark:text-purple-400">
-                  {fmtDuration(selectedStaff.totalTalkTime)}
-                </div>
-                <div className="text-[10px] text-purple-600/80 font-medium">Avg {fmtDuration(selectedStaff.avgDuration)} / call</div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Filters & Search Toolbar inside Modal */}
-            <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-gray-900">
-              {/* Type Filter Pills */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[
-                  { id: 'all', label: `All Calls (${(selectedStaff.dialedCalls || ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0))) + (selectedStaff.missedCalls || 0)})` },
-                  { id: 'outgoing_connected', label: `Connected (${selectedStaff.connectedCalls || 0})` },
-                  { id: 'outgoing_cnp', label: `Not Picked (${selectedStaff.cnpCalls || 0})` },
-                  { id: 'missed', label: `Missed Inbound (${selectedStaff.missedCalls || 0})` },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => {
-                      setStaffLogsFilter(f.id);
-                      loadStaffLogs(selectedStaff, 1, f.id, staffLogsSearch, staffTimeScope);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                      staffLogsFilter === f.id
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+            {(() => {
+              const activeStats = staffStats || {
+                dialedCalls: selectedStaff.dialedCalls !== undefined ? selectedStaff.dialedCalls : ((selectedStaff.connectedCalls || 0) + (selectedStaff.cnpCalls || 0)),
+                connectedCalls: selectedStaff.connectedCalls || 0,
+                cnpCalls: selectedStaff.cnpCalls || 0,
+                missedCalls: selectedStaff.missedCalls || 0,
+              };
 
-              {/* Time Scope & Search */}
-              <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
-                <select
-                  value={staffTimeScope}
-                  onChange={(e) => {
-                    const newScope = e.target.value;
-                    setStaffTimeScope(newScope);
-                    loadStaffLogs(selectedStaff, 1, staffLogsFilter, staffLogsSearch, newScope);
-                  }}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
-                >
-                  <option value="selected">Filtered by {timeFilter}</option>
-                  <option value="all">All-Time History</option>
-                </select>
+              return (
+                <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-gray-900">
+                  {/* Type Filter Pills */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: `All Calls (${(activeStats.dialedCalls || 0) + (activeStats.missedCalls || 0)})` },
+                      { id: 'outgoing_connected', label: `Connected (${activeStats.connectedCalls || 0})` },
+                      { id: 'outgoing_cnp', label: `Not Picked (${activeStats.cnpCalls || 0})` },
+                      { id: 'missed', label: `Missed Inbound (${activeStats.missedCalls || 0})` },
+                    ].map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => {
+                          setStaffLogsFilter(f.id);
+                          loadStaffLogs(selectedStaff, 1, f.id, staffLogsSearch, staffTimeScope, staffCustomStart, staffCustomEnd);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                          staffLogsFilter === f.id
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
 
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search phone or name..."
-                    value={staffLogsSearch}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setStaffLogsSearch(val);
-                      loadStaffLogs(selectedStaff, 1, staffLogsFilter, val, staffTimeScope);
-                    }}
-                    className="pl-8 pr-3 py-1.5 rounded-xl text-xs border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44"
-                  />
+                  {/* Time Scope & Search */}
+                  <div className="flex flex-wrap items-center gap-2 flex-1 sm:flex-initial justify-end">
+                    <select
+                      value={staffTimeScope}
+                      onChange={(e) => {
+                        const newScope = e.target.value;
+                        setStaffTimeScope(newScope);
+                        if (newScope === 'custom' && (!staffCustomStart || !staffCustomEnd)) {
+                          const today = getTodayInputStr();
+                          setStaffCustomStart(today);
+                          setStaffCustomEnd(today);
+                          loadStaffLogs(selectedStaff, 1, staffLogsFilter, staffLogsSearch, 'custom', today, today);
+                        } else {
+                          loadStaffLogs(selectedStaff, 1, staffLogsFilter, staffLogsSearch, newScope, staffCustomStart, staffCustomEnd);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 focus:outline-none"
+                    >
+                      <option value="today">Today</option>
+                      <option value="yesterday">Yesterday</option>
+                      <option value="week">Last 7 Days</option>
+                      <option value="this_month">This Month</option>
+                      <option value="last_month">Last Month</option>
+                      <option value="custom">📅 Custom Range</option>
+                      <option value="all">All-Time History</option>
+                    </select>
+
+                    {staffTimeScope === 'custom' && (
+                      <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/80 px-2 py-1 rounded-xl border border-gray-200 dark:border-gray-700 text-xs">
+                        <input
+                          type="date"
+                          value={staffCustomStart}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setStaffCustomStart(val);
+                            if (val && staffCustomEnd) {
+                              loadStaffLogs(selectedStaff, 1, staffLogsFilter, staffLogsSearch, 'custom', val, staffCustomEnd);
+                            }
+                          }}
+                          className="px-2 py-0.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none"
+                        />
+                        <span className="text-gray-400">to</span>
+                        <input
+                          type="date"
+                          value={staffCustomEnd}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setStaffCustomEnd(val);
+                            if (staffCustomStart && val) {
+                              loadStaffLogs(selectedStaff, 1, staffLogsFilter, staffLogsSearch, 'custom', staffCustomStart, val);
+                            }
+                          }}
+                          className="px-2 py-0.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search phone or name..."
+                        value={staffLogsSearch}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setStaffLogsSearch(val);
+                          loadStaffLogs(selectedStaff, 1, staffLogsFilter, val, staffTimeScope, staffCustomStart, staffCustomEnd);
+                        }}
+                        className="pl-8 pr-3 py-1.5 rounded-xl text-xs border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Calls List / Table */}
             <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
