@@ -279,9 +279,13 @@ export default function TelecallingDesk() {
         const avgDuration = s.connectedCalls > 0 ? Math.round((s.totalTalkTime || 0) / s.connectedCalls) : 0;
         setStaffStats({
           dialedCalls,
+          totalDialAttempts: s.totalDialAttempts || dialedCalls,
           connectedCalls: s.connectedCalls || 0,
           cnpCalls: s.cnpCalls || 0,
+          totalCnpAttempts: s.totalCnpAttempts || s.cnpCalls || 0,
           missedCalls: s.missedCalls || 0,
+          pendingMissedCalls: s.pendingMissedCalls || 0,
+          resolvedMissedCalls: s.resolvedMissedCalls || 0,
           totalTalkTime: s.totalTalkTime || 0,
           avgDuration,
         });
@@ -293,48 +297,123 @@ export default function TelecallingDesk() {
     }
   }, []);
 
-  // Group and process logs when viewing missed calls (group by customer number & count)
+  // Group and process logs:
+  // 1. Missed calls grouped by customer number
+  // 2. Not Picked (CNP) calls grouped by customer number (3 attempts on 1 number = 1 row with attempt badge)
+  // 3. All Calls grouped for repeated CNP calls to same customer
   const displayedStaffLogs = useMemo(() => {
-    if (staffLogsFilter !== 'missed') {
-      return staffLogs;
-    }
-
-    const groups = {};
-    staffLogs.forEach((log) => {
-      const phone = log.phoneNumber;
-      if (!groups[phone]) {
-        groups[phone] = {
-          ...log,
-          missedCount: 1,
-          allTimestamps: [log.timestamp],
-          isResolved: log.status === 'missed_resolved',
-        };
-      } else {
-        groups[phone].missedCount += 1;
-        groups[phone].allTimestamps.push(log.timestamp);
-        if (log.status === 'missed_resolved') {
-          groups[phone].isResolved = true;
+    // A. Missed Calls grouping
+    if (staffLogsFilter === 'missed') {
+      const groups = {};
+      staffLogs.forEach((log) => {
+        const phone = log.phoneNumber;
+        if (!groups[phone]) {
+          groups[phone] = {
+            ...log,
+            missedCount: 1,
+            allTimestamps: [log.timestamp],
+            isResolved: log.status === 'missed_resolved',
+          };
+        } else {
+          groups[phone].missedCount += 1;
+          groups[phone].allTimestamps.push(log.timestamp);
+          if (log.status === 'missed_resolved') {
+            groups[phone].isResolved = true;
+          }
         }
-      }
-    });
+      });
 
-    const list = Object.values(groups);
-    // Auto-detect if staff called back this customer afterwards in logs
-    list.forEach((item) => {
-      const earliestMissed = Math.min(...item.allTimestamps.map((t) => new Date(t).getTime()));
-      const callbackCall = staffLogs.find(
-        (l) => l.phoneNumber === item.phoneNumber && l.callType === 'outgoing' && new Date(l.timestamp).getTime() >= earliestMissed
-      );
-      if (callbackCall) {
-        item.isResolved = true;
-        item.callbackCall = callbackCall;
-      }
-    });
+      const list = Object.values(groups);
+      // Auto-detect if staff called back this customer afterwards in logs
+      list.forEach((item) => {
+        const earliestMissed = Math.min(...item.allTimestamps.map((t) => new Date(t).getTime()));
+        const callbackCall = staffLogs.find(
+          (l) => l.phoneNumber === item.phoneNumber && l.callType === 'outgoing' && new Date(l.timestamp).getTime() >= earliestMissed
+        );
+        if (callbackCall) {
+          item.isResolved = true;
+          item.callbackCall = callbackCall;
+        }
+      });
 
-    if (missedSubFilter === 'pending') {
-      return list.filter((item) => !item.isResolved);
+      if (missedSubFilter === 'pending') {
+        return list.filter((item) => !item.isResolved);
+      }
+      return list;
     }
-    return list;
+
+    // B. Not Picked (CNP) grouping: 1 number called up to 3 times = 1 row with badge (e.g. 3x Attempts)
+    if (staffLogsFilter === 'outgoing_cnp') {
+      const groups = {};
+      staffLogs.forEach((log) => {
+        const phone = log.phoneNumber;
+        if (!groups[phone]) {
+          groups[phone] = {
+            ...log,
+            attemptCount: 1,
+            allTimestamps: [log.timestamp],
+            latestTimestamp: log.timestamp,
+            earliestTimestamp: log.timestamp,
+          };
+        } else {
+          groups[phone].attemptCount += 1;
+          groups[phone].allTimestamps.push(log.timestamp);
+          if (new Date(log.timestamp).getTime() > new Date(groups[phone].latestTimestamp).getTime()) {
+            groups[phone].latestTimestamp = log.timestamp;
+            groups[phone].timestamp = log.timestamp;
+            groups[phone]._id = log._id;
+          }
+          if (new Date(log.timestamp).getTime() < new Date(groups[phone].earliestTimestamp).getTime()) {
+            groups[phone].earliestTimestamp = log.timestamp;
+          }
+        }
+      });
+      return Object.values(groups).sort(
+        (a, b) => new Date(b.latestTimestamp).getTime() - new Date(a.latestTimestamp).getTime()
+      );
+    }
+
+    // C. All Calls view: group repeated CNP calls from the same customer so duplicates don't clutter the view
+    if (staffLogsFilter === 'all') {
+      const cnpGroups = {};
+      const nonCnpList = [];
+
+      staffLogs.forEach((log) => {
+        const isCNP = log.callType === 'outgoing' && log.duration === 0;
+        if (!isCNP) {
+          nonCnpList.push(log);
+        } else {
+          const phone = log.phoneNumber;
+          if (!cnpGroups[phone]) {
+            cnpGroups[phone] = {
+              ...log,
+              attemptCount: 1,
+              allTimestamps: [log.timestamp],
+              latestTimestamp: log.timestamp,
+              earliestTimestamp: log.timestamp,
+            };
+          } else {
+            cnpGroups[phone].attemptCount += 1;
+            cnpGroups[phone].allTimestamps.push(log.timestamp);
+            if (new Date(log.timestamp).getTime() > new Date(cnpGroups[phone].latestTimestamp).getTime()) {
+              cnpGroups[phone].latestTimestamp = log.timestamp;
+              cnpGroups[phone].timestamp = log.timestamp;
+              cnpGroups[phone]._id = log._id;
+            }
+            if (new Date(log.timestamp).getTime() < new Date(cnpGroups[phone].earliestTimestamp).getTime()) {
+              cnpGroups[phone].earliestTimestamp = log.timestamp;
+            }
+          }
+        }
+      });
+
+      const combined = [...nonCnpList, ...Object.values(cnpGroups)];
+      return combined.sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+    }
+
+    return staffLogs;
   }, [staffLogs, staffLogsFilter, missedSubFilter]);
 
   const openStaffCallModal = (agent) => {
@@ -352,9 +431,13 @@ export default function TelecallingDesk() {
     const initialDialed = agent.dialedCalls !== undefined ? agent.dialedCalls : ((agent.connectedCalls || 0) + (agent.cnpCalls || 0));
     setStaffStats({
       dialedCalls: initialDialed,
+      totalDialAttempts: agent.totalDialAttempts || initialDialed,
       connectedCalls: agent.connectedCalls || 0,
       cnpCalls: agent.cnpCalls || 0,
+      totalCnpAttempts: agent.totalCnpAttempts || agent.cnpCalls || 0,
       missedCalls: agent.missedCalls || 0,
+      pendingMissedCalls: agent.pendingMissedCalls || 0,
+      resolvedMissedCalls: agent.resolvedMissedCalls || 0,
       totalTalkTime: agent.totalTalkTime || 0,
       avgDuration: agent.avgDuration || 0,
     });
@@ -611,13 +694,19 @@ export default function TelecallingDesk() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center font-bold text-gray-800 dark:text-gray-200">
-                          {dialed}
+                          <div>{dialed}</div>
+                          {agent.totalDialAttempts && agent.totalDialAttempts > dialed && (
+                            <div className="text-[10px] text-gray-400 font-normal">{agent.totalDialAttempts} dials</div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center text-emerald-600 font-semibold">
                           {agent.connectedCalls} ({connectRate}%)
                         </td>
                         <td className="px-4 py-3 text-center text-amber-600 font-medium">
-                          {agent.cnpCalls}
+                          <div className="font-bold">{agent.cnpCalls}</div>
+                          {agent.totalCnpAttempts && agent.totalCnpAttempts > agent.cnpCalls && (
+                            <div className="text-[10px] text-amber-500/80 font-normal">{agent.totalCnpAttempts} attempts</div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center font-medium">
                           {agent.pendingMissedCalls > 0 ? (
@@ -1000,6 +1089,7 @@ export default function TelecallingDesk() {
                     </div>
                     <div className="text-[10px] text-gray-400 font-medium">
                       {activeStats.connectedCalls} Connected + {activeStats.cnpCalls} CNP
+                      {activeStats.totalDialAttempts && activeStats.totalDialAttempts > activeStats.dialedCalls ? ` (${activeStats.totalDialAttempts} dials)` : ''}
                     </div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-900/40">
@@ -1016,7 +1106,11 @@ export default function TelecallingDesk() {
                     <div className="text-base font-bold text-amber-600 dark:text-amber-400">
                       {activeStats.cnpCalls}
                     </div>
-                    <div className="text-[10px] text-amber-600/80 font-medium">Customer didn't answer</div>
+                    <div className="text-[10px] text-amber-600/80 font-medium">
+                      {activeStats.totalCnpAttempts && activeStats.totalCnpAttempts > activeStats.cnpCalls
+                        ? `${activeStats.totalCnpAttempts} total attempts (${activeStats.cnpCalls} leads)`
+                        : "Customer didn't answer"}
+                    </div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-rose-200 dark:border-rose-900/40">
                     <div className="text-[11px] text-rose-500 font-bold">Inbound Missed</div>
@@ -1259,9 +1353,16 @@ export default function TelecallingDesk() {
                               </span>
                             )}
                             {isCNP && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-300 dark:border-amber-800">
-                                NOT PICKED
-                              </span>
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                                  <span>NOT PICKED</span>
+                                  {log.attemptCount > 1 && (
+                                    <span className="px-1.5 py-0.2 rounded-full bg-amber-600 text-white text-[9px] font-black">
+                                      {log.attemptCount}x Attempts
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
                             )}
                             {isMissed && (
                               <div className="flex flex-col items-center gap-1">
@@ -1297,6 +1398,11 @@ export default function TelecallingDesk() {
                             <div className="text-[10px] text-gray-400">
                               {new Date(log.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                             </div>
+                            {log.attemptCount > 1 && log.earliestTimestamp && log.earliestTimestamp !== log.latestTimestamp && (
+                              <div className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">
+                                1st dial: {new Date(log.earliestTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {staffLogsFilter === 'missed' ? (
@@ -1309,6 +1415,10 @@ export default function TelecallingDesk() {
                                   Pending Callback
                                 </span>
                               )
+                            ) : isCNP && log.attemptCount > 1 ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                                {log.attemptCount} dial attempts
+                              </span>
                             ) : log.isDuplicate ? (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center gap-1 mx-auto w-max" title="Duplicate Call within 48h">
                                 <AlertTriangle className="w-2.5 h-2.5" />
@@ -1329,7 +1439,7 @@ export default function TelecallingDesk() {
             {/* Modal Footer */}
             <div className="p-3 bg-gray-50/50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs text-gray-500">
               <div>
-                Showing <strong>{staffLogs.length}</strong> calls logged for {selectedStaff.name}
+                Showing <strong>{displayedStaffLogs.length}</strong> unique rows ({staffLogs.length} total calls) logged for {selectedStaff.name}
               </div>
               <button
                 onClick={() => setSelectedStaff(null)}
