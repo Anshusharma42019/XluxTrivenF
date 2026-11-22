@@ -1142,7 +1142,26 @@ export default function FollowUp() {
                          </div>
                       </td>
                       <td className="py-4 px-2 text-center">
-                        <span className="text-sm font-black text-gray-700">₹{o.sub_total}</span>
+                        {o.payment_method === 'partial' || Number(o.online_paid_amount) > 0 ? (
+                          <div className="flex flex-col items-center">
+                            <span className="text-xs xl:text-sm font-black text-gray-900">₹{o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))}</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200" title="Online Paid (Advance)">
+                                Paid: ₹{o.online_paid_amount}
+                              </span>
+                              <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200" title="Remaining COD">
+                                COD: ₹{o.remaining_cod ?? Math.max(0, (o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))) - (o.online_paid_amount || 0))}
+                              </span>
+                            </div>
+                          </div>
+                        ) : o.payment_method === 'prepaid' ? (
+                          <div className="flex flex-col items-center">
+                            <span className="text-xs xl:text-sm font-black text-gray-900">₹{o.order_price || o.sub_total}</span>
+                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 uppercase mt-0.5">Prepaid</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm font-black text-gray-700">₹{o.sub_total}</span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -1194,7 +1213,22 @@ export default function FollowUp() {
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="font-black text-gray-900 text-sm">₹{o.sub_total}</p>
+                        {o.payment_method === 'partial' || Number(o.online_paid_amount) > 0 ? (
+                          <div>
+                            <p className="font-black text-gray-900 text-sm">₹{o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))}</p>
+                            <div className="flex justify-end items-center gap-1 mt-0.5">
+                              <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200">Paid: ₹{o.online_paid_amount}</span>
+                              <span className="text-[8px] font-bold text-blue-700 bg-blue-50 px-1 rounded border border-blue-200">COD: ₹{o.remaining_cod ?? Math.max(0, (o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))) - (o.online_paid_amount || 0))}</span>
+                            </div>
+                          </div>
+                        ) : o.payment_method === 'prepaid' ? (
+                          <div>
+                            <p className="font-black text-gray-900 text-sm">₹{o.order_price || o.sub_total}</p>
+                            <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200 uppercase">Prepaid</span>
+                          </div>
+                        ) : (
+                          <p className="font-black text-gray-900 text-sm">₹{o.sub_total}</p>
+                        )}
                         <p className="text-[9px] font-bold text-orange-500 uppercase mt-1">
                           {allDone ? 'COMPLETED' : `Next: ${formatDate(activeFU?.scheduled_date, { day: '2-digit', month: 'short' })}`}
                         </p>
@@ -1318,8 +1352,63 @@ export default function FollowUp() {
                   )}
                   <DetailRow label="Order ID" value={selected.order_id || selected.shiprocket_order_id} />
                   <DetailRow label="Courier" value={selected.courier_name} />
-                  <DetailRow label="Payment" value={selected.payment_method} />
-                  <DetailRow label="Amount" value={`₹${selected.sub_total}`} />
+                  {(() => {
+                    const isPartial = selected.payment_method === 'partial' || Number(selected.online_paid_amount) > 0;
+                    const isPrepaid = selected.payment_method === 'prepaid';
+                    const orderPrice = Number(selected.order_price || selected.price || (Number(selected.sub_total || selected.amount || 0) + Number(selected.online_paid_amount || 0)) || 0);
+                    const onlinePaid = Number(selected.online_paid_amount || 0);
+                    const remainingCod = selected.remaining_cod != null ? Number(selected.remaining_cod) : (isPrepaid ? 0 : Math.max(0, orderPrice - onlinePaid));
+
+                    return (
+                      <>
+                        <DetailRow 
+                          label="Payment" 
+                          value={
+                            isPartial ? (
+                              <span className="font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 uppercase text-[11px]">
+                                Partial (Advance + COD)
+                              </span>
+                            ) : isPrepaid ? (
+                              <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase text-[11px]">
+                                Online Paid (Prepaid)
+                              </span>
+                            ) : (
+                              <span className="font-black text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 uppercase text-[11px]">
+                                COD (Full)
+                              </span>
+                            )
+                          } 
+                        />
+                        <DetailRow 
+                          label="Order Price" 
+                          value={<span className="font-black text-gray-900 text-sm">₹{orderPrice}</span>} 
+                        />
+                        <DetailRow 
+                          label="Online Paid (Advance)" 
+                          value={
+                            onlinePaid > 0 ? (
+                              <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-xs">
+                                ₹{onlinePaid}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 font-bold text-xs">₹0</span>
+                            )
+                          } 
+                        />
+                        <DetailRow 
+                          label="Remaining COD" 
+                          value={
+                            <span className={`font-black text-xs ${remainingCod > 0 ? 'text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200' : 'text-gray-400'}`}>
+                              ₹{remainingCod}
+                            </span>
+                          } 
+                        />
+                        {selected.transaction_id ? (
+                          <DetailRow label="Transaction / UTR" value={<span className="font-mono text-xs text-gray-700 font-bold">{selected.transaction_id}</span>} />
+                        ) : null}
+                      </>
+                    );
+                  })()}
                   <DetailRow label="Delivered" value={formatDate(selected.delivered_at || selected.shiprocket_delivered_date || selected.createdAt, { day: '2-digit', month: 'short', year: 'numeric' })} />
                   {editMode ? (
                     <div className="flex items-start gap-3 py-2 border-b border-gray-50">

@@ -324,15 +324,6 @@ export default function UniversalSearch() {
                              {customerGroup.latestStatus.courier_name && <span className="text-[10px] text-gray-400 ml-1">({customerGroup.latestStatus.courier_name})</span>}
                           </div>
                         )}
-                        {customerGroup.latestStatus.sub_total > 0 && (
-                          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mt-1">
-                             <span className="w-20 font-medium text-gray-500 text-[11px] uppercase shrink-0">Amount:</span> 
-                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
-                               ₹{customerGroup.latestStatus.sub_total} 
-                               {customerGroup.latestStatus.payment_method && <span className="text-[10px] ml-1 font-normal text-gray-500 uppercase">({customerGroup.latestStatus.payment_method})</span>}
-                             </span>
-                          </div>
-                        )}
                         {customerGroup.latestStatus.note && (
                           <div className="flex items-start gap-2 text-gray-600 dark:text-gray-400 mt-2 bg-gray-50 dark:bg-gray-900 p-2 rounded-md border border-gray-100 dark:border-gray-700">
                              <span className="font-medium text-gray-500 text-[10px] uppercase mt-0.5 shrink-0">Note:</span> 
@@ -350,6 +341,135 @@ export default function UniversalSearch() {
                        </div>
                     </div>
                   </div>
+
+                  {/* KITS BREAKDOWN CARDS */}
+                  {customerGroup.kits && customerGroup.kits.length > 0 && (
+                    <div className="mt-4 px-2">
+                      <div className="flex items-center justify-between gap-2 mb-2.5">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                          <span>📦</span>
+                          <span>Kits Overview ({customerGroup.kits.length} {customerGroup.kits.length === 1 ? 'Kit' : 'Kits'})</span>
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-medium">Click any kit to open</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {customerGroup.kits.map((kit, kIdx) => {
+                          const pm = (kit.payment_method || '').toLowerCase();
+                          const isPartial = pm === 'partial' || kit.online_paid_amount > 0;
+                          const isPrepaid = pm === 'prepaid';
+                          const isDelivered = kit.isDelivered || kit.status?.toUpperCase() === 'DELIVERED';
+
+                          return (
+                            <div
+                              key={kIdx}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleResultClick(kit.link);
+                              }}
+                              className={`p-3 rounded-xl border transition-all cursor-pointer hover:shadow-md ${
+                                isDelivered 
+                                  ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 hover:border-emerald-400' 
+                                  : 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60 hover:border-amber-400'
+                              }`}
+                            >
+                              {/* Kit Title & Status Badge */}
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wide border ${
+                                  kit.kit_number === 1
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700'
+                                    : 'bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-200 border-purple-300 dark:border-purple-700'
+                                }`}>
+                                  Kit {kit.kit_number} {kit.kit_number === 1 ? '(1st Order)' : '(Reorder)'}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                                  isDelivered
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-200 border-green-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 border-amber-300'
+                                }`}>
+                                  {isDelivered ? '✓ Delivered' : kit.status?.replace(/_/g, ' ') || 'In Progress'}
+                                </span>
+                              </div>
+
+                              {/* Module & Date Info */}
+                              <div className="flex items-center justify-between text-[11px] text-gray-600 dark:text-gray-400 mb-1.5">
+                                <span className="font-bold text-gray-800 dark:text-gray-200 truncate">
+                                  📍 {kit.module}
+                                </span>
+                                <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                                  {kit.dateLabel}: {formatDate(kit.date)}
+                                </span>
+                              </div>
+
+                              {/* Courier / AWB */}
+                              {kit.awb_code && (
+                                <div className="text-[10px] text-gray-500 mb-2 font-mono">
+                                  <span className="font-bold bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700">
+                                    AWB: {kit.awb_code} {kit.courier_name ? `(${kit.courier_name})` : ''}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Payment Details for THIS KIT */}
+                              <div className="p-2 rounded-lg bg-white/90 dark:bg-gray-800/90 border border-gray-200/90 dark:border-gray-700/90 space-y-1 text-xs">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Mode:</span>
+                                  {isPartial ? (
+                                    <span className="font-black text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-200 uppercase">
+                                      Partial (Advance + COD)
+                                    </span>
+                                  ) : isPrepaid ? (
+                                    <span className="font-black text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase">
+                                      Prepaid
+                                    </span>
+                                  ) : (
+                                    <span className="font-bold text-[9px] px-1.5 py-0.2 rounded bg-gray-100 text-gray-700 border border-gray-200 uppercase">
+                                      COD
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-between font-bold">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Order Price:</span>
+                                  <span className="text-gray-900 dark:text-white font-black">₹{kit.order_price || kit.sub_total || 0}</span>
+                                </div>
+
+                                {isPartial ? (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Online Advance:</span>
+                                      <span className="font-black text-emerald-700 dark:text-emerald-300">₹{kit.online_paid_amount}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Remaining COD:</span>
+                                      <span className="font-black text-blue-700 dark:text-blue-300">₹{kit.remaining_cod}</span>
+                                    </div>
+                                  </>
+                                ) : isPrepaid ? (
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Paid Online:</span>
+                                    <span className="font-black text-emerald-700 dark:text-emerald-300">₹{kit.order_price || kit.sub_total || 0}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-[10px] font-bold text-gray-500">COD Amount:</span>
+                                    <span className="font-black text-gray-800 dark:text-gray-200">₹{kit.order_price || kit.sub_total || 0}</span>
+                                  </div>
+                                )}
+
+                                {kit.transaction_id && (
+                                  <div className="flex items-center justify-between text-[10px] pt-1 border-t border-gray-100 dark:border-gray-700">
+                                    <span className="font-bold text-gray-400">UTR:</span>
+                                    <span className="font-mono font-bold text-gray-700 dark:text-gray-300">{kit.transaction_id}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* STATUS HISTORY */}
                   {customerGroup.history.length > 1 && (
@@ -379,6 +499,12 @@ export default function UniversalSearch() {
                               {hist.assignedTo && (
                                 <span className="text-[10px] text-gray-400 font-medium">
                                   • {hist.assignedTo} {hist.assignedRole ? `(${hist.assignedRole})` : ''}
+                                </span>
+                              )}
+                              {(hist.order_price > 0 || hist.sub_total > 0) && (
+                                <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 rounded border border-gray-200 dark:border-gray-700">
+                                  ₹{hist.order_price || hist.sub_total}
+                                  {Number(hist.online_paid_amount) > 0 ? ` (Adv: ₹${hist.online_paid_amount})` : ''}
                                 </span>
                               )}
                             </div>

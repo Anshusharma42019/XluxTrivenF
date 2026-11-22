@@ -118,6 +118,7 @@ export default function Verification() {
   const itemsPerPage = 15;
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [paymentFilter, setPaymentFilter] = useState('all'); // 'all' | 'online' | 'cod'
 
   const load = useCallback(async (silent = false) => {
     if (!silent && records.length === 0) setLoading(true);
@@ -290,18 +291,35 @@ export default function Verification() {
       assignedTo: r.assignedTo || r.task?.assignedTo,
       title: r.name || r.title || r.task?.title || r.lead?.name,
       department: r.department || r.task?.department || r.lead?.department,
+      payment_method: r.payment_method || r.task?.payment_method || 'cod',
+      online_paid_amount: r.online_paid_amount ?? r.task?.online_paid_amount ?? 0,
+      transaction_id: r.transaction_id || r.task?.transaction_id || '',
       task: r.task,
       _isPipelineOnly: r._isPipelineOnly,
     };
   };
 
-  const activeList = activeTab === 'on_hold' ? onHoldRecords : records;
+  const rawActiveList = activeTab === 'on_hold' ? onHoldRecords : records;
+  const onlineCount = rawActiveList.filter(r => (r.payment_method || r.task?.payment_method) === 'prepaid' || (r.payment_method || r.task?.payment_method) === 'partial').length;
+  const codCount = rawActiveList.filter(r => !(r.payment_method || r.task?.payment_method) || (r.payment_method || r.task?.payment_method) === 'cod').length;
+
+  const activeList = rawActiveList.filter(r => {
+    const pm = r.payment_method || r.task?.payment_method || 'cod';
+    if (paymentFilter === 'online') {
+      return pm === 'prepaid' || pm === 'partial';
+    }
+    if (paymentFilter === 'cod') {
+      return pm === 'cod';
+    }
+    return true;
+  });
+
   const indexOffset = (currentPage - 1) * itemsPerPage;
 
   // Reset page when search or tab filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, department, dayFilter, search, ohDayFilter, ohSearch, customDate, ohCustomDate]);
+  }, [activeTab, department, dayFilter, search, ohDayFilter, ohSearch, customDate, ohCustomDate, paymentFilter]);
 
   const paginatedRecords = activeList;
 
@@ -326,6 +344,9 @@ export default function Verification() {
       state: selected.state || selected.lead?.state || '',
       reminderAt: selected.reminderAt ? selected.reminderAt.slice(0, 10) : '',
       price: selected.price || '',
+      payment_method: selected.payment_method || 'cod',
+      online_paid_amount: selected.online_paid_amount ?? (selected.payment_method === 'prepaid' ? (selected.price || '') : ''),
+      transaction_id: selected.transaction_id || '',
     });
     setEditMode(true);
   };
@@ -540,6 +561,23 @@ export default function Verification() {
             <VerifyIcon className="w-3.5 h-3.5" />
             {totalItems} Pending ✓
           </div>
+          {/* Quick Payment Mode Filters */}
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl shrink-0">
+            <button type="button" onClick={() => setPaymentFilter('all')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${paymentFilter === 'all' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+              All
+            </button>
+            <button type="button" onClick={() => setPaymentFilter('online')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'online' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-700 hover:bg-emerald-50'}`}>
+              <span>⚡</span> Online Paid
+              {onlineCount > 0 && <span className="text-[10px] bg-emerald-700/80 text-white px-1.5 py-0.2 rounded-full">{onlineCount}</span>}
+            </button>
+            <button type="button" onClick={() => setPaymentFilter('cod')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${paymentFilter === 'cod' ? 'bg-amber-600 text-white shadow-sm' : 'text-amber-700 hover:bg-amber-50'}`}>
+              COD
+              {codCount > 0 && <span className="text-[10px] bg-amber-700/80 text-white px-1.5 py-0.2 rounded-full">{codCount}</span>}
+            </button>
+          </div>
           {canManage && (
             <select value={department} onChange={e => setDepartment(e.target.value)}
               className="px-3 py-2.5 rounded-xl border border-gray-100 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition shadow-sm shrink-0">
@@ -591,9 +629,47 @@ export default function Verification() {
                             {(flattened.name || flattened.lead?.name) && <span className="text-xs text-gray-500">{flattened.name || flattened.lead?.name}</span>}
                             {(flattened.phone || flattened.lead?.phone) && <span className="text-xs text-gray-400">{flattened.phone || flattened.lead?.phone}</span>}
                           </div>
+                          {/* Payment Breakdown on Card */}
+                          {flattened.payment_method === 'partial' ? (
+                            <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold flex-wrap">
+                              <span className="text-gray-900 font-black">₹{Number(flattened.price || 0).toLocaleString('en-IN')}</span>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-emerald-800 bg-emerald-50 border border-emerald-300/80 px-2 py-0.5 rounded-md font-black shadow-2xs">
+                                Paid: ₹{Number(flattened.online_paid_amount || 0).toLocaleString('en-IN')}
+                              </span>
+                              <span className="text-blue-800 bg-blue-50 border border-blue-300/80 px-2 py-0.5 rounded-md font-black shadow-2xs">
+                                COD: ₹{Math.max(0, Number(flattened.price || 0) - Number(flattened.online_paid_amount || 0)).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          ) : flattened.payment_method === 'prepaid' ? (
+                            <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold flex-wrap">
+                              <span className="text-gray-900 font-black">₹{Number(flattened.price || 0).toLocaleString('en-IN')}</span>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md font-black">
+                                ⚡ Full Online Paid (₹0 COD)
+                              </span>
+                            </div>
+                          ) : flattened.price ? (
+                            <div className="flex items-center gap-1.5 mt-1 text-[11px] font-bold">
+                              <span className="text-gray-900 font-black">₹{Number(flattened.price).toLocaleString('en-IN')}</span>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold">
+                                Full COD
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-gray-50 text-gray-600 border-gray-100">ON HOLD</span>
+                          {flattened.payment_method === 'prepaid' ? (
+                            <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">
+                              ⚡ Online Paid
+                            </span>
+                          ) : flattened.payment_method === 'partial' ? (
+                            <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-300 uppercase">
+                              💳 Partial (₹{flattened.online_paid_amount || 0})
+                            </span>
+                          ) : null}
                           <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                             Placed: {new Date(r.onHoldAt || r.updatedAt || r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                           </span>
@@ -659,11 +735,53 @@ export default function Verification() {
                             </span>
                           )}
                         </div>
+                        {/* Payment Breakdown on Card */}
+                        {flattened.payment_method === 'partial' ? (
+                          <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold flex-wrap">
+                            <span className="text-gray-900 font-black">₹{Number(flattened.price || 0).toLocaleString('en-IN')}</span>
+                            <span className="text-gray-300">·</span>
+                            <span className="text-emerald-800 bg-emerald-50 border border-emerald-300/80 px-2 py-0.5 rounded-md font-black shadow-2xs">
+                              Paid: ₹{Number(flattened.online_paid_amount || 0).toLocaleString('en-IN')}
+                            </span>
+                            <span className="text-blue-800 bg-blue-50 border border-blue-300/80 px-2 py-0.5 rounded-md font-black shadow-2xs">
+                              COD: ₹{Math.max(0, Number(flattened.price || 0) - Number(flattened.online_paid_amount || 0)).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        ) : flattened.payment_method === 'prepaid' ? (
+                          <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold flex-wrap">
+                            <span className="text-gray-900 font-black">₹{Number(flattened.price || 0).toLocaleString('en-IN')}</span>
+                            <span className="text-gray-300">·</span>
+                            <span className="text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md font-black">
+                              ⚡ Full Online Paid (₹0 COD)
+                            </span>
+                          </div>
+                        ) : flattened.price ? (
+                          <div className="flex items-center gap-1.5 mt-1 text-[11px] font-bold">
+                            <span className="text-gray-900 font-black">₹{Number(flattened.price).toLocaleString('en-IN')}</span>
+                            <span className="text-gray-300">·</span>
+                            <span className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold">
+                              Full COD
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${flattened.status === 'on_hold' ? 'bg-gray-50 text-gray-600 border-gray-100' : flattened.status === 'verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : flattened.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
                           {flattened.status?.replace(/_/g, ' ').toUpperCase()}
                         </span>
+                        {flattened.payment_method === 'prepaid' ? (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase flex items-center gap-0.5">
+                            ⚡ Online Paid
+                          </span>
+                        ) : flattened.payment_method === 'partial' ? (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-300 uppercase">
+                            💳 Partial (₹{flattened.online_paid_amount || 0})
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 uppercase">
+                            COD
+                          </span>
+                        )}
                         {(flattened.assignedTo?.name) && (
                           <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
                             <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
@@ -787,7 +905,22 @@ export default function Verification() {
               </div>
               <div>
                 <p className="text-sm font-bold text-gray-800 leading-tight">{selected.name || selected.lead?.name || selected.title || 'Task Detail'}</p>
-                {(selected.phone || selected.lead?.phone) && <p className="text-xs text-gray-400">{selected.phone || selected.lead.phone}</p>}
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {(selected.phone || selected.lead?.phone) && <p className="text-xs text-gray-400">{selected.phone || selected.lead.phone}</p>}
+                  {selected.payment_method === 'partial' ? (
+                    <span className="text-[10px] font-black text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                      Paid: ₹{Number(selected.online_paid_amount || 0).toLocaleString('en-IN')} · COD: ₹{Math.max(0, Number(selected.price || 0) - Number(selected.online_paid_amount || 0)).toLocaleString('en-IN')}
+                    </span>
+                  ) : selected.payment_method === 'prepaid' ? (
+                    <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      ⚡ 100% Online Paid
+                    </span>
+                  ) : selected.price ? (
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                      COD: ₹{Number(selected.price).toLocaleString('en-IN')}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -822,9 +955,106 @@ export default function Verification() {
                   <textarea rows={2} className={`${inputCls} mt-1`} value={editForm.otherProblems} onChange={e => sf('otherProblems', e.target.value)} /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Price</label>
-                    <input type="number" className={`${inputCls} mt-1`} value={editForm.price} onChange={e => sf('price', e.target.value)} /></div>
+                    <input type="number" className={`${inputCls} mt-1`} value={editForm.price} onChange={e => {
+                      const newPrice = e.target.value;
+                      sf('price', newPrice);
+                      if (editForm.payment_method === 'prepaid') {
+                        sf('online_paid_amount', newPrice);
+                      }
+                    }} /></div>
                   <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Call Date</label>
                     <input type="date" className={`${inputCls} mt-1`} value={editForm.reminderAt} onChange={e => sf('reminderAt', e.target.value)} /></div>
+                </div>
+
+                <SectionHead label="Payment / Online Paid" />
+                <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-200/90 space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Payment Mode</label>
+                    <div className="grid grid-cols-3 gap-2 mt-1">
+                      {[
+                        { id: 'cod', label: 'COD', sub: 'Cash on Delivery', color: 'amber' },
+                        { id: 'prepaid', label: '⚡ Online Paid', sub: 'Full Prepaid', color: 'emerald' },
+                        { id: 'partial', label: '💳 Partial Paid', sub: 'Advance Online', color: 'blue' }
+                      ].map(opt => {
+                        const isSel = (editForm.payment_method || 'cod') === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              sf('payment_method', opt.id);
+                              if (opt.id === 'prepaid') {
+                                sf('online_paid_amount', editForm.price || selected.price || '');
+                              } else if (opt.id === 'cod') {
+                                sf('online_paid_amount', 0);
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border text-left transition-all ${
+                              isSel
+                                ? opt.color === 'emerald'
+                                  ? 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500/20 shadow-sm'
+                                  : opt.color === 'blue'
+                                  ? 'bg-blue-50 border-blue-500 text-blue-900 ring-2 ring-blue-500/20 shadow-sm'
+                                  : 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-500/20 shadow-sm'
+                                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            <div className="text-xs font-black">{opt.label}</div>
+                            <div className="text-[9px] text-gray-500 mt-0.5">{opt.sub}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {(editForm.payment_method === 'prepaid' || editForm.payment_method === 'partial') && (
+                    <div className="space-y-2.5 pt-1 border-t border-gray-200/60">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">
+                            {editForm.payment_method === 'partial' ? 'Advance Paid Online (₹)' : 'Online Paid Amount (₹)'}
+                          </label>
+                          <input
+                            type="number"
+                            className={`${inputCls} mt-1 border-emerald-300 focus:ring-emerald-400 font-bold text-emerald-800 bg-emerald-50/30`}
+                            placeholder="e.g. 1498"
+                            value={editForm.online_paid_amount ?? ''}
+                            onChange={e => sf('online_paid_amount', e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                            Transaction ID / UTR No.
+                          </label>
+                          <input
+                            type="text"
+                            className={`${inputCls} mt-1`}
+                            placeholder="e.g. UPI-12345678"
+                            value={editForm.transaction_id || ''}
+                            onChange={e => sf('transaction_id', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {editForm.payment_method === 'partial' && (
+                        <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-200 flex justify-between items-center text-xs">
+                          <span className="text-blue-700 font-medium">Remaining COD to collect:</span>
+                          <span className="font-black text-blue-900 text-sm">
+                            ₹{Math.max(0, (Number(editForm.price || selected.price || 0) - Number(editForm.online_paid_amount || 0)))}
+                          </span>
+                        </div>
+                      )}
+
+                      {editForm.payment_method === 'prepaid' && (
+                        <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center gap-1.5 text-xs text-emerald-800 font-bold">
+                          <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                          Full ₹{editForm.online_paid_amount || editForm.price || 0} received online. Courier will deliver with ₹0 COD.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <SectionHead label="Address" />
                 <div className="grid grid-cols-2 gap-3">
@@ -926,8 +1156,52 @@ export default function Verification() {
                   </>
                 )}
 
-                <SectionHead label="Order" />
-                <DetailRow label="Price" value={selected.price ? `₹${selected.price}` : null} />
+                <SectionHead label="Payment & Order" />
+                <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-2 mb-2">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Payment Status</span>
+                    {selected.payment_method === 'prepaid' ? (
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-black flex items-center gap-1.5 shadow-xs">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        ONLINE PAID (PREPAID)
+                      </span>
+                    ) : selected.payment_method === 'partial' ? (
+                      <span className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 border border-blue-300 text-xs font-black flex items-center gap-1.5 shadow-xs">
+                        <span className="w-2 h-2 rounded-full bg-blue-500" />
+                        PARTIAL ONLINE PAID
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-xs font-black">
+                        CASH ON DELIVERY (COD)
+                      </span>
+                    )}
+                  </div>
+
+                  <DetailRow label="Order Price" value={selected.price ? `₹${Number(selected.price).toLocaleString('en-IN')}` : null} />
+
+                  {(selected.payment_method === 'prepaid' || selected.payment_method === 'partial') && (
+                    <>
+                      <div className="flex items-start gap-3 py-1.5 border-b border-gray-100 last:border-0">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 w-28 shrink-0 mt-0.5">Online Paid (Advance)</span>
+                        <span className="text-sm text-emerald-700 font-extrabold flex-1">
+                          ₹{Number(selected.online_paid_amount || (selected.payment_method === 'prepaid' ? selected.price : 0)).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      {selected.payment_method === 'partial' && (
+                        <div className="flex items-start gap-3 py-1.5 border-b border-gray-100 last:border-0">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-blue-700 w-28 shrink-0 mt-0.5">Remaining COD</span>
+                          <span className="text-sm text-blue-700 font-extrabold flex-1">
+                            ₹{Math.max(0, Number(selected.price || 0) - Number(selected.online_paid_amount || 0)).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      )}
+                      {selected.transaction_id && (
+                        <DetailRow label="Transaction / UTR" value={selected.transaction_id} />
+                      )}
+                    </>
+                  )}
+                </div>
+
                 {selected.relief_percentage != null && (
                   <div className="flex items-start gap-3 py-2 border-b border-gray-50">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0 mt-0.5">Relief %</span>
@@ -1120,8 +1394,47 @@ export default function Verification() {
                   <DetailRow label="Pincode" value={selected.pincode} />
                   <DetailRow label="Landmark" value={selected.landmark} />
 
-                  <SectionHead label="Order Details" />
-                  <DetailRow label="Price" value={selected.price ? `₹${selected.price}` : null} />
+                  <SectionHead label="Payment & Order" />
+                  <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-2 mb-2">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Payment Status</span>
+                      {selected.payment_method === 'prepaid' ? (
+                        <span className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black flex items-center gap-1">
+                          ⚡ ONLINE PAID
+                        </span>
+                      ) : selected.payment_method === 'partial' ? (
+                        <span className="px-2 py-0.5 rounded-lg bg-blue-100 text-blue-800 border border-blue-300 text-[10px] font-black">
+                          💳 PARTIAL PAID
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black">
+                          COD
+                        </span>
+                      )}
+                    </div>
+                    <DetailRow label="Order Price" value={selected.price ? `₹${Number(selected.price).toLocaleString('en-IN')}` : null} />
+                    {(selected.payment_method === 'prepaid' || selected.payment_method === 'partial') && (
+                      <>
+                        <div className="flex items-start gap-3 py-1 border-b border-gray-100">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 w-28 shrink-0 mt-0.5">Online Paid</span>
+                          <span className="text-xs text-emerald-700 font-extrabold flex-1">
+                            ₹{Number(selected.online_paid_amount || (selected.payment_method === 'prepaid' ? selected.price : 0)).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        {selected.payment_method === 'partial' && (
+                          <div className="flex items-start gap-3 py-1 border-b border-gray-100">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-700 w-28 shrink-0 mt-0.5">Remaining COD</span>
+                            <span className="text-xs text-blue-700 font-extrabold flex-1">
+                              ₹{Math.max(0, Number(selected.price || 0) - Number(selected.online_paid_amount || 0)).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        )}
+                        {selected.transaction_id && (
+                          <DetailRow label="UTR / Txn ID" value={selected.transaction_id} />
+                        )}
+                      </>
+                    )}
+                  </div>
                   {selected.relief_percentage != null && (
                     <div className="flex items-start gap-3 py-2 border-b border-gray-50">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0 mt-0.5">Relief %</span>

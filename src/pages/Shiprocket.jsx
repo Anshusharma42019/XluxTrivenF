@@ -233,16 +233,23 @@ export default function Shiprocket({ initialSection, initialReturnsTab = 'return
         billing_city: r.cityVillage || r.district || '',
         billing_pincode: r.pincode || '',
         billing_state: r.state || '',
+        payment_method: r.payment_method === 'prepaid' ? 'prepaid' : 'COD',
         lead_id: r.lead?._id || '',
         ...(r.title || r.task?.title ? {
           order_items: [{
             name: r.title || r.task?.title,
             sku: getMedicineSku(r.title || r.task?.title),
             units: 1,
-            selling_price: r.price || '',
+            selling_price: r.payment_method === 'partial' 
+              ? Math.max(0, Number(r.price || 0) - Number(r.online_paid_amount || 0))
+              : (r.price || ''),
           }],
         } : {}),
-        ...(r.price ? { sub_total: r.price } : {}),
+        ...(r.price ? {
+          sub_total: r.payment_method === 'partial'
+            ? Math.max(0, Number(r.price || 0) - Number(r.online_paid_amount || 0))
+            : r.price
+        } : {}),
       }));
       setRtsRecords([r]);
       if (r._id) setRtsId(r._id);
@@ -479,6 +486,28 @@ export default function Shiprocket({ initialSection, initialReturnsTab = 'return
             </div>
           )}
         </div>
+
+        {/* Partial Payment Banner if applicable */}
+        {rtsRecords[0]?.payment_method === 'partial' && (
+          <div className="p-4 mb-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 animate-pulse" />
+              <div>
+                <p className="font-extrabold text-blue-900 text-sm">💳 Partial Paid Order (Advance Online)</p>
+                <p className="text-blue-700 text-xs mt-0.5">
+                  Advance Paid Online: ₹{Number(rtsRecords[0].online_paid_amount || 0).toLocaleString('en-IN')}
+                  {rtsRecords[0].transaction_id ? ` (UTR: ${rtsRecords[0].transaction_id})` : ''}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white px-3 py-2 rounded-xl border border-blue-200 text-right shrink-0">
+              <span className="text-[10px] text-gray-500 uppercase font-bold block">Courier COD to Collect</span>
+              <span className="font-black text-blue-900 text-base">
+                ₹{Math.max(0, Number(rtsRecords[0].price || 0) - Number(rtsRecords[0].online_paid_amount || 0)).toLocaleString('en-IN')}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Order Form */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>

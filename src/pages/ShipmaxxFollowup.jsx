@@ -1517,7 +1517,26 @@ export default function ShipmaxxFollowup() {
                           )}
                         </td>
                         <td className="py-3 xl:py-4 px-1 xl:px-4 text-center">
-                          <span className="text-xs xl:text-sm font-black text-gray-700">₹{o.sub_total}</span>
+                          {o.payment_method === 'partial' || Number(o.online_paid_amount) > 0 ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-xs xl:text-sm font-black text-gray-900">₹{o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))}</span>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200" title="Online Paid (Advance)">
+                                  Paid: ₹{o.online_paid_amount}
+                                </span>
+                                <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200" title="Remaining COD">
+                                  COD: ₹{o.remaining_cod ?? Math.max(0, (o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))) - (o.online_paid_amount || 0))}
+                                </span>
+                              </div>
+                            </div>
+                          ) : o.payment_method === 'prepaid' ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-xs xl:text-sm font-black text-gray-900">₹{o.order_price || o.sub_total}</span>
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 uppercase mt-0.5">Prepaid</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs xl:text-sm font-black text-gray-700">₹{o.sub_total}</span>
+                          )}
                         </td>
                         <td className="py-3 xl:py-4 px-2 xl:px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5 xl:gap-2">
@@ -1583,7 +1602,22 @@ export default function ShipmaxxFollowup() {
                           </div>
                         </div>
                         <div className="text-left sm:text-right shrink-0 w-full sm:w-auto flex items-center sm:block justify-between">
-                          <p className="font-black text-gray-900 text-sm">₹{o.sub_total}</p>
+                          {o.payment_method === 'partial' || Number(o.online_paid_amount) > 0 ? (
+                            <div>
+                              <p className="font-black text-gray-900 text-sm">₹{o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))}</p>
+                              <div className="flex sm:justify-end items-center gap-1 mt-0.5">
+                                <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200">Paid: ₹{o.online_paid_amount}</span>
+                                <span className="text-[8px] font-bold text-blue-700 bg-blue-50 px-1 rounded border border-blue-200">COD: ₹{o.remaining_cod ?? Math.max(0, (o.order_price || (Number(o.sub_total || 0) + Number(o.online_paid_amount || 0))) - (o.online_paid_amount || 0))}</span>
+                              </div>
+                            </div>
+                          ) : o.payment_method === 'prepaid' ? (
+                            <div>
+                              <p className="font-black text-gray-900 text-sm">₹{o.order_price || o.sub_total}</p>
+                              <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200 uppercase">Prepaid</span>
+                            </div>
+                          ) : (
+                            <p className="font-black text-gray-900 text-sm">₹{o.sub_total}</p>
+                          )}
                           <div className="mt-0 sm:mt-1">
                             {allDone ? (
                               <span className="text-[9px] font-bold text-gray-400 uppercase">DONE</span>
@@ -1702,7 +1736,25 @@ export default function ShipmaxxFollowup() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    <button onClick={() => { if (editMode) { setEditMode(false); setEditFields({}); } else { setEditMode(true); setEditFields({ billing_phone: selected.billing_phone, billing_city: selected.billing_city, billing_state: selected.billing_state, billing_pincode: selected.billing_pincode, billing_address: selected.billing_address }); } }}
+                    <button onClick={() => {
+                      if (editMode) {
+                        setEditMode(false);
+                        setEditFields({});
+                      } else {
+                        setEditMode(true);
+                        setEditFields({
+                          billing_phone: selected.billing_phone || '',
+                          billing_city: selected.billing_city || '',
+                          billing_state: selected.billing_state || '',
+                          billing_pincode: selected.billing_pincode || '',
+                          billing_address: selected.billing_address || '',
+                          payment_method: selected.payment_method || 'cod',
+                          order_price: selected.order_price || selected.price || selected.sub_total || selected.amount || 0,
+                          online_paid_amount: selected.online_paid_amount || 0,
+                          transaction_id: selected.transaction_id || ''
+                        });
+                      }
+                    }}
                       className="px-2.5 sm:px-3 py-1.5 rounded-lg sm:rounded-xl bg-white/10 text-emerald-100 hover:bg-white/20 text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all">
                       {editMode ? 'EXIT' : 'EDIT'}
                     </button>
@@ -1749,8 +1801,130 @@ export default function ShipmaxxFollowup() {
                     </div>
                     <DetailRow label="Medicine" value={selected.order_items?.[0]?.name || '—'} />
                     <DetailRow label="Courier" value={selected.courier_name} />
-                    <DetailRow label="Payment" value={selected.payment_method} />
-                    <DetailRow label="Amount" value={selected.sub_total != null ? `₹${selected.sub_total}` : (selected.amount != null ? `₹${selected.amount}` : '—')} />
+                    {editMode ? (
+                      <div className="space-y-2 py-2 border-b border-gray-100">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 block mb-1">Payment Details</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0">Payment Mode</span>
+                          <select
+                            className={inputCls}
+                            value={editFields.payment_method || 'cod'}
+                            onChange={e => {
+                              const pm = e.target.value;
+                              setEditFields(p => ({
+                                ...p,
+                                payment_method: pm,
+                                online_paid_amount: pm === 'cod' ? 0 : p.online_paid_amount,
+                              }));
+                            }}
+                          >
+                            <option value="cod">COD (Cash On Delivery)</option>
+                            <option value="partial">Partial (Advance Online + COD)</option>
+                            <option value="prepaid">Online Paid (Prepaid)</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0">Order Price</span>
+                          <input
+                            type="number"
+                            className={inputCls}
+                            value={editFields.order_price ?? ''}
+                            onChange={e => setEditFields(p => ({ ...p, order_price: e.target.value }))}
+                            placeholder="Order Price (₹)"
+                          />
+                        </div>
+                        {editFields.payment_method === 'partial' && (
+                          <>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0">Online Paid (Advance)</span>
+                              <input
+                                type="number"
+                                className={inputCls}
+                                value={editFields.online_paid_amount ?? ''}
+                                onChange={e => setEditFields(p => ({ ...p, online_paid_amount: e.target.value }))}
+                                placeholder="Advance Paid (₹)"
+                              />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0">Remaining COD</span>
+                              <div className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-2 rounded-xl border border-blue-200 flex-1">
+                                ₹{Math.max(0, (Number(editFields.order_price) || 0) - (Number(editFields.online_paid_amount) || 0))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        {(editFields.payment_method === 'partial' || editFields.payment_method === 'prepaid') && (
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-28 shrink-0">Transaction / UTR</span>
+                            <input
+                              type="text"
+                              className={inputCls}
+                              value={editFields.transaction_id || ''}
+                              onChange={e => setEditFields(p => ({ ...p, transaction_id: e.target.value }))}
+                              placeholder="Transaction / UTR ID"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      (() => {
+                        const isPartial = selected.payment_method === 'partial' || Number(selected.online_paid_amount) > 0;
+                        const isPrepaid = selected.payment_method === 'prepaid';
+                        const orderPrice = Number(selected.order_price || selected.price || (Number(selected.sub_total || selected.amount || 0) + Number(selected.online_paid_amount || 0)) || 0);
+                        const onlinePaid = Number(selected.online_paid_amount || 0);
+                        const remainingCod = selected.remaining_cod != null ? Number(selected.remaining_cod) : (isPrepaid ? 0 : Math.max(0, orderPrice - onlinePaid));
+
+                        return (
+                          <>
+                            <DetailRow 
+                              label="Payment" 
+                              value={
+                                isPartial ? (
+                                  <span className="font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 uppercase text-[11px]">
+                                    Partial (Advance + COD)
+                                  </span>
+                                ) : isPrepaid ? (
+                                  <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase text-[11px]">
+                                    Online Paid (Prepaid)
+                                  </span>
+                                ) : (
+                                  <span className="font-black text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 uppercase text-[11px]">
+                                    COD (Full)
+                                  </span>
+                                )
+                              } 
+                            />
+                            <DetailRow 
+                              label="Order Price" 
+                              value={<span className="font-black text-gray-900 text-sm">₹{orderPrice}</span>} 
+                            />
+                            <DetailRow 
+                              label="Online Paid (Advance)" 
+                              value={
+                                onlinePaid > 0 ? (
+                                  <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-xs">
+                                    ₹{onlinePaid}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 font-bold text-xs">₹0</span>
+                                )
+                              } 
+                            />
+                            <DetailRow 
+                              label="Remaining COD" 
+                              value={
+                                <span className={`font-black text-xs ${remainingCod > 0 ? 'text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200' : 'text-gray-400'}`}>
+                                  ₹{remainingCod}
+                                </span>
+                              } 
+                            />
+                            {selected.transaction_id ? (
+                              <DetailRow label="Transaction / UTR" value={<span className="font-mono text-xs text-gray-700 font-bold">{selected.transaction_id}</span>} />
+                            ) : null}
+                          </>
+                        );
+                      })()
+                    )}
                     <DetailRow label="Delivered" value={formatDate(selected.delivered_at || selected.createdAt, { day: '2-digit', month: 'short', year: 'numeric' })} />
                     {editMode ? (
                       <div className="flex items-start gap-3 py-2 border-b border-gray-50">

@@ -307,6 +307,27 @@ export default function ReadyToShipment() {
                               </span>
                             )}
                           </div>
+                          {/* Payment breakdown */}
+                          {r.payment_method === 'partial' ? (
+                            <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold flex-wrap">
+                              <span className="text-gray-900 font-black">₹{Number(r.price || 0).toLocaleString('en-IN')} Total</span>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md font-black">
+                                Advance Paid: ₹{Number(r.online_paid_amount || 0).toLocaleString('en-IN')}
+                              </span>
+                              <span className="text-blue-800 bg-blue-50 border border-blue-300 px-2 py-0.5 rounded-md font-black">
+                                Remaining COD: ₹{Math.max(0, Number(r.price || 0) - Number(r.online_paid_amount || 0)).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          ) : r.payment_method === 'prepaid' ? (
+                            <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold flex-wrap">
+                              <span className="text-gray-900 font-black">₹{Number(r.price || 0).toLocaleString('en-IN')}</span>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md font-black">
+                                ⚡ Full Online Paid (₹0 COD)
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
   
@@ -321,6 +342,19 @@ export default function ReadyToShipment() {
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg uppercase tracking-wide">
                             Ready To Ship
                           </span>
+                          {r.payment_method === 'prepaid' ? (
+                            <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-lg uppercase">
+                              ⚡ Online Paid
+                            </span>
+                          ) : r.payment_method === 'partial' ? (
+                            <span className="text-[10px] font-black text-blue-800 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded-lg uppercase">
+                              💳 Partial (₹{r.online_paid_amount || 0})
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg uppercase">
+                              COD
+                            </span>
+                          )}
                           {r.price && (
                             <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg">
                               ₹{r.price}
@@ -502,8 +536,13 @@ export default function ReadyToShipment() {
             <DetailRow label="Pincode" value={selected.pincode} />
             <DetailRow label="Landmark" value={selected.landmark} />
 
-            <SectionHead label="Order" />
-            <DetailRow label="Price" value={selected.price ? `₹${selected.price}` : null} />
+            <SectionHead label="Payment & Order" />
+            <DetailRow label="Price" value={selected.price ? `₹${Number(selected.price).toLocaleString('en-IN')}` : null} />
+            <DetailRow label="Payment Method" value={selected.payment_method === 'prepaid' ? '⚡ Online Paid (Prepaid)' : selected.payment_method === 'partial' ? `💳 Partial Paid (₹${selected.online_paid_amount || 0})` : 'Cash on Delivery (COD)'} />
+            {selected.payment_method === 'partial' && (
+              <DetailRow label="Remaining COD" value={`₹${Math.max(0, Number(selected.price || 0) - Number(selected.online_paid_amount || 0)).toLocaleString('en-IN')}`} />
+            )}
+            {selected.transaction_id && <DetailRow label="UTR / Txn ID" value={selected.transaction_id} />}
             <DetailRow label="Confirm Date" value={selected.reminderAt ? new Date(selected.reminderAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null} />
           </div>
 

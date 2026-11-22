@@ -1010,8 +1010,16 @@ export default function Shipmaxx() {
 
     setOrder(p => ({
       ...p,
+      payment_method: r.payment_method === 'prepaid' ? 'prepaid' : 'cod',
       customer: { ...p.customer, name: fullName, phone: r.lead?.phone || '', email: r.lead?.email || '', address: address || r.lead?.address || '', landmark: r.landmark || '', city: r.cityVillage || r.district || '', pincode: r.pincode || '', state: r.state || '' },
-      products: [{ ...p.products[0], name: mappedProduct, sku: mappedProduct, price: r.price || '' }],
+      products: [{
+        ...p.products[0],
+        name: mappedProduct,
+        sku: mappedProduct,
+        price: r.payment_method === 'partial'
+          ? Math.max(0, Number(r.price || 0) - Number(r.online_paid_amount || 0))
+          : (r.price || '')
+      }],
     }));
     if (r._id) setRtsId(r._id);
     setSection('actions'); setStep(1);
@@ -1057,6 +1065,28 @@ export default function Shipmaxx() {
     // Step 1: Create Order
     if (step === 1) return (
       <div className="space-y-5 animate-in fade-in duration-200">
+        {/* Partial Payment Alert if applicable */}
+        {location.state?.rts?.payment_method === 'partial' && (
+          <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 animate-pulse" />
+              <div>
+                <p className="font-extrabold text-blue-900 text-sm">💳 Partial Paid Order (Advance Online)</p>
+                <p className="text-blue-700 text-xs mt-0.5">
+                  Advance Paid Online: ₹{Number(location.state.rts.online_paid_amount || 0).toLocaleString('en-IN')}
+                  {location.state.rts.transaction_id ? ` (UTR: ${location.state.rts.transaction_id})` : ''}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white px-3 py-2 rounded-xl border border-blue-200 text-right shrink-0">
+              <span className="text-[10px] text-gray-500 uppercase font-bold block">Courier COD to Collect</span>
+              <span className="font-black text-blue-900 text-base">
+                ₹{Math.max(0, Number(location.state.rts.price || 0) - Number(location.state.rts.online_paid_amount || 0)).toLocaleString('en-IN')}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
           <div className="h-1 bg-blue-500" />
           <div className="px-5 py-3 border-b border-gray-50"><h3 className="font-semibold text-gray-700 text-sm">Order Info</h3></div>

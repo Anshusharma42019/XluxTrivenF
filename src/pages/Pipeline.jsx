@@ -36,7 +36,7 @@ const SectionHead = ({ label, color = "green" }) => (
 );
 
 const todayISO = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); };
-const TASK_EMPTY = { title: '', phone: '', problem: '', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', reminderAt: '', dueDate: '', cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', lead: '', assignedTo: '' };
+const TASK_EMPTY = { title: '', phone: '', problem: '', age: '', weight: '', height: '', otherProblems: '', problemDuration: '', price: '', payment_method: 'cod', online_paid_amount: '', transaction_id: '', reminderAt: '', dueDate: '', cityVillageType: 'city', cityVillage: '', houseNo: '', postOffice: '', district: '', landmark: '', pincode: '', state: '', lead: '', assignedTo: '' };
 const inputCls = "w-full border border-gray-200 rounded-xl px-4 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition";
 
 
@@ -778,7 +778,17 @@ export default function Pipeline() {
                           <DetailRow label="Height" value={leadTask?.height ? `${leadTask.height} ft` : null} />
                           <DetailRow label="Other Problems" value={leadTask?.otherProblems} />
                           <DetailRow label="Duration" value={leadTask?.problemDuration} />
-                          <DetailRow label="Price" value={leadTask?.price ? `₹${leadTask.price}` : null} />
+                          <DetailRow label="Price" value={leadTask?.price ? `₹${Number(leadTask.price).toLocaleString('en-IN')}` : null} />
+                          {leadTask?.payment_method === 'partial' && (
+                            <>
+                              <DetailRow label="Advance Paid" value={`₹${Number(leadTask.online_paid_amount || 0).toLocaleString('en-IN')}`} />
+                              <DetailRow label="Remaining COD" value={`₹${Math.max(0, Number(leadTask.price || 0) - Number(leadTask.online_paid_amount || 0)).toLocaleString('en-IN')}`} />
+                              {leadTask?.transaction_id && <DetailRow label="UTR / Txn ID" value={leadTask.transaction_id} />}
+                            </>
+                          )}
+                          {leadTask?.payment_method === 'prepaid' && (
+                            <DetailRow label="Payment Mode" value="⚡ 100% Online Paid (₹0 COD)" />
+                          )}
                         </>
                       )}
                       
@@ -997,7 +1007,17 @@ export default function Pipeline() {
                         <DetailRow label="Height" value={leadTask?.height ? `${leadTask.height} ft` : null} />
                         <DetailRow label="Other Problems" value={leadTask?.otherProblems} />
                         <DetailRow label="Duration" value={leadTask?.problemDuration} />
-                        <DetailRow label="Price" value={leadTask?.price ? `₹${leadTask.price}` : null} />
+                        <DetailRow label="Price" value={leadTask?.price ? `₹${Number(leadTask.price).toLocaleString('en-IN')}` : null} />
+                        {leadTask?.payment_method === 'partial' && (
+                          <>
+                            <DetailRow label="Advance Paid" value={`₹${Number(leadTask.online_paid_amount || 0).toLocaleString('en-IN')}`} />
+                            <DetailRow label="Remaining COD" value={`₹${Math.max(0, Number(leadTask.price || 0) - Number(leadTask.online_paid_amount || 0)).toLocaleString('en-IN')}`} />
+                            {leadTask?.transaction_id && <DetailRow label="UTR / Txn ID" value={leadTask.transaction_id} />}
+                          </>
+                        )}
+                        {leadTask?.payment_method === 'prepaid' && (
+                          <DetailRow label="Payment Mode" value="⚡ 100% Online Paid (₹0 COD)" />
+                        )}
                       </>
                     )}
                     
@@ -1125,7 +1145,84 @@ export default function Pipeline() {
                 <input className={`${inputCls} mt-1`} placeholder="e.g. 2y" value={taskForm.problemDuration} onChange={e => setTaskForm(f => ({ ...f, problemDuration: e.target.value }))} /></div>
             </div>
             <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Price</label>
-              <input type="number" className={`${inputCls} mt-1`} placeholder="₹" value={taskForm.price} onChange={e => setTaskForm(f => ({ ...f, price: e.target.value }))} /></div>
+              <input type="number" className={`${inputCls} mt-1`} placeholder="₹" value={taskForm.price} onChange={e => {
+                const newPrice = e.target.value;
+                setTaskForm(f => ({
+                  ...f,
+                  price: newPrice,
+                  ...(f.payment_method === 'prepaid' ? { online_paid_amount: newPrice } : {})
+                }));
+              }} /></div>
+
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Payment Mode</label>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {[
+                  { id: 'cod', label: 'COD', sub: 'Cash on Delivery' },
+                  { id: 'prepaid', label: '⚡ Online Paid', sub: 'Full Prepaid' },
+                  { id: 'partial', label: '💳 Partial Paid', sub: 'Advance Online' }
+                ].map(opt => {
+                  const isSel = (taskForm.payment_method || 'cod') === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setTaskForm(f => ({
+                          ...f,
+                          payment_method: opt.id,
+                          online_paid_amount: opt.id === 'prepaid' ? f.price : (opt.id === 'cod' ? '' : f.online_paid_amount)
+                        }));
+                      }}
+                      className={`p-2 rounded-xl border text-left transition-all ${
+                        isSel
+                          ? 'bg-green-50 border-green-500 text-green-900 ring-2 ring-green-500/20 shadow-xs'
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{opt.label}</div>
+                      <div className="text-[9px] text-gray-500">{opt.sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {(taskForm.payment_method === 'partial' || taskForm.payment_method === 'prepaid') && (
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">
+                      {taskForm.payment_method === 'partial' ? 'Advance Paid (₹)' : 'Online Paid (₹)'}
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="₹"
+                      className={`${inputCls} mt-1 font-bold text-emerald-800 bg-emerald-50/50`}
+                      value={taskForm.online_paid_amount}
+                      onChange={e => setTaskForm(f => ({ ...f, online_paid_amount: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">UTR / Txn ID</label>
+                    <input
+                      placeholder="Optional"
+                      className={`${inputCls} mt-1`}
+                      value={taskForm.transaction_id}
+                      onChange={e => setTaskForm(f => ({ ...f, transaction_id: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                {taskForm.payment_method === 'partial' && (
+                  <div className="p-2 bg-blue-50 rounded-lg border border-blue-200 flex justify-between items-center text-xs">
+                    <span className="text-blue-700 font-medium">Remaining COD to collect:</span>
+                    <span className="font-bold text-blue-900">
+                      ₹{Math.max(0, Number(taskForm.price || 0) - Number(taskForm.online_paid_amount || 0))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Address</label>
               <div className="grid grid-cols-2 gap-2 mt-1">
                 <input placeholder="City/Village" className={inputCls} value={taskForm.cityVillage} onChange={e => setTaskForm(f => ({ ...f, cityVillage: e.target.value }))} />
