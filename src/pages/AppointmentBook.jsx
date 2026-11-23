@@ -13,6 +13,7 @@ const EMPTY = {
   patientName: '', phone: '', email: '', doctorName: '',
   appointmentDate: '', type: 'consultation',
   status: 'scheduled', notes: '', patientType: 'new',
+  age: '', weight: '',
   problem: '', address: '', houseNo: '', cityVillage: '',
   postOffice: '', landmark: '', district: '', state: '', pincode: '',
   medicineDeliveryDate: '', department: ''
@@ -87,6 +88,34 @@ function FormFields({ form, sf, error, loading, onSubmit, submitLabel, selected,
               {t === 'new' ? '🆕 New Patient' : '🔄 Old Patient'}
             </button>
           ))}
+        </div>
+      </div>
+      {/* Age & Weight */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Age (Years)</label>
+          <input
+            type="number"
+            min="1"
+            max="120"
+            placeholder="e.g. 35"
+            className={`${inputCls} mt-1`}
+            value={form.age ?? ''}
+            onChange={e => sf('age', e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Weight (kg)</label>
+          <input
+            type="number"
+            min="1"
+            max="300"
+            step="0.1"
+            placeholder="e.g. 65"
+            className={`${inputCls} mt-1`}
+            value={form.weight ?? ''}
+            onChange={e => sf('weight', e.target.value)}
+          />
         </div>
       </div>
       <div>
@@ -330,6 +359,8 @@ export default function AppointmentBook() {
             state: r.state || f.state,
             pincode: r.pincode || f.pincode,
             problem: r.problem || f.problem,
+            age: r.age || f.age,
+            weight: r.weight || f.weight,
             medicineDeliveryDate: r.medicineDeliveryDate || f.medicineDeliveryDate,
             patientType: r.patientType || f.patientType,
           }));
@@ -363,7 +394,7 @@ export default function AppointmentBook() {
     setFieldNote(appt.fieldNote || '');
     const d = appt.appointmentDate ? new Date(appt.appointmentDate).toISOString().split('T')[0] : '';
     const md = appt.medicineDeliveryDate ? new Date(appt.medicineDeliveryDate).toISOString().split('T')[0] : '';
-    setForm({ ...EMPTY, ...appt, appointmentDate: d, medicineDeliveryDate: md });
+    setForm({ ...EMPTY, ...appt, age: appt.age ?? '', weight: appt.weight ?? '', appointmentDate: d, medicineDeliveryDate: md });
     setRightPanel({ mode: 'edit', appt });
   };
 
@@ -524,7 +555,14 @@ export default function AppointmentBook() {
 
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-800 truncate">{appt.patientName}</p>
-                      <p className="text-xs text-gray-400">{appt.phone} · Dr. {appt.doctorName}</p>
+                      <p className="text-xs text-gray-400">
+                        {appt.phone} · Dr. {appt.doctorName}
+                        {(appt.age || appt.weight) && (
+                          <span className="font-semibold text-emerald-600">
+                            {' · '}{[appt.age ? `${appt.age} Yrs` : null, appt.weight ? `${appt.weight} kg` : null].filter(Boolean).join(' / ')}
+                          </span>
+                        )}
+                      </p>
                       <p className="text-[10px] text-gray-400 mt-0.5">{fmt(appt.appointmentDate)}</p>
                     </div>
 
@@ -566,7 +604,14 @@ export default function AppointmentBook() {
               </div>
               <div>
                 <p className="text-sm font-bold text-gray-800">{rightPanel.appt.patientName}</p>
-                <p className="text-xs text-gray-400">Dr. {rightPanel.appt.doctorName}</p>
+                <p className="text-xs text-gray-400">
+                  Dr. {rightPanel.appt.doctorName}
+                  {(rightPanel.appt.age || rightPanel.appt.weight) && (
+                    <span className="font-semibold text-emerald-600">
+                      {' · '}{[rightPanel.appt.age ? `${rightPanel.appt.age} Yrs` : null, rightPanel.appt.weight ? `${rightPanel.appt.weight} kg` : null].filter(Boolean).join(' / ')}
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -601,6 +646,8 @@ export default function AppointmentBook() {
                 <DetailRow label="Doctor" value={`Dr. ${rightPanel.appt.doctorName}`} />
                 <DetailRow label="Department" value={rightPanel.appt.department?.toUpperCase()} />
                 <DetailRow label="Patient Type" value={rightPanel.appt.patientType} />
+                <DetailRow label="Age" value={rightPanel.appt.age ? `${rightPanel.appt.age} Yrs` : '—'} />
+                <DetailRow label="Weight" value={rightPanel.appt.weight ? `${rightPanel.appt.weight} kg` : '—'} />
                 <DetailRow label="Date" value={fmt(rightPanel.appt.appointmentDate)} />
                 <DetailRow label="Type" value={rightPanel.appt.type?.replace(/_/g, ' ')} />
                 <DetailRow label="Status" value={rightPanel.appt.status?.replace(/_/g, ' ')} />
@@ -719,6 +766,8 @@ export default function AppointmentBook() {
                 <DetailRow label="Doctor" value={`Dr. ${rightPanel.appt.doctorName}`} />
                 <DetailRow label="Department" value={rightPanel.appt.department?.toUpperCase()} />
                 <DetailRow label="Patient Type" value={rightPanel.appt.patientType} />
+                <DetailRow label="Age" value={rightPanel.appt.age ? `${rightPanel.appt.age} Yrs` : '—'} />
+                <DetailRow label="Weight" value={rightPanel.appt.weight ? `${rightPanel.appt.weight} kg` : '—'} />
                 <DetailRow label="Date" value={fmt(rightPanel.appt.appointmentDate)} />
                 <DetailRow label="Type" value={rightPanel.appt.type?.replace(/_/g, ' ')} />
                 <DetailRow label="Status" value={rightPanel.appt.status?.replace(/_/g, ' ')} />

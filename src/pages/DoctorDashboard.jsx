@@ -64,7 +64,14 @@ const AppointmentList = ({ title, list, icon, color, bg, open, onToggle }) => (
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-gray-800 truncate">{appt.patientName}</p>
-              <p className="text-[10px] text-gray-400">{appt.phone} · {fmt(appt.appointmentDate)}</p>
+              <p className="text-[10px] text-gray-400">
+                {appt.phone} · {fmt(appt.appointmentDate)}
+                {(appt.age || appt.weight) && (
+                  <span className="font-semibold text-emerald-600">
+                    {' · '}{[appt.age ? `${appt.age} Yrs` : null, appt.weight ? `${appt.weight} kg` : null].filter(Boolean).join(' / ')}
+                  </span>
+                )}
+              </p>
               {appt.problem && (
                 <div className="mt-1">
                   <span className="text-[9px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-bold inline-block">

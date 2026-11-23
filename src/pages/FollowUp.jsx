@@ -180,6 +180,8 @@ export default function FollowUp() {
     type: 'follow_up',
     status: 'scheduled',
     patientType: 'old',
+    age: '',
+    weight: '',
     problem: '',
     address: '',
     houseNo: '',
@@ -477,6 +479,8 @@ export default function FollowUp() {
       type: 'follow_up',
       status: 'scheduled',
       patientType: 'old',
+      age: selected.verification_id?.age || selected.lead_id?.age || selected.age || selected.verification_age || '',
+      weight: selected.verification_id?.weight || selected.lead_id?.weight || selected.weight || selected.verification_weight || '',
       problem: selected.verification_problem || selected.problem || selected.lead_id?.problem || '',
       houseNo: '',
       address: selected.billing_address || '',
@@ -1835,6 +1839,17 @@ export default function FollowUp() {
                       <option value="new">New Patient</option>
                       <option value="old">Old Patient</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Age (Years)</label>
+                    <input type="number" min="1" max="120" placeholder="e.g. 35" className={inputCls} value={apptForm.age || ''} onChange={e => setApptForm(p => ({ ...p, age: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block">Weight (kg)</label>
+                    <input type="number" min="1" max="300" step="0.1" placeholder="e.g. 65" className={inputCls} value={apptForm.weight || ''} onChange={e => setApptForm(p => ({ ...p, weight: e.target.value }))} />
                   </div>
                 </div>
 

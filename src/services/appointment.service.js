@@ -56,13 +56,15 @@ export const searchByPhone = async (phone) => {
         state: l.state || '',
         pincode: l.pincode || '',
         problem: l.problem || '',
+        age: l.age || '',
+        weight: l.weight || '',
         patientType: 'old',
       };
     }
   } catch (e) { console.warn('lead search failed', e?.message); }
 
   // 2. Search previous appointments (merge missing fields)
-  if (!result || !result.cityVillage) {
+  if (!result || !result.cityVillage || !result.age || !result.weight) {
     try {
       const { data } = await API.get('/appointments', { params: { search: clean, limit: 5 } });
       const appts = data?.data?.appointments || [];
@@ -80,6 +82,8 @@ export const searchByPhone = async (phone) => {
           state: result?.state || a.state || '',
           pincode: result?.pincode || a.pincode || '',
           problem: result?.problem || a.problem || '',
+          age: result?.age || a.age || '',
+          weight: result?.weight || a.weight || '',
           medicineDeliveryDate: a.medicineDeliveryDate ? new Date(a.medicineDeliveryDate).toISOString().split('T')[0] : '',
           patientType: 'old',
         };
@@ -105,6 +109,8 @@ export const searchByPhone = async (phone) => {
         state: result?.state || o.state || '',
         pincode: result?.pincode || String(o.pincode || ''),
         problem: result?.problem || '',
+        age: result?.age || o.age || '',
+        weight: result?.weight || o.weight || '',
         medicineDeliveryDate: result?.medicineDeliveryDate || deliveryDate,
         patientType: 'old',
       };
